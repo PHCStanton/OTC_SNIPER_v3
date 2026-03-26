@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "theme": "dark",
+  "timezone": "UTC",
+  "language": "en",
+  "data_retention_days": 30,
+  "log_level": "INFO",
+  "oteo": {
+    "warmup_ticks": 50,
+    "cooldown_ticks": 30,
+    "multi_timeframe": false,
+    "manipulation_suppression": false,
+    "volatility_adaptive": true
+  },
+  "ghost_trading": {
+    "enabled": false,
+    "default_amount": 25,
+    "auto_record_high_signals": true
+  },
+  "tick_logging": {
+    "enabled": true,
+    "ticks_per_file": 500,
+    "expiry_minutes": 30,
+    "archive_expired": true
+  },
+  "multi_chart": {
+    "default_grid": "2x2",
+    "max_assets": 9,
+    "render_throttle_ms": 100
+  },
+  "trading": {
+    "max_concurrent_trades": 3,
+    "default_amount": 10.0,
+    "default_expiration": 60,
+    "allow_same_asset_trades": true,
+    "cooldown_between_trades_ms": 1000
+  }
+}

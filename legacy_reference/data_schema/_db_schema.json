@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "description": "Master schema for all OTC SNIPER data tables. Used as migration blueprint for Supabase.",
+  "tables": {
+    "ticks": {
+      "source_dir": "tick_logs/",
+      "format": "jsonl",
+      "columns": {
+        "id": "uuid",
+        "timestamp": "float8",
+        "asset": "text",
+        "price": "float8",
+        "volume": "float8",
+        "broker": "text",
+        "created_at": "timestamptz"
+      },
+      "indexes": ["asset", "timestamp", "broker"],
+      "retention_days": 30
+    },
+    "signals": {
+      "source_dir": "signals/",
+      "format": "jsonl",
+      "columns": {
+        "id": "uuid",
+        "timestamp": "float8",
+        "asset": "text",
+        "score": "float8",
+        "direction": "text",
+        "confidence": "text",
+        "price": "float8",
+        "velocity": "float8",
+        "z_score": "float8",
+        "maturity": "float8",
+        "manipulation": "bool",
+        "broker": "text"
+      },
+      "indexes": ["asset", "timestamp", "confidence", "broker"]
+    },
+    "ghost_trades": {
+      "source_dir": "ghost_trades/sessions/",
+      "format": "jsonl",
+      "columns": {
+        "id": "text",
+        "session_id": "text",
+        "asset": "text",
+        "direction": "text",
+        "entry_price": "float8",
+        "entry_time": "float8",
+        "expiry_seconds": "int4",
+        "oteo_score": "float8",
+        "confidence": "text",
+        "velocity": "float8",
+        "z_score": "float8",
+        "manipulation_at_entry": "jsonb",
+        "exit_price": "float8",
+        "exit_time": "float8",
+        "outcome": "text",
+        "payout_pct": "float8",
+        "simulated_profit": "float8",
+        "simulated_amount": "float8",
+        "broker": "text"
+      },
+      "indexes": ["asset", "session_id", "outcome", "broker"]
+    },
+    "settings": {
+      "source_dir": "settings/",
+      "format": "json",
+      "columns": {
+        "id": "uuid",
+        "scope": "text",
+        "key": "text",
+        "value": "jsonb",
+        "updated_at": "timestamptz"
+      },
+      "indexes": ["scope", "key"]
+    },
+    "users": {
+      "source_dir": "auth/",
+      "format": "json",
+      "columns": {
+        "id": "uuid",
+        "username": "text",
+        "password_hash": "text",
+        "role": "text",
+        "created_at": "timestamptz"
+      },
+      "indexes": ["username"]
+    },
+    "sessions": {
+      "source_dir": "auth/sessions/",
+      "format": "json",
+      "columns": {
+        "id": "uuid",
+        "user_id": "uuid",
+        "token": "text",
+        "expires_at": "float8",
+        "created_at": "timestamptz"
+      },
+      "indexes": ["token", "user_id"]
+    }
+  }
+}

@@ -1,0 +1,42 @@
+C:\v3\OTC_SNIPER\
+├── _legacy_reference/
+│   ├── ssid_integration_package/    ← Full package (direct reuse)
+│   ├── backend_reuse/               ← Files to adapt
+│   │   ├── brokers_base.py
+│   │   ├── brokers_registry.py
+│   │   ├── asset_utils.py
+│   │   ├── oteo_indicator.py
+│   │   ├── manipulation_detector.py
+│   │   ├── tick_logger.py
+│   │   ├── signal_logger.py
+│   │   ├── ghost_trader.py
+│   │   ├── trade_manager.py
+│   │   ├── settings_manager.py
+│   │   ├── auth_tokens.py
+│   │   └── auth_middleware.py
+│   ├── frontend_reference/          ← UI patterns to rebuild
+│   │   ├── Sparkline.jsx
+│   │   ├── MiniSparkline.jsx
+│   │   ├── MultiChartView.jsx
+│   │   ├── TopBar.jsx
+│   │   ├── SettingsView.jsx
+│   │   ├── GhostStatsPanel.jsx
+│   │   └── useOpsControl.js
+│   ├── risk_components/             ← TSX → JSX rebuild reference
+│   │   ├── VerticalRiskChart.tsx
+│   │   ├── SessionTable.tsx
+│   │   ├── TradeSessionsManager.tsx
+│   │   └── RiskVisualizationPrototype.tsx
+│   ├── data_schema/
+│   │   ├── _db_schema.json
+│   │   └── global_settings.json
+│   └── docs/
+│       ├── README_v2.md
+│       ├── INTEGRATION_GUIDE.md
+│       └── SSID_normalization_plan.md
+├── app/
+	├──.clinerules/       ← Copy from v2
+	├── backend/          ← New clean code starts here
+	├── frontend/
+	├── data/
+	└── .env

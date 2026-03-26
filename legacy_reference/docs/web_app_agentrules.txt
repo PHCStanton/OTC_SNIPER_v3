@@ -1,0 +1,24 @@
+# QuFLX v2 Project Guidelines
+
+## Documentation Requirements
+- All feature additions MUST be recorded in `.agent-memory/progress.md`.
+- Architectural shifts (e.g., new backend ports or patterns) MUST be updated in `.agent-memory/systemPatterns.md`.
+- Keep the `README.md` and any UI documentation in sync with latest visual changes.
+
+## Architecture
+- Respect the separation between the **Main Backend (8001)** and the **Streaming Server (3001)**.
+- New indicators or logical blocks should be placed in `backend/src/` as reusable classes.
+- Frontend components should be modular and located in `src/components/`.
+
+## Code Style & Patterns
+- **React**: Use functional components with hooks (e.g., `useEffect`, `useMemo`).
+- **Python**: Follow PEP 8; use Type Hints for all new class methods.
+- **Styling**: Use Vanilla CSS or Tailwind where applicable, following the glassmorphism aesthetic.
+
+## Testing Standards
+- Always verify high-frequency streaming using the **Simulation Worker** before proceeding to live data.
+- Ensure all new components handle "Loading" or "Error" states for real-time streams.
+
+## Security
+- **SSID Protection**: Never log full SSIDs or hardcode them in the codebase.
+- Avoid committing `.env` files or session logs containing user identifiers.

@@ -1,0 +1,14 @@
+# SSID integration package
+vssid_integration_package/
+
+# DATA
+app/data/
+
+# AGENT SPECIFIC FOLDERS
+
+.clinerules/
+.zencoder/
+.zenflow/
+
+# .ENV
+.env/
