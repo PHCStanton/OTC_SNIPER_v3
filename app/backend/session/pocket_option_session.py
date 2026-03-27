@@ -148,7 +148,7 @@ class PocketOptionSession:
             global_value.SSID = self._raw_ssid
             global_value.DEMO = self._is_demo
 
-            self._api = PocketOption(self._raw_ssid)
+            self._api = PocketOption(self._raw_ssid, self._is_demo)
             if not self._api.connect():
                 self._connected = False
                 return False, "Failed to start WebSocket connection"
