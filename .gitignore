@@ -1,5 +1,5 @@
 # SSID integration package
-vssid_integration_package/
+ssid_integration_package/
 
 # DATA
 app/data/
@@ -12,3 +12,9 @@ app/data/
 
 # .ENV
 .env/
+
+# CHROME PROFILE
+Chrome_profile/
+
+# AGENT RELATED FILES
+# .agent-memory/

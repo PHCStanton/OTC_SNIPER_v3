@@ -1,77 +1,102 @@
 # Active Context
 
 ## Current Work
-**Phase 0 (Ops Layer: Chrome Lifecycle + Manual SSID Input) — COMPLETE**
+**Phase 4 (Frontend Shell) — COMPLETE**
 
-All Phase 0 deliverables implemented and wired into the backend.
+React + Vite + Tailwind v4 + Zustand frontend shell built, installed, and verified with a clean production build (1624 modules, 0 errors).
 
-## Phase 0 Deliverables — Done
+**SSID connection workflow validated via frontend**
+
+The Connect Session modal now successfully connects to both DEMO and REAL Pocket Option accounts through the backend session endpoint after the PocketOption constructor signature fix.
+
+## Phase 4 Deliverables — Done
 
 | File | Status | Notes |
 |------|--------|-------|
-| `app/backend/config.py` | ✅ Updated | Added `chrome_profile_dir`, `chrome_url`, `chrome_executable` fields |
-| `app/backend/api/ops.py` | ✅ Created | Chrome start/stop/status + combined /api/ops/status endpoint |
-| `app/backend/api/session.py` | ✅ Created | SSID connect/disconnect/status/ssid-status with .env persistence + auto-reconnect |
-| `app/backend/main.py` | ✅ Rewritten | ops + session routers registered; check_status Socket.IO event added; duplicate inline session routes removed |
-| `netstat_chrome_session.bat` | ✅ Deleted | Cross-project v2 dependency eliminated |
+| `app/frontend/package.json` | ✅ Rewritten | React 18, Zustand 5, Tailwind v4, Socket.IO, lucide-react |
+| `app/frontend/vite.config.js` | ✅ Created | @vitejs/plugin-react + @tailwindcss/vite + proxy to :8001 |
+| `app/frontend/jsconfig.json` | ✅ Created | allowJs + jsx: react-jsx (replaces broken tsconfig.json) |
+| `app/frontend/index.html` | ✅ Fixed | Points to src/main.jsx |
+| `app/frontend/tailwind.config.js` | ✅ Fixed | Minimal v4 config (theme in CSS @theme block) |
+| `app/frontend/src/index.css` | ✅ Created | Tailwind v4 @import + @theme glow design tokens |
+| `app/frontend/src/main.jsx` | ✅ Created | React 18 createRoot |
+| `app/frontend/src/App.jsx` | ✅ Created | Socket.IO init + check_status polling every 5s |
+| `app/frontend/src/api/socketClient.js` | ✅ Created | Socket.IO singleton |
+| `app/frontend/src/api/opsApi.js` | ✅ Created | Chrome + session HTTP endpoints |
+| `app/frontend/src/api/tradingApi.js` | ✅ Created | Trade execution + history |
+| `app/frontend/src/api/streamApi.js` | ✅ Created | focusAsset, watchAssets, onMarketData, onSignal |
+| `app/frontend/src/stores/useOpsStore.js` | ✅ Kept | Chrome/session status |
+| `app/frontend/src/stores/useLayoutStore.js` | ✅ Kept | Sidebar + view + dashboardMode |
+| `app/frontend/src/stores/useAuthStore.js` | ✅ Created | SSID input + connect/disconnect |
+| `app/frontend/src/stores/useAssetStore.js` | ✅ Created | Selected asset + OTC list |
+| `app/frontend/src/stores/useTradingStore.js` | ✅ Created | Trade form + execution |
+| `app/frontend/src/stores/useSettingsStore.js` | ✅ Created | OTEO + ghost + risk + UI prefs |
+| `app/frontend/src/stores/useStreamStore.js` | ✅ Created | Ticks + signals + manipulation |
+| `app/frontend/src/stores/useRiskStore.js` | ✅ Created | Session P&L + win rate + streak |
+| `app/frontend/src/components/layout/MainLayout.jsx` | ✅ Created | Full app shell |
+| `app/frontend/src/components/layout/TopBar.jsx` | ✅ Created | Chrome badge + Session badge + Tab toggle |
+| `app/frontend/src/components/layout/LeftSidebar.jsx` | ✅ Created | Collapsible nav + asset list |
+| `app/frontend/src/components/layout/RightSidebar.jsx` | ✅ Created | Collapsible session risk panel |
+| `app/frontend/src/components/shared/TradingPlaceholder.jsx` | ✅ Created | Trading view placeholder |
+| `app/frontend/src/components/shared/RiskPlaceholder.jsx` | ✅ Created | Risk view placeholder |
+| `app/frontend/src/components/auth/ConnectDialog.jsx` | ✅ Created | SSID connect/disconnect modal |
 
-## Key Design Decisions Made
+## Key Design Decisions Made (Phase 4)
 
-- **Chrome spawn flags**: `--disable-web-security` and `--allow-running-insecure-content` are NOT included by default. Opt-in via `CHROME_INSECURE_MODE=1` in `.env` only.
-- **Chrome profile dir**: Lives at `C:\v3\OTC_SNIPER\Chrome_profile\` (one level above `app/`) so it persists across app rebuilds.
-- **SSID persistence**: After a successful connect, SSID is written to `.env` AND `os.environ` is refreshed immediately (fixes v2 stale-state bug).
-- **Auto-reconnect**: `POST /api/session/connect` with empty `ssid` field falls back to saved `.env` value for the requested account type.
-- **Status separation**: `chrome.running` (port probe) and `session.connected` (authenticated WS) are always reported as separate fields — they are distinct states.
-- **Session manager**: `get_session_manager()` from `dependencies.py` is the single singleton used by both `session.py` router and `check_status` Socket.IO event.
+- **Tailwind v4**: Uses `@import "tailwindcss"` + `@theme {}` in CSS instead of `theme.extend` in config. The `tailwind.config.js` is minimal (v4 convention).
+- **JSX not TSX**: All frontend files are `.jsx`/`.js` per plan spec. `jsconfig.json` replaces `tsconfig.json`.
+- **Dark mode**: Driven by `dashboardMode === 'risk'` in `App.jsx` — adds `dark` class to root div. Trading = light, Risk Manager = dark.
+- **Socket.IO proxy**: Vite dev server proxies `/api` and `/socket.io` to `http://127.0.0.1:8001`.
+- **Status polling**: `App.jsx` emits `check_status` every 5s; `status_update` response updates `useOpsStore`.
+- **ConnectDialog**: Opened from TopBar session badge. Supports SSID paste or empty-string auto-reconnect from `.env`.
 
-## API Surface Added (Phase 0)
+## API Surface Consumed (Phase 4 → Phase 0 Backend)
 
-### HTTP Endpoints
 ```
-POST /api/ops/chrome/start      → Spawn Chrome with remote debugging (idempotent)
-POST /api/ops/chrome/stop       → Terminate managed Chrome process
-GET  /api/ops/chrome/status     → Live port probe (never stale)
-GET  /api/ops/status            → Combined Chrome + session status (TopBar badge source)
+POST /api/ops/chrome/start      → chromeStart() in opsApi.js
+POST /api/ops/chrome/stop       → chromeStop() in opsApi.js
+GET  /api/ops/chrome/status     → chromeStatus() in opsApi.js
+GET  /api/ops/status            → opsStatus() in opsApi.js
+POST /api/session/connect       → sessionConnect(ssid, demo) in opsApi.js
+POST /api/session/disconnect    → sessionDisconnect() in opsApi.js
+GET  /api/session/status        → sessionStatus() in opsApi.js
+GET  /api/session/ssid-status   → sessionSsidStatus() in opsApi.js
 
-POST /api/session/connect       → Connect with SSID or auto-reconnect from .env
-POST /api/session/disconnect    → Disconnect active session
-GET  /api/session/status        → Current session state
-GET  /api/session/ssid-status   → Reports has_demo_ssid / has_real_ssid (no values exposed)
+Socket.IO emit: check_status    → triggers status_update
+Socket.IO recv: status_update   → updates useOpsStore
+Socket.IO emit: focus_asset     → streamApi.focusAsset()
+Socket.IO emit: watch_assets    → streamApi.watchAssets()
+Socket.IO recv: market_data     → streamApi.onMarketData()
+Socket.IO recv: signal          → streamApi.onSignal()
 ```
-
-### Socket.IO Events
-```
-emit: check_status              → Triggers status_update response
-recv: status_update             → { chrome: {...}, session: {...}, observed_at }
-```
-
-## Security Model
-- All `/api/ops/*` endpoints require `QFLX_ENABLE_OPS=1` in `.env`
-- All `/api/ops/*` endpoints are localhost-only (127.0.0.1 / ::1)
-- Optional `X-QFLX-OPS-TOKEN` header for extra protection
-- Chrome insecure flags are opt-in only via `CHROME_INSECURE_MODE=1`
 
 ## Recent Changes
-- Ported OTEO and Manipulation Detection algorithms (Phase 3).
-- Implemented `StreamingService` for real-time data orchestration (Phase 3).
-- Integrated `python-socketio` into `main.py` ASGI app (Phase 3).
-- Monkey-patched `pocketoptionapi.global_value.set_csv` to hook live ticks (Phase 3).
-- Added `TickLogger` and `SignalLogger` for JSONL persistence (Phase 3).
-- **Phase 0 complete**: Chrome lifecycle management + manual SSID input ops layer.
+- Removed broken Vite vanilla TypeScript boilerplate (main.ts, counter.ts, style.css, assets/, tsconfig.json).
+- Rebuilt frontend scaffold from scratch with correct React + Vite + Tailwind v4 stack.
+- All 8 Zustand stores created (2 existing kept, 6 new).
+- Full layout shell with TopBar, LeftSidebar, RightSidebar, MainLayout.
+- ConnectDialog for SSID management wired to Phase 0 backend.
+- Fixed backend session wrapper to pass the required `demo` flag into `PocketOption(ssid, demo)` for the installed Pocket Option API.
+- Verified successful frontend SSID connection for both DEMO and REAL accounts.
+- Normalized `.env` formatting for `PO_SSID_DEMO` to match canonical env style.
+- Production build verified: 1624 modules, 0 errors, 0 vulnerabilities.
 
 ## Next Steps
-1. **@Reviewer** — Phase 0 incremental review (per PHASE_REVIEW_PROTOCOL.md).
-2. After review sign-off: proceed with **Phase 1** (Backend Foundation).
-   - Rebuild broker adapter around `PocketOptionSession` directly.
-   - Add repository abstraction for local storage.
-   - Verify real connection through new session layer.
-3. **Phase 4** (Frontend Shell) — TopBar with Chrome + SSID badges using `useOpsStore.js`.
+1. **@Reviewer** — review the SSID/backend fix pass and confirm no regressions.
+2. Proceed with **Phase 5** (Trading UI).
+   - `Sparkline.jsx` — live tick chart
+   - `OTEORing.jsx` — signal confidence ring
+   - `TradePanel.jsx` — buy/sell controls
+   - `TradeHistory.jsx` — recent trades table
+   - `MultiChartView.jsx` — multi-asset grid
+   - `MiniSparkline.jsx` — compact chart for multi-chart
 
 ## Blockers
-None. Phase 0 is complete and awaiting @Reviewer sign-off before Phase 1 begins.
+None. SSID connection is working via the frontend for both account modes.
 
 ## Environment Notes
-- App server: `OTC_PORT=8001` (separate from QuFLX-v2 gateway on 8000)
+- Backend: `cd C:\v3\OTC_SNIPER\app && python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload`
+- Frontend dev: `cd C:\v3\OTC_SNIPER\app\frontend && npm run dev` → http://localhost:5173
+- Frontend build: `npm run build` → `dist/` (verified ✅)
 - Chrome debug port: `CHROME_PORT=9222`
 - Ops enabled: `QFLX_ENABLE_OPS=1`
-- Start command: `cd C:\v3\OTC_SNIPER\app && python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload`
