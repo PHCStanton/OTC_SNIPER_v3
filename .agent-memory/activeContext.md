@@ -82,14 +82,15 @@ Socket.IO recv: signal          → streamApi.onSignal()
 - Production build verified: 1624 modules, 0 errors, 0 vulnerabilities.
 
 ## Next Steps
-1. **@Reviewer** — review the SSID/backend fix pass and confirm no regressions.
-2. Proceed with **Phase 5** (Trading UI).
+1. **Phase 4 cleanup pass** — remove dead imports and keep the shell lean.
+2. **Phase 5** — implement the trading-terminal surface from the supplied dashboard draft.
    - `Sparkline.jsx` — live tick chart
    - `OTEORing.jsx` — signal confidence ring
    - `TradePanel.jsx` — buy/sell controls
    - `TradeHistory.jsx` — recent trades table
    - `MultiChartView.jsx` — multi-asset grid
    - `MiniSparkline.jsx` — compact chart for multi-chart
+3. **Reviewer gate** — confirm the cleanup pass and then approve the Phase 5 handoff.
 
 ## Blockers
 None. SSID connection is working via the frontend for both account modes.

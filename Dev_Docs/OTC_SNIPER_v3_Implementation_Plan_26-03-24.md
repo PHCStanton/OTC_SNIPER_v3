@@ -1,7 +1,7 @@
 # OTC SNIPER v3 — Implementation Plan
 
 **Date:** 2026-03-24  
-**Updated:** 2026-03-26 — Added Phase 0 (Ops + Chrome + Manual SSID) per cross-project architecture review  
+**Updated:** 2026-03-28 — Phase 4 shell verified complete; Phase 5 trading UI design handoff prepared  
 **Status:** Draft for clean rebuild execution  
 **Workspace Root:** `C:\v3\OTC_SNIPER`  
 **Functional App Root:** `C:\v3\OTC_SNIPER\app`
@@ -360,7 +360,7 @@ Next time: User clicks "Connect" with empty SSID
 
 ---
 
-### Phase 4 — Frontend Shell (IN PROGRESS)
+### Phase 4 — Frontend Shell ✅
 
 **Goal:** Establish a high-end, glowy UI shell with dual themes and Risk Manager visualization.
 
@@ -380,11 +380,17 @@ Next time: User clicks "Connect" with empty SSID
 - `Socket.IO Integration` — Hooking into backend `check_status` and tick streams.
 
 #### Acceptance Criteria
-- [ ] React + Vite + Tailwind project scaffolded in `app/frontend`.
-- [ ] Theme provider supporting Light (Trading) and Dark (Risk) modes.
-- [ ] Tab toggle switches between Trading and Risk views.
-- [ ] TopBar badges correctly report backend Chrome and Session status.
-- [ ] Left/Right sidebars collapse/expand with persistence.
+- [x] React + Vite + Tailwind project scaffolded in `app/frontend`.
+- [x] Theme provider supporting Light (Trading) and Dark (Risk) modes.
+- [x] Tab toggle switches between Trading and Risk views.
+- [x] TopBar badges correctly report backend Chrome and Session status.
+- [x] Left/Right sidebars collapse/expand with persistence.
+
+#### Phase 4 Verification Summary
+- React + Vite + Tailwind v4 shell is built and verified with a clean production build.
+- Socket.IO polling updates Chrome/session state in the top bar.
+- Sidebar collapse state persists and the Trading/Risk theme split is in place.
+- Current gap is visual fidelity to the provided trading-terminal draft, which is now a Phase 5+ styling and content task rather than a shell blocker.
 
 ---
 
@@ -564,7 +570,8 @@ Next time: User clicks "Connect" with empty SSID
 7. **[Phase 1]** Rebuild the broker adapter around `PocketOptionSession`.
 8. **[Phase 1]** Add the repository abstraction for local storage.
 9. **[Phase 4]** Scaffold the frontend layout shell, stores, and TopBar with Chrome/SSID badges.
-10. Verify the real trade path before adding non-essential features.
+10. **[Phase 5]** Build the trading-terminal UI from the dashboard draft: chart stage, signal cards, execution panel, and logs.
+11. Verify the real trade path before adding non-essential features.
 
 ---
 

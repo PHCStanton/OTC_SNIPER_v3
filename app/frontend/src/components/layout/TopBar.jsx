@@ -7,7 +7,6 @@ import {
   Chrome,
   Wifi,
   WifiOff,
-  Monitor,
   TrendingUp,
   ShieldAlert,
   Settings,
@@ -18,7 +17,6 @@ import {
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
-import { useAuthStore } from '../../stores/useAuthStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
 import logoImg from '../../../assets/LOGO1-bg.png';
