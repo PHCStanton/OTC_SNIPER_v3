@@ -17,6 +17,17 @@ export const useSettingsStore = create()(
       ghostTradingEnabled: false,
       ghostAmount: 1,
 
+      // Session risk defaults
+      initialBalance: 1000,
+      payoutPercentage: 80,
+      riskPercentPerTrade: 1,
+      drawdownPercent: 10,
+      riskRewardRatio: 2,
+      useFixedAmount: false,
+      fixedRiskAmount: 10,
+      tradesPerRun: 4,
+      maxRuns: 3,
+
       // Risk management
       maxDailyLoss: 50,
       maxTradesPerSession: 20,
@@ -32,6 +43,15 @@ export const useSettingsStore = create()(
       setOteoCooldownBars: (val) => set({ oteoCooldownBars: val }),
       setGhostTradingEnabled: (val) => set({ ghostTradingEnabled: val }),
       setGhostAmount: (val) => set({ ghostAmount: val }),
+      setInitialBalance: (val) => set({ initialBalance: val }),
+      setPayoutPercentage: (val) => set({ payoutPercentage: val }),
+      setRiskPercentPerTrade: (val) => set({ riskPercentPerTrade: val }),
+      setDrawdownPercent: (val) => set({ drawdownPercent: val }),
+      setRiskRewardRatio: (val) => set({ riskRewardRatio: val }),
+      setUseFixedAmount: (val) => set({ useFixedAmount: val }),
+      setFixedRiskAmount: (val) => set({ fixedRiskAmount: val }),
+      setTradesPerRun: (val) => set({ tradesPerRun: val }),
+      setMaxRuns: (val) => set({ maxRuns: val }),
       setMaxDailyLoss: (val) => set({ maxDailyLoss: val }),
       setMaxTradesPerSession: (val) => set({ maxTradesPerSession: val }),
       setStopOnLossStreak: (val) => set({ stopOnLossStreak: val }),

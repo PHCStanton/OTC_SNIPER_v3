@@ -1,7 +1,7 @@
 # OTC SNIPER v3 — Implementation Plan
 
 **Date:** 2026-03-24  
-**Updated:** 2026-03-28 — Phase 4 shell verified complete; Phase 5 trading UI design handoff prepared  
+**Updated:** 2026-03-29 — Phase 4 shell verified complete; Phase 5 trading UI complete; Phase 6 risk manager scope refined with Trade / Trade Run / Session terminology and VOID state; Phase 7 settings scope refined with Account / App / Risk tabs and Auth0-ready boundaries  
 **Status:** Draft for clean rebuild execution  
 **Workspace Root:** `C:\v3\OTC_SNIPER`  
 **Functional App Root:** `C:\v3\OTC_SNIPER\app`
@@ -107,6 +107,12 @@ Must only include account/security/session concerns:
 - demo/real account choice
 - account-specific credentials or connection state
 
+Auth0 readiness rule:
+- future identity/profile state will live in a separate user profile boundary
+- do **not** add Auth0 user fields to `useAuthStore`
+- preserve `useAuthStore` for SSID connect/disconnect only
+- reserve Account Settings for session identity, broker identity, and future user-profile presentation only
+
 #### App Settings
 Must only include application behavior/configuration:
 - navigation and layout
@@ -131,6 +137,25 @@ Must only include application behavior/configuration:
 - AI is advisory only.
 - AI may help explain patterns, summarize sessions, suggest assets, and propose risk adjustments.
 - AI must never directly execute trades or override validation.
+
+### 5.5 Trading / Risk Terminology
+
+These terms are mandatory throughout the app, docs, and UI:
+
+| Term | Definition |
+|---|---|
+| **Trade** | One single executed trade — outcome is WIN, LOSS, or VOID. |
+| **Trade Run** | A group of consecutive trades in one focused sequence. |
+| **Session** | The overall trading day / account session defined by starting balance, drawdown limit, and take-profit target. |
+| **VOID** | A recorded trade that is excluded from P&L and win-rate math. Used for break-even outcomes, SSID sync errors, or manual corrections. |
+
+### 5.6 Risk Modes
+
+The risk surface must support three modes:
+
+- **Auto Mode** — default mode. Automatically records WIN / LOSS / VOID from real SSID / Pocket Option trade results.
+- **Manual Mode** — user manually enters WIN / LOSS / VOID for each trade.
+- **Manual Override** — user can edit/correct any previously recorded trade, balance, or Trade Run at any time to fix SSID errors.
 
 ---
 
@@ -413,34 +438,107 @@ Next time: User clicks "Connect" with empty SSID
 ---
 
 ### Phase 6 — Risk Management
-**Goal:** Integrate quick session risk visibility.
+**Goal:** Deliver a simple, session-aware Risk Manager built from the proven legacy risk foundation.
+
+#### Design Inputs From Legacy Reference
+- `legacy_reference/risk_components/UnifiedRiskControls.tsx` → primary risk settings surface
+- `legacy_reference/risk_components/RiskCalculator.tsx` → pure risk math engine
+- `legacy_reference/risk_components/TradeSessionsManager.tsx` → session progression / equity curve visualization
+- `legacy_reference/risk_components/SessionTable.tsx` → session summary cards + detailed session table
+
+#### Implementation Shape
+Phase 6 should stay deliberately simple and dashboard-first:
+- one **session command center** that shows the risk summary, controls, and progression visualization
+- one **pure risk math utility** for derived values such as risk per trade, take-profit target, minimum win rate, and drawdown thresholds
+- one **vertical session progression chart** to show the current run and drawdown/target boundaries
+- one **trade run history table** for Trade / Trade Run progression and VOID-aware corrections
+- one **shared risk store update path** so completed trades flow into the Risk Manager automatically
 
 #### Deliverables
-- `VerticalRiskChart.jsx`
-- `SessionRiskPanel.jsx`
-- `RiskSummaryCards.jsx`
-- unified trade-history / session-table flow
+- `riskMath.js` — pure helper module for risk calculations
+- `VerticalRiskChart.jsx` — compact equity/drawdown visualization for the active session
+- `TradeRunHistory.jsx` — trade / Trade Run history with WIN / LOSS / VOID badges and manual override support
+- `SessionControls.jsx` — mode toggle plus Add Win / Add Loss / Add Void / Sync / Export / Reset actions
+- `SessionRiskPanel.jsx` — main Phase 6 container composing metrics, chart, controls, and history
+
+#### Data Flow
+1. `useTradingStore.executeTrade()` records each result and forwards the resolved outcome to `useRiskStore` in Auto Mode.
+2. Manual Mode and Manual Override allow the user to add or correct WIN / LOSS / VOID outcomes inside the Risk Manager.
+3. `useRiskStore` remains the session-level source of truth for P/L, streak, drawdown, Trade Runs, and edit history.
+4. `riskMath.js` computes derived targets and guardrails from the current session inputs.
+5. `RiskPlaceholder.jsx` is replaced by the composed Phase 6 risk manager surface.
 
 #### Acceptance Criteria
-- Risk visualization appears next to the sparkline in the main layout.
-- Trade history and session risk data are generated from a shared source.
-- The risk UI remains optional and composable.
+- The Risk Manager shows live session P/L, win rate, streak, Trade Run history, and max drawdown from a shared risk source.
+- The primary Phase 6 surface supports Auto Mode, Manual Mode, and Manual Override.
+- The vertical risk chart clearly communicates starting balance, take-profit target, and drawdown limit.
+- Trade history remains VOID-aware and supports inline correction without breaking session math.
+- The risk UI remains optional, lean, and easy to extend without changing the trading workspace.
 
 ---
 
 ### Phase 7 — Settings System
-**Goal:** Make settings structured, scalable, and easy to extend.
+**Goal:** Make settings structured, scalable, and Auth0-ready without mixing session identity into the wrong store.
+
+#### Phase 7 Scope
+- Replace the `SettingsPlaceholder` with a real settings workspace in `MainLayout.jsx`.
+- Keep settings separated into three tabs: **Account**, **App**, and **Risk**.
+- Surface the already-defined frontend defaults from `useSettingsStore` with validation before persistence.
+- Keep `useAuthStore` focused on SSID connect/disconnect only.
+- Reserve a future user-profile boundary for Auth0 so implementation later does not conflict with current session state.
 
 #### Deliverables
-- `SettingsView.jsx` with tabs/sections
-- `AccountSettings.jsx`
-- `AppSettings.jsx`
-- backend settings schemas and service layer
+- `SettingsView.jsx` with tabbed sections and shared layout framing
+- `AccountSettings.jsx` for broker/session status, saved SSID controls, and Auth0-ready placeholders
+- `AppSettings.jsx` for OTEO, ghost trading, trading controls, and UI preferences
+- `RiskSettings.jsx` for session capital, payout, risk sizing, drawdown, and trade-run controls
+- `validateSettings()` guardrails in `useSettingsStore.js`
+- `useUserStore.js` reserved namespace for future Auth0 profile state
 
 #### Acceptance Criteria
-- Account settings and app settings are clearly separated.
-- New setting groups can be added without reworking the UI.
+- Account, App, and Risk settings are clearly separated.
+- Account settings show only session/broker identity, saved SSID state, and an Auth0-ready placeholder card.
+- App settings expose OTEO, ghost trading, trading control, and UI preference toggles already present in `useSettingsStore`.
+- Risk settings expose the current session defaults already used by `useRiskStore`.
 - Settings changes are validated before persistence.
+- New setting groups can be added without reworking the UI.
+
+#### Recommended Settings By Panel
+
+##### Account Settings
+Recommended up to this point:
+- Broker badge / broker identity display
+- Session connected/disconnected status
+- Demo vs Real account display
+- Current balance display when connected
+- Saved SSID status for demo and real accounts
+- Clear saved SSID actions for security
+- Auth0-ready user profile placeholder card
+
+##### App Settings
+Recommended up to this point:
+- OTEO enable toggle
+- OTEO warmup bars
+- OTEO cooldown bars
+- Ghost trading enable toggle
+- Ghost trading amount
+- Max trades per session
+- Stop on loss streak
+- Max daily loss
+- Show manipulation alerts
+- Show signal confidence
+- Auto-focus on signal
+
+##### Risk Settings
+Recommended up to this point:
+- Initial balance
+- Payout percentage
+- Risk percent per trade
+- Fixed risk amount toggle and value
+- Drawdown percent
+- Risk:reward ratio
+- Trades per run
+- Max runs per session
 
 ---
 
@@ -571,7 +669,9 @@ Next time: User clicks "Connect" with empty SSID
 8. **[Phase 1]** Add the repository abstraction for local storage.
 9. **[Phase 4]** Scaffold the frontend layout shell, stores, and TopBar with Chrome/SSID badges.
 10. **[Phase 5]** Build the trading-terminal UI from the dashboard draft: chart stage, signal cards, execution panel, and logs.
-11. Verify the real trade path before adding non-essential features.
+11. **[Phase 6]** Build the simple Risk Manager from the legacy foundation: risk math, vertical chart, session controls, Trade Run history, and VOID-aware manual override support.
+12. **[Phase 7]** Implement the tabbed Settings workspace: Account, App, and Risk panels with validation and an Auth0-ready boundary.
+13. Verify the real trade path before adding non-essential features.
 
 ---
 
@@ -582,6 +682,7 @@ The architecture summary file `otc_sniper_v3_rebuild_architechture.md` has been 
 - **SSID workflow** — manual-first with `.env` persistence and auto-reconnect (NEW)
 - **TopBar badge requirements** — Chrome and SSID status badges aligned with v2 pattern (NEW)
 - **Security improvements** — removal of `--disable-web-security` Chrome flags (NEW)
+- **Settings split** — Account / App / Risk tabs with a reserved Auth0-ready user profile boundary (NEW)
 - the workspace/app root split
 - the new `C:\v3\OTC_SNIPER\app` runtime requirement
 - the settings split between Account and App scopes

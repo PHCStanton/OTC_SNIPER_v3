@@ -14,7 +14,7 @@ export default function MainLayout() {
   const { activeView, dashboardMode } = useLayoutStore();
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#0c0f0f] text-[#e3e6e7]">
       {/* Top bar — fixed height */}
       <TopBar />
 
@@ -46,7 +46,7 @@ function ActiveView({ view, mode }) {
 function SettingsPlaceholder() {
   return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-center text-slate-400">
+      <div className="text-center text-gray-500">
         <p className="text-lg font-semibold">Settings</p>
         <p className="text-sm mt-1">Phase 7 — Coming soon</p>
       </div>
@@ -57,7 +57,7 @@ function SettingsPlaceholder() {
 function JournalPlaceholder() {
   return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-center text-slate-400">
+      <div className="text-center text-gray-500">
         <p className="text-lg font-semibold">Journal</p>
         <p className="text-sm mt-1">Phase 8 — Coming soon</p>
       </div>

@@ -75,7 +75,7 @@ export default function ConnectDialog({ onClose }) {
                       ? <Ghost size={11} className="text-amber-400" />
                       : <DollarSign size={11} className="text-emerald-400" />}
                     <span className="capitalize font-medium">{accountType}</span> account
-                    {balance > 0 && <span className="ml-1">· ${balance.toFixed(2)}</span>}
+                    {balance != null && <span className="ml-1">· ${balance.toFixed(2)}</span>}
                   </p>
                 )}
               </div>

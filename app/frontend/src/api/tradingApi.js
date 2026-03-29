@@ -1,25 +1,7 @@
 /**
  * HTTP client for Phase 2 trading endpoints.
  */
-
-const BASE = '/api';
-
-async function request(method, path, body) {
-  const opts = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-
-  const res = await fetch(`${BASE}${path}`, opts);
-  const data = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    const msg = data.detail || data.message || `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return data;
-}
+import { request } from './httpClient.js';
 
 /**
  * Execute a trade.

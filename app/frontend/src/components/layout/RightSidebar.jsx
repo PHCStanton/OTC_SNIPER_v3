@@ -3,12 +3,12 @@
  * Shows session risk summary when expanded.
  */
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
-import { useState } from 'react';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useOpsStore } from '../../stores/useOpsStore.js';
+import { useLayoutStore } from '../../stores/useLayoutStore.js';
 
 export default function RightSidebar() {
-  const [open, setOpen] = useState(true);
+  const { rightSidebarOpen, toggleRightSidebar } = useLayoutStore();
   const { sessionPnl, winRate, totalTrades, currentStreak, maxDrawdown } = useRiskStore();
   const { balance, accountType } = useOpsStore();
 
@@ -18,21 +18,21 @@ export default function RightSidebar() {
   return (
     <aside className={`
       flex flex-col shrink-0
-      border-l border-slate-200 dark:border-slate-700
-      bg-white dark:bg-slate-900
+      border-r border-white/5
+      bg-[#0f1419]
       transition-all duration-200
-      ${open ? 'w-52' : 'w-12'}
+      ${rightSidebarOpen ? 'w-[220px]' : 'w-12'}
     `}>
       {/* Toggle button */}
       <button
-        onClick={() => setOpen(!open)}
+        onClick={toggleRightSidebar}
         className="flex items-center justify-center h-10 w-full border-b border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shrink-0"
-        title={open ? 'Collapse panel' : 'Expand panel'}
+        title={rightSidebarOpen ? 'Collapse panel' : 'Expand panel'}
       >
-        {open ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+        {rightSidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
       </button>
 
-      {open && (
+      {rightSidebarOpen && (
         <div className="flex flex-col gap-3 p-3 overflow-y-auto">
           {/* Header */}
           <div className="flex items-center gap-1.5">
@@ -41,7 +41,7 @@ export default function RightSidebar() {
           </div>
 
           {/* Balance */}
-          {balance > 0 && (
+          {balance != null && (
             <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
               <p className="text-[10px] text-slate-400 mb-0.5">Balance</p>
               <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
@@ -55,7 +55,7 @@ export default function RightSidebar() {
 
           {/* Session P&L */}
           <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
-            <p className="text-[10px] text-slate-400 mb-0.5">Session P&L</p>
+            <p className="text-[14px] text-slate-400 mb-0.5">Session P&L</p>
             <p className={`text-sm font-bold flex items-center gap-1 ${
               pnlPositive ? 'text-emerald-500' : pnlNegative ? 'text-red-500' : 'text-slate-500'
             }`}>

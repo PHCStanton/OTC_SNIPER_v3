@@ -1,103 +1,65 @@
 # Active Context
 
 ## Current Work
-**Phase 4 (Frontend Shell) — COMPLETE**
+**Phase 6 (Risk Management) — COMPLETE**
 
-React + Vite + Tailwind v4 + Zustand frontend shell built, installed, and verified with a clean production build (1624 modules, 0 errors).
+Full Risk Manager surface built, reviewed, patched, and verified with a clean production build (1643 modules, 0 errors).
 
-**SSID connection workflow validated via frontend**
+**@Reviewer gate passed.** All 3 MEDIUM issues resolved by @Coder. No blocking issues remain.
 
-The Connect Session modal now successfully connects to both DEMO and REAL Pocket Option accounts through the backend session endpoint after the PocketOption constructor signature fix.
-
-## Phase 4 Deliverables — Done
+## Phase 6 Deliverables — Done
 
 | File | Status | Notes |
 |------|--------|-------|
-| `app/frontend/package.json` | ✅ Rewritten | React 18, Zustand 5, Tailwind v4, Socket.IO, lucide-react |
-| `app/frontend/vite.config.js` | ✅ Created | @vitejs/plugin-react + @tailwindcss/vite + proxy to :8001 |
-| `app/frontend/jsconfig.json` | ✅ Created | allowJs + jsx: react-jsx (replaces broken tsconfig.json) |
-| `app/frontend/index.html` | ✅ Fixed | Points to src/main.jsx |
-| `app/frontend/tailwind.config.js` | ✅ Fixed | Minimal v4 config (theme in CSS @theme block) |
-| `app/frontend/src/index.css` | ✅ Created | Tailwind v4 @import + @theme glow design tokens |
-| `app/frontend/src/main.jsx` | ✅ Created | React 18 createRoot |
-| `app/frontend/src/App.jsx` | ✅ Created | Socket.IO init + check_status polling every 5s |
-| `app/frontend/src/api/socketClient.js` | ✅ Created | Socket.IO singleton |
-| `app/frontend/src/api/opsApi.js` | ✅ Created | Chrome + session HTTP endpoints |
-| `app/frontend/src/api/tradingApi.js` | ✅ Created | Trade execution + history |
-| `app/frontend/src/api/streamApi.js` | ✅ Created | focusAsset, watchAssets, onMarketData, onSignal |
-| `app/frontend/src/stores/useOpsStore.js` | ✅ Kept | Chrome/session status |
-| `app/frontend/src/stores/useLayoutStore.js` | ✅ Kept | Sidebar + view + dashboardMode |
-| `app/frontend/src/stores/useAuthStore.js` | ✅ Created | SSID input + connect/disconnect |
-| `app/frontend/src/stores/useAssetStore.js` | ✅ Created | Selected asset + OTC list |
-| `app/frontend/src/stores/useTradingStore.js` | ✅ Created | Trade form + execution |
-| `app/frontend/src/stores/useSettingsStore.js` | ✅ Created | OTEO + ghost + risk + UI prefs |
-| `app/frontend/src/stores/useStreamStore.js` | ✅ Created | Ticks + signals + manipulation |
-| `app/frontend/src/stores/useRiskStore.js` | ✅ Created | Session P&L + win rate + streak |
-| `app/frontend/src/components/layout/MainLayout.jsx` | ✅ Created | Full app shell |
-| `app/frontend/src/components/layout/TopBar.jsx` | ✅ Created | Chrome badge + Session badge + Tab toggle |
-| `app/frontend/src/components/layout/LeftSidebar.jsx` | ✅ Created | Collapsible nav + asset list |
-| `app/frontend/src/components/layout/RightSidebar.jsx` | ✅ Created | Collapsible session risk panel |
-| `app/frontend/src/components/shared/TradingPlaceholder.jsx` | ✅ Created | Trading view placeholder |
-| `app/frontend/src/components/shared/RiskPlaceholder.jsx` | ✅ Created | Risk view placeholder |
-| `app/frontend/src/components/auth/ConnectDialog.jsx` | ✅ Created | SSID connect/disconnect modal |
+| `app/frontend/src/utils/riskMath.js` | ✅ Created | Pure risk math utility — riskPerTrade, TP target, DD limit, min win rate |
+| `app/frontend/src/stores/useRiskStore.js` | ✅ Rewritten | Trade Run tracking, VOID state, Manual Override, summarizeSession() pure function |
+| `app/frontend/src/stores/useSettingsStore.js` | ✅ Updated | Added session risk defaults: initialBalance, payoutPercentage, riskPercentPerTrade, drawdownPercent, riskRewardRatio, useFixedAmount, fixedRiskAmount, tradesPerRun, maxRuns |
+| `app/frontend/src/stores/useTradingStore.js` | ✅ Updated | Auto Mode wiring — forwards validated outcome + pnl to useRiskStore after each live trade |
+| `app/frontend/src/components/risk/VerticalRiskChart.jsx` | ✅ Created | SVG session visualizer — balance bar, TP line, DD line, current balance label |
+| `app/frontend/src/components/risk/SessionControls.jsx` | ✅ Created | Mode toggle (Auto/Manual), Add Win/Loss/Void, New Trade Run, Sync, Export, Reset |
+| `app/frontend/src/components/risk/TradeRunHistory.jsx` | ✅ Created | W/L/V badge history per Trade Run, click-to-cycle Manual Override, edited indicator |
+| `app/frontend/src/components/risk/SessionRiskPanel.jsx` | ✅ Created | Main Phase 6 container — header, stat cards, chart, controls, trade run history |
+| `app/frontend/src/components/shared/RiskPlaceholder.jsx` | ✅ Replaced | Now a thin wrapper that renders SessionRiskPanel |
 
-## Key Design Decisions Made (Phase 4)
+## Key Design Decisions Made (Phase 6)
 
-- **Tailwind v4**: Uses `@import "tailwindcss"` + `@theme {}` in CSS instead of `theme.extend` in config. The `tailwind.config.js` is minimal (v4 convention).
-- **JSX not TSX**: All frontend files are `.jsx`/`.js` per plan spec. `jsconfig.json` replaces `tsconfig.json`.
-- **Dark mode**: Driven by `dashboardMode === 'risk'` in `App.jsx` — adds `dark` class to root div. Trading = light, Risk Manager = dark.
-- **Socket.IO proxy**: Vite dev server proxies `/api` and `/socket.io` to `http://127.0.0.1:8001`.
-- **Status polling**: `App.jsx` emits `check_status` every 5s; `status_update` response updates `useOpsStore`.
-- **ConnectDialog**: Opened from TopBar session badge. Supports SSID paste or empty-string auto-reconnect from `.env`.
+- **Mandatory terminology locked in:** Trade = single executed trade (WIN/LOSS/VOID), Trade Run = group of consecutive trades, Session = full trading day arc.
+- **VOID state:** Recorded but excluded from P&L, win rate, and streak. Increments `sessionVoids` and `totalTrades` only. Does not break streaks.
+- **Three modes:** Auto (live SSID), Manual (button entry), Manual Override (click any badge to cycle WIN→LOSS→VOID).
+- **`summarizeSession()` pure function:** All session math is recomputed from source data on every mutation — no stale derived state. Correct for financial tracking.
+- **`syncStartBalance()` guard:** Only called when `startBalance === 0` (initial sync). JSDoc documents this assumption explicitly.
+- **Settings separation:** Risk configuration inputs (balance, payout %, risk %, drawdown %, R:R) live in `useSettingsStore` and will be surfaced in Phase 7 Settings Tab. Phase 6 reads them but does not provide input UI for them.
+- **RightSidebar unchanged:** Remains the always-visible ambient pulse (P&L, win rate, streak, drawdown). No duplication with the Risk Manager Tab.
+- **Export:** CSV export of full session trade history built into `SessionRiskPanel`.
 
-## API Surface Consumed (Phase 4 → Phase 0 Backend)
+## Architecture: Three Distinct Surfaces
 
-```
-POST /api/ops/chrome/start      → chromeStart() in opsApi.js
-POST /api/ops/chrome/stop       → chromeStop() in opsApi.js
-GET  /api/ops/chrome/status     → chromeStatus() in opsApi.js
-GET  /api/ops/status            → opsStatus() in opsApi.js
-POST /api/session/connect       → sessionConnect(ssid, demo) in opsApi.js
-POST /api/session/disconnect    → sessionDisconnect() in opsApi.js
-GET  /api/session/status        → sessionStatus() in opsApi.js
-GET  /api/session/ssid-status   → sessionSsidStatus() in opsApi.js
-
-Socket.IO emit: check_status    → triggers status_update
-Socket.IO recv: status_update   → updates useOpsStore
-Socket.IO emit: focus_asset     → streamApi.focusAsset()
-Socket.IO emit: watch_assets    → streamApi.watchAssets()
-Socket.IO recv: market_data     → streamApi.onMarketData()
-Socket.IO recv: signal          → streamApi.onSignal()
-```
+| Surface | Role |
+|---|---|
+| **Settings Tab (Phase 7)** | Configure — balance, risk %, payout %, drawdown %, R:R |
+| **RightSidebar** | Observe — live ambient pulse, always visible |
+| **Risk Manager Tab** | Manage — session command center, visualization, Trade Run tracking |
 
 ## Recent Changes
-- Removed broken Vite vanilla TypeScript boilerplate (main.ts, counter.ts, style.css, assets/, tsconfig.json).
-- Rebuilt frontend scaffold from scratch with correct React + Vite + Tailwind v4 stack.
-- All 8 Zustand stores created (2 existing kept, 6 new).
-- Full layout shell with TopBar, LeftSidebar, RightSidebar, MainLayout.
-- ConnectDialog for SSID management wired to Phase 0 backend.
-- Fixed backend session wrapper to pass the required `demo` flag into `PocketOption(ssid, demo)` for the installed Pocket Option API.
-- Verified successful frontend SSID connection for both DEMO and REAL accounts.
-- Normalized `.env` formatting for `PO_SSID_DEMO` to match canonical env style.
-- Production build verified: 1624 modules, 0 errors, 0 vulnerabilities.
+- Implemented full Phase 6 Risk Manager surface (5 new files, 3 updated stores).
+- Locked in Trade / Trade Run / Session / VOID terminology in implementation plan (sections 5.5 and 5.6).
+- @Reviewer gate passed: 0 critical, 0 high, 3 medium (all fixed), 3 low (deferred to Phase 9).
+- @Coder fixed: duplicate `completeCurrentTradeRun` action removed, `syncStartBalance` JSDoc added, dead import removed from `SessionRiskPanel`.
+- Production build verified: 1643 modules, 0 errors, JS bundle 273.56 kB.
 
 ## Next Steps
-1. **Phase 4 cleanup pass** — remove dead imports and keep the shell lean.
-2. **Phase 5** — implement the trading-terminal surface from the supplied dashboard draft.
-   - `Sparkline.jsx` — live tick chart
-   - `OTEORing.jsx` — signal confidence ring
-   - `TradePanel.jsx` — buy/sell controls
-   - `TradeHistory.jsx` — recent trades table
-   - `MultiChartView.jsx` — multi-asset grid
-   - `MiniSparkline.jsx` — compact chart for multi-chart
-3. **Reviewer gate** — confirm the cleanup pass and then approve the Phase 5 handoff.
+1. **Phase 7** — Settings System (SettingsView, AccountSettings, AppSettings, RiskSettings).
+   - Risk configuration inputs (balance, payout %, risk %, drawdown %, R:R) move here from `useSettingsStore` defaults.
+   - Account settings and app settings clearly separated.
+   - Settings changes validated before persistence.
+2. **Reviewer gate** — required before Phase 8.
 
 ## Blockers
-None. SSID connection is working via the frontend for both account modes.
+None.
 
 ## Environment Notes
 - Backend: `cd C:\v3\OTC_SNIPER\app && python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload`
 - Frontend dev: `cd C:\v3\OTC_SNIPER\app\frontend && npm run dev` → http://localhost:5173
-- Frontend build: `npm run build` → `dist/` (verified ✅)
+- Frontend build: `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build` → `dist/` (verified ✅)
 - Chrome debug port: `CHROME_PORT=9222`
 - Ops enabled: `QFLX_ENABLE_OPS=1`

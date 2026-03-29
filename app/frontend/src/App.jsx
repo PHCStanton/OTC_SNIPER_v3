@@ -35,7 +35,7 @@ export default function App() {
   }, [setChromeStatus, setSessionStatus, setBalance, setAccountType]);
 
   return (
-    <div className={dashboardMode === 'risk' ? 'dark' : ''}>
+    <div className="dark" data-dashboard-mode={dashboardMode}>
       <MainLayout />
     </div>
   );
