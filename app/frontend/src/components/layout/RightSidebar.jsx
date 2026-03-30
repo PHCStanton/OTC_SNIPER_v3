@@ -1,19 +1,51 @@
 /**
  * RightSidebar — collapsible info/risk panel.
- * Shows session risk summary when expanded.
+ * Shows session risk summary and AI assistant tabs when expanded.
  */
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Activity, Bot, ShieldAlert } from 'lucide-react';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
+import { getAIStatus } from '../../api/aiApi.js';
+import AITab from '../ai/AITab.jsx';
 
 export default function RightSidebar() {
   const { rightSidebarOpen, toggleRightSidebar } = useLayoutStore();
   const { sessionPnl, winRate, totalTrades, currentStreak, maxDrawdown } = useRiskStore();
   const { balance, accountType } = useOpsStore();
+  const [activeTab, setActiveTab] = useState('risk');
+  const [aiStatus, setAIStatus] = useState({ enabled: false, provider: 'xai', model: '', has_api_key: false, reason: '' });
+  const [statusLoading, setStatusLoading] = useState(false);
 
   const pnlPositive = sessionPnl > 0;
   const pnlNegative = sessionPnl < 0;
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadAIStatus() {
+      setStatusLoading(true);
+      try {
+        const status = await getAIStatus();
+        if (mounted) setAIStatus(status);
+      } catch (error) {
+        if (mounted) {
+          setAIStatus({ enabled: false, provider: 'xai', model: '', has_api_key: false, reason: error.message });
+        }
+      } finally {
+        if (mounted) setStatusLoading(false);
+      }
+    }
+
+    if (rightSidebarOpen) {
+      loadAIStatus();
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [rightSidebarOpen]);
 
   return (
     <aside className={`
@@ -34,56 +66,89 @@ export default function RightSidebar() {
 
       {rightSidebarOpen && (
         <div className="flex flex-col gap-3 p-3 overflow-y-auto">
-          {/* Header */}
-          <div className="flex items-center gap-1.5">
-            <Activity size={12} className="text-slate-400" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Session Risk</span>
+          <div className="flex items-center gap-2 rounded-2xl border border-white/5 bg-[#11161d] p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('risk')}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'risk' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}
+            >
+              <ShieldAlert size={12} />
+              Risk
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('ai')}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-2.5 py-2 text-[10px] font-semibold uppercase tracking-wider transition-colors ${activeTab === 'ai' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'}`}
+            >
+              <Bot size={12} />
+              AI
+            </button>
           </div>
 
-          {/* Balance */}
-          {balance != null && (
-            <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
-              <p className="text-[10px] text-slate-400 mb-0.5">Balance</p>
-              <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                ${balance.toFixed(2)}
-              </p>
-              {accountType && (
-                <p className="text-[10px] text-slate-400 capitalize">{accountType} account</p>
+          {activeTab === 'risk' ? (
+            <>
+              <div className="flex items-center gap-1.5">
+                <Activity size={12} className="text-slate-400" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Session Risk</span>
+              </div>
+
+              {balance != null && (
+                <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
+                  <p className="text-[10px] text-slate-400 mb-0.5">Balance</p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                    ${balance.toFixed(2)}
+                  </p>
+                  {accountType && (
+                    <p className="text-[10px] text-slate-400 capitalize">{accountType} account</p>
+                  )}
+                </div>
               )}
-            </div>
-          )}
 
-          {/* Session P&L */}
-          <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
-            <p className="text-[14px] text-slate-400 mb-0.5">Session P&L</p>
-            <p className={`text-sm font-bold flex items-center gap-1 ${
-              pnlPositive ? 'text-emerald-500' : pnlNegative ? 'text-red-500' : 'text-slate-500'
-            }`}>
-              {pnlPositive ? <TrendingUp size={13} /> : pnlNegative ? <TrendingDown size={13} /> : <Minus size={13} />}
-              {pnlPositive ? '+' : ''}{sessionPnl.toFixed(2)}
-            </p>
-          </div>
+              <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-2.5">
+                <p className="text-[14px] text-slate-400 mb-0.5">Session P&L</p>
+                <p className={`text-sm font-bold flex items-center gap-1 ${
+                  pnlPositive ? 'text-emerald-500' : pnlNegative ? 'text-red-500' : 'text-slate-500'
+                }`}>
+                  {pnlPositive ? <TrendingUp size={13} /> : pnlNegative ? <TrendingDown size={13} /> : <Minus size={13} />}
+                  {pnlPositive ? '+' : ''}{sessionPnl.toFixed(2)}
+                </p>
+              </div>
 
-          {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-2">
-            <StatCard label="Win Rate" value={totalTrades > 0 ? `${winRate.toFixed(0)}%` : '—'} />
-            <StatCard label="Trades" value={totalTrades > 0 ? totalTrades : '—'} />
-            <StatCard
-              label="Streak"
-              value={currentStreak !== 0 ? `${currentStreak > 0 ? '+' : ''}${currentStreak}` : '—'}
-              valueClass={currentStreak > 0 ? 'text-emerald-500' : currentStreak < 0 ? 'text-red-500' : 'text-slate-500'}
+              <div className="grid grid-cols-2 gap-2">
+                <StatCard label="Win Rate" value={totalTrades > 0 ? `${winRate.toFixed(0)}%` : '—'} />
+                <StatCard label="Trades" value={totalTrades > 0 ? totalTrades : '—'} />
+                <StatCard
+                  label="Streak"
+                  value={currentStreak !== 0 ? `${currentStreak > 0 ? '+' : ''}${currentStreak}` : '—'}
+                  valueClass={currentStreak > 0 ? 'text-emerald-500' : currentStreak < 0 ? 'text-red-500' : 'text-slate-500'}
+                />
+                <StatCard
+                  label="Max DD"
+                  value={maxDrawdown > 0 ? `-$${maxDrawdown.toFixed(2)}` : '—'}
+                  valueClass={maxDrawdown > 0 ? 'text-red-500' : 'text-slate-500'}
+                />
+              </div>
+
+              {totalTrades === 0 && (
+                <p className="text-[10px] text-slate-400 text-center py-2">
+                  No trades this session
+                </p>
+              )}
+            </>
+          ) : (
+            <AITab
+              aiStatus={aiStatus}
+              statusLoading={statusLoading}
+              onStatusRefresh={async () => {
+                try {
+                  setStatusLoading(true);
+                  const status = await getAIStatus();
+                  setAIStatus(status);
+                } finally {
+                  setStatusLoading(false);
+                }
+              }}
             />
-            <StatCard
-              label="Max DD"
-              value={maxDrawdown > 0 ? `-$${maxDrawdown.toFixed(2)}` : '—'}
-              valueClass={maxDrawdown > 0 ? 'text-red-500' : 'text-slate-500'}
-            />
-          </div>
-
-          {totalTrades === 0 && (
-            <p className="text-[10px] text-slate-400 text-center py-2">
-              No trades this session
-            </p>
           )}
         </div>
       )}

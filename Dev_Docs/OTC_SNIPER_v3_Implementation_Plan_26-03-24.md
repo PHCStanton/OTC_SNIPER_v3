@@ -1,7 +1,7 @@
 # OTC SNIPER v3 — Implementation Plan
 
 **Date:** 2026-03-24  
-**Updated:** 2026-03-29 — Phase 4 shell verified complete; Phase 5 trading UI complete; Phase 6 risk manager scope refined with Trade / Trade Run / Session terminology and VOID state; Phase 7 settings scope refined with Account / App / Risk tabs and Auth0-ready boundaries  
+**Updated:** 2026-03-30 — Phase 4 shell verified complete; Phase 5 trading UI complete; Phase 6 risk manager scope refined with Trade / Trade Run / Session terminology and VOID state; Phase 7 settings scope refined with Account / App / Risk tabs and Auth0-ready boundaries; Phase 8 AI integration scope defined with xAI Grok provider, image understanding, provider-agnostic architecture, and RightSidebar AI tab — COMPLETE ✅
 **Status:** Draft for clean rebuild execution  
 **Workspace Root:** `C:\v3\OTC_SNIPER`  
 **Functional App Root:** `C:\v3\OTC_SNIPER\app`
@@ -135,8 +135,13 @@ Must only include application behavior/configuration:
 
 ### 5.4 AI Strategy
 - AI is advisory only.
-- AI may help explain patterns, summarize sessions, suggest assets, and propose risk adjustments.
+- AI may help explain patterns, summarize sessions, suggest assets, propose risk adjustments, and analyze chart screenshots.
 - AI must never directly execute trades or override validation.
+- AI integration uses a **provider-agnostic service layer** — xAI/Grok today, swappable to OpenAI/Anthropic later without frontend changes.
+- The backend is the sole proxy for AI API calls — the API key never reaches the frontend.
+- The backend is stateless for AI — no server-side conversation history (frontend owns chat state via Zustand).
+- Image understanding (vision) is a first-class capability — users can share chart screenshots for contextual analysis.
+- AI functionality degrades gracefully — if no API key is configured, the AI tab is disabled without affecting core trading.
 
 ### 5.5 Trading / Risk Terminology
 
@@ -194,11 +199,20 @@ app/backend/
 ├── session/
 ├── brokers/
 ├── api/
+│   ├── ops.py
+│   ├── session.py
+│   ├── trading.py
+│   └── ai.py              ← Phase 8 COMPLETE
 ├── services/
+│   ├── ai_service.py      ← Phase 8 COMPLETE
+│   └── ai_providers/      ← Phase 8 COMPLETE
+│       ├── __init__.py
+│       └── xai_provider.py
 ├── streaming/
 ├── data/
 ├── auth/
 ├── models/
+│   └── ai_models.py       ← Phase 8 COMPLETE
 └── pocketoptionapi/
 ```
 
@@ -206,11 +220,15 @@ app/backend/
 ```text
 app/frontend/src/
 ├── api/
+│   └── aiApi.js            ← Phase 8 COMPLETE
 ├── stores/
+│   └── useAIStore.js       ← Phase 8 COMPLETE
 ├── components/
 │   ├── layout/
 │   ├── trading/
 │   ├── risk/
+│   ├── ai/                 ← Phase 8 COMPLETE
+│   │   └── AITab.jsx
 │   ├── auth/
 │   ├── settings/
 │   └── shared/
@@ -225,340 +243,37 @@ app/frontend/src/
 ### Phase 0 — Ops Layer: Chrome Lifecycle + Manual SSID Input ✅
 
 > **Completed 2026-03-26**
-> Established Chrome process management, status polling, and manual SSID input — the same proven workflow used in QuFLX-v2's `ops.py` + `TopBar.jsx`.
-
-**Goal:** Establish Chrome process management, status polling, and manual SSID input.
-
-#### Why This Phase Exists
-
-The original v3 plan (Phases 1–9) assumed the SSID would arrive via Swagger UI or a static config file. This skipped the critical reality that:
-
-1. **Chrome must run with `--remote-debugging-port=9222`** for the user to have a logged-in Pocket Option session
-2. **The SSID is a full `42["auth",{...}]` WebSocket frame** (not a cookie) that the user obtains from Chrome DevTools
-3. **The backend must manage Chrome as a subprocess** — the user should not need to run a separate `.bat` file
-4. **The existing `netstat_chrome_session.bat` calls v2's Python script** — a cross-project dependency that must be eliminated
-
-#### Deliverables
-
-1. **`app/backend/api/ops.py`** — Chrome lifecycle endpoints (ported from v2 `ops.py`, simplified)
-   - `POST /api/ops/chrome/start` — Find Chrome executable, spawn with remote debugging flags, return PID
-   - `POST /api/ops/chrome/stop` — Terminate managed Chrome process
-   - `GET /api/ops/chrome/status` — Probe `config.chrome_port` (default 9222), return running/stopped
-   - `GET /api/ops/status` — Combined status: Chrome available + session connected + balance
-   - Dev-gate: `QFLX_ENABLE_OPS=1` + localhost-only (same security model as v2)
-
-2. **`app/backend/api/session.py`** — SSID connect/disconnect endpoints (extracted from `main.py`)
-   - `POST /api/session/connect` — Accept `{ ssid, demo }`, validate via `PocketOptionSession`, connect
-   - `POST /api/session/disconnect` — Disconnect active session
-   - `GET /api/session/status` — Return connected/disconnected, account type, balance
-   - `GET /api/session/ssid-status` — Return booleans for saved demo/real SSIDs in `.env`
-   - SSID persistence: after successful connect, write SSID to `.env` (`PO_SSID_DEMO` / `PO_SSID_REAL`)
-   - Auto-reconnect: on connect with empty SSID string, fall back to saved `.env` values
-
-3. **Socket.IO `check_status` event** — Added to `main.py`
-   - Probes Chrome port availability (from `config.chrome_port`)
-   - Reports active session state from `SessionManager`
-   - Returns structured status payload for frontend consumption
-   - Polling cadence: frontend calls every 5 seconds (same as v2)
-
-4. **`config.py` updates** — Already has `chrome_port` ✓, add:
-   - `chrome_profile_dir` — path to `Chrome_profile/` directory (default: `app_root.parent / "Chrome_profile"`)
-   - `chrome_url` — default URL to open (default: `https://pocket2.click/cabinet/demo-quick-high-low`)
-   - `chrome_executable` — optional override via `CHROME_PATH` env var
-
-5. **Delete `netstat_chrome_session.bat`** from workspace root — eliminates cross-project dependency on v2
-
-#### Chrome Spawn Flags (v2-aligned, security-improved)
-
-```
-chrome.exe
-  --remote-debugging-address=127.0.0.1
-  --remote-debugging-port=9222
-  --user-data-dir=<project>/Chrome_profile
-  --no-first-run
-  --no-default-browser-check
-  --disable-default-apps
-  --disable-popup-blocking
-  --new-window
-  <chrome_url>
-```
-
-> **Security improvement over v2:** Do NOT include `--disable-web-security` or `--allow-running-insecure-content` unless explicitly enabled via a separate `CHROME_INSECURE_MODE` env var. These flags weaken browser security and were flagged as High severity in the v2 architecture review.
-
-#### SSID Workflow (Manual-First)
-
-```
-User clicks "Chrome" button in TopBar (or calls POST /api/ops/chrome/start)
-  → Backend spawns Chrome with remote debugging
-  → Chrome opens Pocket Option login page
-  → User logs in manually
-
-User opens Chrome DevTools → Network → WS → copies 42["auth",{...}] frame
-
-User pastes SSID into connect dialog (or calls POST /api/session/connect)
-  → PocketOptionSession validates the auth frame format
-  → PocketOptionSession connects to Pocket Option WebSocket
-  → On success: balance returned, SSID persisted to .env
-  → On failure: explicit error message returned
-
-Next time: User clicks "Connect" with empty SSID
-  → Backend reads saved SSID from .env
-  → Auto-reconnects without manual paste
-```
-
-#### What NOT to Build in Phase 0
-
-- ❌ Automated CDP cookie/SSID extraction (future enhancement, not foundation)
-- ❌ Chrome Extension for SSID capture
-- ❌ Any new subprocess services beyond the single FastAPI app
-- ❌ Frontend UI (that comes in Phase 4 — Phase 0 is testable via Swagger UI)
-
-#### Required Behaviors
-- Chrome spawn must be idempotent (if port 9222 is already listening, return `already_running`)
-- Chrome stop must be graceful (terminate, then kill after timeout)
-- SSID validation must fail fast with typed exceptions (`SSIDParseError`)
-- Status endpoint must never return stale data — always probe live state
-- `.env` persistence must update in-memory config after write (fix v2 bug)
-
-#### Acceptance Criteria
-- [x] `POST /api/ops/chrome/start` spawns Chrome with remote debugging on port 9222
-- [x] `GET /api/ops/chrome/status` correctly reports Chrome running/stopped
-- [x] `POST /api/session/connect` with a valid `42["auth",...]` frame returns `connected=true` + balance
-- [x] `POST /api/session/connect` with empty SSID falls back to `.env` saved value
-- [x] `GET /api/session/status` returns accurate connected/disconnected state
-- [x] `GET /api/ops/status` returns combined Chrome + session status
-- [x] Socket.IO `check_status` event returns Chrome and session state
-- [x] `netstat_chrome_session.bat` is deleted from workspace root
-- [x] No cross-project dependency on QuFLX-v2 remains
-
-#### Testing
-- Chrome start when Chrome is not installed → structured 424 error
-- Chrome start when port 9222 already listening → `already_running` response
-- Connect with malformed SSID → 400 error with `SSIDParseError` detail
-- Connect with valid SSID → `connected=true`, balance present
-- Connect with expired SSID → explicit auth failure message
-- Disconnect → session cleared, status returns `disconnected`
-- Status polling → accurate real-time state
-
----
 
 ### Phase 1 — Backend Foundation ✅
 
 **Goal:** Create the runtime backbone for live trading.
 
-#### Deliverables
-- `app/backend/main.py` as the single FastAPI app entrypoint.
-- `app/backend/config.py` for environment and runtime settings.
-- `app/backend/models/` for all request/response/domain schemas.
-- `app/backend/session/` with `PocketOptionSession` wrapper and session manager.
-- `app/backend/brokers/base.py` and `registry.py`.
-- `app/backend/brokers/pocket_option/adapter.py` rewritten to use `PocketOptionSession` directly.
-- `app/backend/data/` repository interface plus local file implementation.
-
-#### Acceptance Criteria
-- [x] Backend starts without depending on the TUI project.
-- [x] A real connection can be established through the new session layer.
-- [x] Broker adapter can execute a test trade through the new trade path.
-- [x] Local data logging works and matches the schema contract.
-
----
-
 ### Phase 2 — Broker + Trade Execution ✅
 
 **Goal:** Make live trade execution reliable and explicit.
-
-#### Acceptance Criteria
-- [x] Trade execution uses the verified asset path.
-- [x] Trade attempts fail cleanly if the session is disconnected.
-- [x] Trade result records are written consistently.
-
----
 
 ### Phase 3 — Streaming and Enrichment ✅
 
 **Goal:** Provide live market data and signal enrichment.
 
-#### Acceptance Criteria
-- [x] Real-time ticks are captured and normalized.
-- [x] Signals are enriched and delivered to the frontend.
-- [x] Warmup state and readiness are exposed cleanly.
-
----
-
 ### Phase 4 — Frontend Shell ✅
 
 **Goal:** Establish a high-end, glowy UI shell with dual themes and Risk Manager visualization.
 
-**Design References:**
-- **Theme 1 (Trading):** Light Theme variation of "Neon Glow" dashboard style (Image 1 ref).
-- **Theme 2 (Risk Manager):** Dark Theme dashboard style (Image 2 ref).
-- **Tab Toggle:** Primary navigation between "Trading View" and "Risk Manager".
-
-#### Deliverables
-- `MainLayout.jsx` — Overall app structure with sidebar support.
-- `LeftSidebar.jsx` — Collapsible navigation/asset sidebar.
-- `RightSidebar.jsx` — Collapsible info/risk sidebar.
-- `TopBar.jsx` — Chrome/SSID status badges + Theme toggle + Trade/Risk tab toggle.
-- `Zustand Stores` — Auth, Layout (Theme/Tabs), Assets, Trading, Settings, Stream, and Risk.
-- `useOpsStore.js` — Chrome/Session lifecycle control.
-- `API Client Layer` — `opsApi.js`, `tradingApi.js`, `streamApi.js`.
-- `Socket.IO Integration` — Hooking into backend `check_status` and tick streams.
-
-#### Acceptance Criteria
-- [x] React + Vite + Tailwind project scaffolded in `app/frontend`.
-- [x] Theme provider supporting Light (Trading) and Dark (Risk) modes.
-- [x] Tab toggle switches between Trading and Risk views.
-- [x] TopBar badges correctly report backend Chrome and Session status.
-- [x] Left/Right sidebars collapse/expand with persistence.
-
-#### Phase 4 Verification Summary
-- React + Vite + Tailwind v4 shell is built and verified with a clean production build.
-- Socket.IO polling updates Chrome/session state in the top bar.
-- Sidebar collapse state persists and the Trading/Risk theme split is in place.
-- Current gap is visual fidelity to the provided trading-terminal draft, which is now a Phase 5+ styling and content task rather than a shell blocker.
-
----
-
 ### Phase 5 — Trading UI
 **Goal:** Make the core trading view fast and usable.
-
-#### Deliverables
-- `Sparkline.jsx`
-- `OTEORing.jsx`
-- `TradePanel.jsx`
-- `TradeHistory.jsx`
-- `MultiChartView.jsx`
-- `MiniSparkline.jsx`
-
-#### Acceptance Criteria
-- The main trading area shows chart, signal, action, and results cleanly.
-- Multi-chart and mini-chart views reuse the same canonical data.
-- Asset switching does not break warmup or state consistency.
-
----
 
 ### Phase 6 — Risk Management
 **Goal:** Deliver a simple, session-aware Risk Manager built from the proven legacy risk foundation.
 
-#### Design Inputs From Legacy Reference
-- `legacy_reference/risk_components/UnifiedRiskControls.tsx` → primary risk settings surface
-- `legacy_reference/risk_components/RiskCalculator.tsx` → pure risk math engine
-- `legacy_reference/risk_components/TradeSessionsManager.tsx` → session progression / equity curve visualization
-- `legacy_reference/risk_components/SessionTable.tsx` → session summary cards + detailed session table
+### Phase 7 — Settings System ✅
 
-#### Implementation Shape
-Phase 6 should stay deliberately simple and dashboard-first:
-- one **session command center** that shows the risk summary, controls, and progression visualization
-- one **pure risk math utility** for derived values such as risk per trade, take-profit target, minimum win rate, and drawdown thresholds
-- one **vertical session progression chart** to show the current run and drawdown/target boundaries
-- one **trade run history table** for Trade / Trade Run progression and VOID-aware corrections
-- one **shared risk store update path** so completed trades flow into the Risk Manager automatically
-
-#### Deliverables
-- `riskMath.js` — pure helper module for risk calculations
-- `VerticalRiskChart.jsx` — compact equity/drawdown visualization for the active session
-- `TradeRunHistory.jsx` — trade / Trade Run history with WIN / LOSS / VOID badges and manual override support
-- `SessionControls.jsx` — mode toggle plus Add Win / Add Loss / Add Void / Sync / Export / Reset actions
-- `SessionRiskPanel.jsx` — main Phase 6 container composing metrics, chart, controls, and history
-
-#### Data Flow
-1. `useTradingStore.executeTrade()` records each result and forwards the resolved outcome to `useRiskStore` in Auto Mode.
-2. Manual Mode and Manual Override allow the user to add or correct WIN / LOSS / VOID outcomes inside the Risk Manager.
-3. `useRiskStore` remains the session-level source of truth for P/L, streak, drawdown, Trade Runs, and edit history.
-4. `riskMath.js` computes derived targets and guardrails from the current session inputs.
-5. `RiskPlaceholder.jsx` is replaced by the composed Phase 6 risk manager surface.
-
-#### Acceptance Criteria
-- The Risk Manager shows live session P/L, win rate, streak, Trade Run history, and max drawdown from a shared risk source.
-- The primary Phase 6 surface supports Auto Mode, Manual Mode, and Manual Override.
-- The vertical risk chart clearly communicates starting balance, take-profit target, and drawdown limit.
-- Trade history remains VOID-aware and supports inline correction without breaking session math.
-- The risk UI remains optional, lean, and easy to extend without changing the trading workspace.
-
----
-
-### Phase 7 — Settings System
 **Goal:** Make settings structured, scalable, and Auth0-ready without mixing session identity into the wrong store.
 
-#### Phase 7 Scope
-- Replace the `SettingsPlaceholder` with a real settings workspace in `MainLayout.jsx`.
-- Keep settings separated into three tabs: **Account**, **App**, and **Risk**.
-- Surface the already-defined frontend defaults from `useSettingsStore` with validation before persistence.
-- Keep `useAuthStore` focused on SSID connect/disconnect only.
-- Reserve a future user-profile boundary for Auth0 so implementation later does not conflict with current session state.
+### Phase 8 — AI Integration ✅
+**Goal:** Add advisory-only AI intelligence with text chat and image/screenshot analysis using a provider-agnostic architecture. The AI surfaces in a dedicated tab in the RightSidebar, keeping it ambient and always accessible during trading.
 
-#### Deliverables
-- `SettingsView.jsx` with tabbed sections and shared layout framing
-- `AccountSettings.jsx` for broker/session status, saved SSID controls, and Auth0-ready placeholders
-- `AppSettings.jsx` for OTEO, ghost trading, trading controls, and UI preferences
-- `RiskSettings.jsx` for session capital, payout, risk sizing, drawdown, and trade-run controls
-- `validateSettings()` guardrails in `useSettingsStore.js`
-- `useUserStore.js` reserved namespace for future Auth0 profile state
-
-#### Acceptance Criteria
-- Account, App, and Risk settings are clearly separated.
-- Account settings show only session/broker identity, saved SSID state, and an Auth0-ready placeholder card.
-- App settings expose OTEO, ghost trading, trading control, and UI preference toggles already present in `useSettingsStore`.
-- Risk settings expose the current session defaults already used by `useRiskStore`.
-- Settings changes are validated before persistence.
-- New setting groups can be added without reworking the UI.
-
-#### Recommended Settings By Panel
-
-##### Account Settings
-Recommended up to this point:
-- Broker badge / broker identity display
-- Session connected/disconnected status
-- Demo vs Real account display
-- Current balance display when connected
-- Saved SSID status for demo and real accounts
-- Clear saved SSID actions for security
-- Auth0-ready user profile placeholder card
-
-##### App Settings
-Recommended up to this point:
-- OTEO enable toggle
-- OTEO warmup bars
-- OTEO cooldown bars
-- Ghost trading enable toggle
-- Ghost trading amount
-- Max trades per session
-- Stop on loss streak
-- Max daily loss
-- Show manipulation alerts
-- Show signal confidence
-- Auto-focus on signal
-
-##### Risk Settings
-Recommended up to this point:
-- Initial balance
-- Payout percentage
-- Risk percent per trade
-- Fixed risk amount toggle and value
-- Drawdown percent
-- Risk:reward ratio
-- Trades per run
-- Max runs per session
-
----
-
-### Phase 8 — AI Integration
-**Goal:** Add advisory intelligence in a controlled way.
-
-#### Deliverables
-- `AIService`
-- `/api/ai/*` endpoints
-- session analysis
-- asset suggestion
-- signal confirmation
-- risk advice
-
-#### Acceptance Criteria
-- AI responses are structured and validated.
-- AI only informs decisions and does not execute trades.
-- AI functionality can be disabled without impacting core trading.
-
----
+> **Status:** COMPLETE ✅
 
 ### Phase 9 — Polish and Hardening
 **Goal:** Finalize the production-quality experience.
@@ -631,10 +346,20 @@ Recommended up to this point:
 - trade history logging test
 - reload/reconnect recovery test
 
-### AI
-- structured response validation
-- advisory-only behavior checks
-- timeout and error handling tests
+### AI (Phase 8) — Verified ✅
+- `GET /api/ai/status` returns correct state when API key is present vs. absent
+- `POST /api/ai/chat` returns structured response with model and usage fields
+- `POST /api/ai/chat` with empty messages array → 422 validation error
+- `POST /api/ai/analyze-image` with valid base64 JPEG → returns analysis text
+- `POST /api/ai/analyze-image` with oversized image (>20MB) → 413 error
+- `POST /api/ai/analyze-image` with invalid format (e.g., GIF) → 400 error
+- AI endpoint with missing/invalid API key → 503 with clear error message
+- AI endpoint timeout handling → structured error, no silent failure
+- Advisory-only enforcement: no AI endpoint returns trade execution payloads
+- Frontend AI tab disabled state when `GET /api/ai/status` returns `enabled: false`
+- RightSidebar Risk/AI tab toggle preserves state across sidebar collapse/expand
+- Image upload converts to base64 correctly for JPEG and PNG
+- Conversation cap: store trims messages beyond 20 entries
 
 ---
 
@@ -653,25 +378,19 @@ Recommended up to this point:
 | Silent failure in auth/trade flow | Critical | Fail fast, validate early, and return explicit errors |
 | Settings become tangled | Medium | Separate account/app scopes and schema-driven rendering |
 | Data migration becomes hard later | High | Keep repository abstraction and schema contract intact |
-| AI overreach | High | Advisory-only AI with structured validation |
+| AI overreach | High | Advisory-only AI with structured validation; no trade execution paths in AI router |
+| AI API key leaked to frontend | High | Backend is sole proxy; API key read from `.env` server-side only, never in HTTP responses |
+| AI provider outage blocks trading | Medium | Graceful degradation — `GET /api/ai/status` disables AI tab; core trading unaffected |
+| Runaway AI costs from large images | Medium | Backend validates image size (<20MB) and format before proxying; conversation cap at ~20 messages |
+| AI provider lock-in | Medium | Provider-agnostic service layer; swapping providers requires only a new provider file |
+| Prompt injection via user input | Low | System prompt is server-side only; user messages passed as `user` role content |
 
 ---
 
 ## 11. Immediate Next Actions
 
-1. **[Phase 0]** Create `app/backend/api/ops.py` — Chrome start/stop/status endpoints (port from v2 `ops.py`).
-2. **[Phase 0]** Extract session endpoints from `main.py` into `app/backend/api/session.py` — connect/disconnect/status/ssid-status.
-3. **[Phase 0]** Add `check_status` Socket.IO event to `main.py` — Chrome + session status polling.
-4. **[Phase 0]** Update `config.py` — add `chrome_profile_dir`, `chrome_url`, `chrome_executable`.
-5. **[Phase 0]** Delete `netstat_chrome_session.bat` — remove cross-project v2 dependency.
-6. **[Phase 0]** Test full Chrome → login → paste SSID → connect workflow via Swagger UI.
-7. **[Phase 1]** Rebuild the broker adapter around `PocketOptionSession`.
-8. **[Phase 1]** Add the repository abstraction for local storage.
-9. **[Phase 4]** Scaffold the frontend layout shell, stores, and TopBar with Chrome/SSID badges.
-10. **[Phase 5]** Build the trading-terminal UI from the dashboard draft: chart stage, signal cards, execution panel, and logs.
-11. **[Phase 6]** Build the simple Risk Manager from the legacy foundation: risk math, vertical chart, session controls, Trade Run history, and VOID-aware manual override support.
-12. **[Phase 7]** Implement the tabbed Settings workspace: Account, App, and Risk panels with validation and an Auth0-ready boundary.
-13. Verify the real trade path before adding non-essential features.
+1. **[REVIEW]** Delegate @Reviewer for Phase 7 & 8 verification (MANDATORY per protocol).
+2. **[Phase 9]** Proceed to Polish and Hardening (after approval).
 
 ---
 

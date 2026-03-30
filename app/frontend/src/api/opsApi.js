@@ -27,3 +27,4 @@ export const sessionConnect = (ssid, demo) =>
 export const sessionDisconnect = () => request('POST', '/session/disconnect');
 export const sessionStatus = () => request('GET', '/session/status');
 export const sessionSsidStatus = () => request('GET', '/session/ssid-status');
+export const sessionClearSsid = (demo) => request('POST', '/session/clear-ssid', { demo });

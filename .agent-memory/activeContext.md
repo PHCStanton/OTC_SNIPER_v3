@@ -1,58 +1,54 @@
 # Active Context
 
 ## Current Work
-**Phase 6 (Risk Management) — COMPLETE**
+**Phase 7 (Settings System) — COMPLETE**
+**Phase 8 (AI Service Integration) — COMPLETE**
 
-Full Risk Manager surface built, reviewed, patched, and verified with a clean production build (1643 modules, 0 errors).
+Tabbed Settings workspace built and verified (Phase 7).
+AI Service Integration (xAI Grok) built, verified with mocked service test, and production build-verified (Phase 8).
 
-**@Reviewer gate passed.** All 3 MEDIUM issues resolved by @Coder. No blocking issues remain.
+**@Reviewer gate requested for Phase 7 & 8.** Implementation is complete and ready for final review before moving to Phase 9.
 
-## Phase 6 Deliverables — Done
+## Phase 7 Deliverables — Done
 
 | File | Status | Notes |
 |------|--------|-------|
-| `app/frontend/src/utils/riskMath.js` | ✅ Created | Pure risk math utility — riskPerTrade, TP target, DD limit, min win rate |
-| `app/frontend/src/stores/useRiskStore.js` | ✅ Rewritten | Trade Run tracking, VOID state, Manual Override, summarizeSession() pure function |
-| `app/frontend/src/stores/useSettingsStore.js` | ✅ Updated | Added session risk defaults: initialBalance, payoutPercentage, riskPercentPerTrade, drawdownPercent, riskRewardRatio, useFixedAmount, fixedRiskAmount, tradesPerRun, maxRuns |
-| `app/frontend/src/stores/useTradingStore.js` | ✅ Updated | Auto Mode wiring — forwards validated outcome + pnl to useRiskStore after each live trade |
-| `app/frontend/src/components/risk/VerticalRiskChart.jsx` | ✅ Created | SVG session visualizer — balance bar, TP line, DD line, current balance label |
-| `app/frontend/src/components/risk/SessionControls.jsx` | ✅ Created | Mode toggle (Auto/Manual), Add Win/Loss/Void, New Trade Run, Sync, Export, Reset |
-| `app/frontend/src/components/risk/TradeRunHistory.jsx` | ✅ Created | W/L/V badge history per Trade Run, click-to-cycle Manual Override, edited indicator |
-| `app/frontend/src/components/risk/SessionRiskPanel.jsx` | ✅ Created | Main Phase 6 container — header, stat cards, chart, controls, trade run history |
-| `app/frontend/src/components/shared/RiskPlaceholder.jsx` | ✅ Replaced | Now a thin wrapper that renders SessionRiskPanel |
+| `app/frontend/src/components/settings/SettingsView.jsx` | ✅ Created | Tabbed Account / App / Risk settings workspace |
+| `app/frontend/src/components/settings/AccountSettings.jsx` | ✅ Created | Session identity, saved SSID inventory, Auth0-ready boundary |
+| `app/frontend/src/components/settings/AppSettings.jsx` | ✅ Created | OTEO, ghost trading, trading controls, UI preferences |
+| `app/frontend/src/components/settings/RiskSettings.jsx` | ✅ Created | Capital, payout, sizing, drawdown, Trade Run risk preview |
+| `app/frontend/src/stores/useSettingsStore.js` | ✅ Hardened | Validation + clamped persistence + reset/update helpers |
+| `app/frontend/src/stores/useUserStore.js` | ✅ Created | Reserved namespace for future Auth0/profile state |
+| `app/frontend/src/components/layout/MainLayout.jsx` | ✅ Updated | SettingsView wired into active view router |
+| `app/frontend/src/api/opsApi.js` | ✅ Updated | Added SSID inventory / clear endpoints |
+| `app/backend/api/session.py` | ✅ Updated | Added `/api/session/clear-ssid` |
 
-## Key Design Decisions Made (Phase 6)
+## Phase 8 Deliverables — Done
 
-- **Mandatory terminology locked in:** Trade = single executed trade (WIN/LOSS/VOID), Trade Run = group of consecutive trades, Session = full trading day arc.
-- **VOID state:** Recorded but excluded from P&L, win rate, and streak. Increments `sessionVoids` and `totalTrades` only. Does not break streaks.
-- **Three modes:** Auto (live SSID), Manual (button entry), Manual Override (click any badge to cycle WIN→LOSS→VOID).
-- **`summarizeSession()` pure function:** All session math is recomputed from source data on every mutation — no stale derived state. Correct for financial tracking.
-- **`syncStartBalance()` guard:** Only called when `startBalance === 0` (initial sync). JSDoc documents this assumption explicitly.
-- **Settings separation:** Risk configuration inputs (balance, payout %, risk %, drawdown %, R:R) live in `useSettingsStore` and will be surfaced in Phase 7 Settings Tab. Phase 6 reads them but does not provide input UI for them.
-- **RightSidebar unchanged:** Remains the always-visible ambient pulse (P&L, win rate, streak, drawdown). No duplication with the Risk Manager Tab.
-- **Export:** CSV export of full session trade history built into `SessionRiskPanel`.
+| File | Status | Notes |
+|------|--------|-------|
+| `app/backend/services/ai_providers/xai_provider.py` | ✅ Created | Provider-agnostic AI provider (httpx) |
+| `app/backend/services/ai_service.py` | ✅ Created | Provider-agnostic AI service wrapper |
+| `app/backend/api/ai.py` | ✅ Created | AI router for chat and image analysis |
+| `app/backend/models/ai_models.py` | ✅ Created | AI request/response schemas |
+| `app/frontend/src/api/aiApi.js` | ✅ Created | Frontend API client |
+| `app/frontend/src/stores/useAIStore.js` | ✅ Created | Chat/analysis state management |
+| `app/frontend/src/components/ai/AITab.jsx` | ✅ Created | RightSidebar AI chat UI |
+| `app/backend/config.py` | ✅ Updated | Added AI configuration fields |
+| `app/frontend/src/components/layout/RightSidebar.jsx` | ✅ Updated | Added Risk/AI tab toggle |
 
-## Architecture: Three Distinct Surfaces
+## Key Design Decisions Made (Phase 7/8)
 
-| Surface | Role |
-|---|---|
-| **Settings Tab (Phase 7)** | Configure — balance, risk %, payout %, drawdown %, R:R |
-| **RightSidebar** | Observe — live ambient pulse, always visible |
-| **Risk Manager Tab** | Manage — session command center, visualization, Trade Run tracking |
+- **Phase 7:** Explicit scope split (Account/App/Risk), store-level validation, reserved Auth0 namespace.
+- **Phase 8:** Advisory-only AI policy, provider-agnostic backend service layer (`xai_provider.py` via `httpx`), stateless backend (frontend owns conversation history via `useAIStore`), dedicated RightSidebar AI tab.
 
 ## Recent Changes
-- Implemented full Phase 6 Risk Manager surface (5 new files, 3 updated stores).
-- Locked in Trade / Trade Run / Session / VOID terminology in implementation plan (sections 5.5 and 5.6).
-- @Reviewer gate passed: 0 critical, 0 high, 3 medium (all fixed), 3 low (deferred to Phase 9).
-- @Coder fixed: duplicate `completeCurrentTradeRun` action removed, `syncStartBalance` JSDoc added, dead import removed from `SessionRiskPanel`.
-- Production build verified: 1643 modules, 0 errors, JS bundle 273.56 kB.
+- Phase 8 AI Integration: Complete and build-verified (1650 modules).
+- Phase 7 Settings System: Complete.
 
 ## Next Steps
-1. **Phase 7** — Settings System (SettingsView, AccountSettings, AppSettings, RiskSettings).
-   - Risk configuration inputs (balance, payout %, risk %, drawdown %, R:R) move here from `useSettingsStore` defaults.
-   - Account settings and app settings clearly separated.
-   - Settings changes validated before persistence.
-2. **Reviewer gate** — required before Phase 8.
+1. **Reviewer gate** — review Phase 7 and 8 implementations.
+2. **Phase 9** — Polish and Hardening.
 
 ## Blockers
 None.

@@ -5,60 +5,129 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export const SETTINGS_DEFAULTS = {
+  // OTEO configuration
+  oteoEnabled: true,
+  oteoWarmupBars: 20,
+  oteoCooldownBars: 3,
+
+  // Ghost trading
+  ghostTradingEnabled: false,
+  ghostAmount: 1,
+
+  // Session risk defaults
+  initialBalance: 1000,
+  payoutPercentage: 80,
+  riskPercentPerTrade: 1,
+  drawdownPercent: 10,
+  riskRewardRatio: 2,
+  useFixedAmount: false,
+  fixedRiskAmount: 10,
+  tradesPerRun: 4,
+  maxRuns: 3,
+
+  // Risk management
+  maxDailyLoss: 50,
+  maxTradesPerSession: 20,
+  stopOnLossStreak: 3,
+
+  // AI integration
+  aiModel: 'grok-4-1-fast-non-reasoning',
+
+  // UI preferences
+  showManipulationAlerts: true,
+  showSignalConfidence: true,
+  autoFocusOnSignal: false,
+};
+
+function toBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  return fallback;
+}
+
+function toNumber(value, fallback, { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY, integer = false } = {}) {
+  if (value === '' || value === null || value === undefined) return fallback;
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+
+  const clamped = Math.min(max, Math.max(min, parsed));
+  return integer ? Math.trunc(clamped) : clamped;
+}
+
+export function validateSettings(input = {}) {
+  return {
+    oteoEnabled: toBoolean(input.oteoEnabled, SETTINGS_DEFAULTS.oteoEnabled),
+    oteoWarmupBars: toNumber(input.oteoWarmupBars, SETTINGS_DEFAULTS.oteoWarmupBars, { min: 0, max: 500, integer: true }),
+    oteoCooldownBars: toNumber(input.oteoCooldownBars, SETTINGS_DEFAULTS.oteoCooldownBars, { min: 0, max: 500, integer: true }),
+
+    ghostTradingEnabled: toBoolean(input.ghostTradingEnabled, SETTINGS_DEFAULTS.ghostTradingEnabled),
+    ghostAmount: toNumber(input.ghostAmount, SETTINGS_DEFAULTS.ghostAmount, { min: 0, max: 100000, integer: false }),
+
+    initialBalance: toNumber(input.initialBalance, SETTINGS_DEFAULTS.initialBalance, { min: 0, max: 100000000, integer: false }),
+    payoutPercentage: toNumber(input.payoutPercentage, SETTINGS_DEFAULTS.payoutPercentage, { min: 0, max: 1000, integer: false }),
+    riskPercentPerTrade: toNumber(input.riskPercentPerTrade, SETTINGS_DEFAULTS.riskPercentPerTrade, { min: 0, max: 100, integer: false }),
+    drawdownPercent: toNumber(input.drawdownPercent, SETTINGS_DEFAULTS.drawdownPercent, { min: 0, max: 100, integer: false }),
+    riskRewardRatio: toNumber(input.riskRewardRatio, SETTINGS_DEFAULTS.riskRewardRatio, { min: 0, max: 100, integer: false }),
+    useFixedAmount: toBoolean(input.useFixedAmount, SETTINGS_DEFAULTS.useFixedAmount),
+    fixedRiskAmount: toNumber(input.fixedRiskAmount, SETTINGS_DEFAULTS.fixedRiskAmount, { min: 0, max: 100000, integer: false }),
+    tradesPerRun: toNumber(input.tradesPerRun, SETTINGS_DEFAULTS.tradesPerRun, { min: 1, max: 100, integer: true }),
+    maxRuns: toNumber(input.maxRuns, SETTINGS_DEFAULTS.maxRuns, { min: 1, max: 100, integer: true }),
+
+    maxDailyLoss: toNumber(input.maxDailyLoss, SETTINGS_DEFAULTS.maxDailyLoss, { min: 0, max: 100000, integer: false }),
+    maxTradesPerSession: toNumber(input.maxTradesPerSession, SETTINGS_DEFAULTS.maxTradesPerSession, { min: 1, max: 1000, integer: true }),
+    stopOnLossStreak: toNumber(input.stopOnLossStreak, SETTINGS_DEFAULTS.stopOnLossStreak, { min: 0, max: 100, integer: true }),
+
+    aiModel: typeof input.aiModel === 'string' && input.aiModel.trim()
+      ? input.aiModel.trim()
+      : SETTINGS_DEFAULTS.aiModel,
+
+    showManipulationAlerts: toBoolean(input.showManipulationAlerts, SETTINGS_DEFAULTS.showManipulationAlerts),
+    showSignalConfidence: toBoolean(input.showSignalConfidence, SETTINGS_DEFAULTS.showSignalConfidence),
+    autoFocusOnSignal: toBoolean(input.autoFocusOnSignal, SETTINGS_DEFAULTS.autoFocusOnSignal),
+  };
+}
+
+function commitSettingsPatch(set, patch) {
+  set((state) => ({
+    ...state,
+    ...validateSettings({ ...state, ...patch }),
+  }));
+}
+
 export const useSettingsStore = create()(
   persist(
     (set) => ({
-      // OTEO configuration
-      oteoEnabled: true,
-      oteoWarmupBars: 20,
-      oteoCooldownBars: 3,
+      ...SETTINGS_DEFAULTS,
 
-      // Ghost trading
-      ghostTradingEnabled: false,
-      ghostAmount: 1,
+      updateSettings: (patch) => commitSettingsPatch(set, patch),
+      resetSettings: () => set({ ...SETTINGS_DEFAULTS }),
 
-      // Session risk defaults
-      initialBalance: 1000,
-      payoutPercentage: 80,
-      riskPercentPerTrade: 1,
-      drawdownPercent: 10,
-      riskRewardRatio: 2,
-      useFixedAmount: false,
-      fixedRiskAmount: 10,
-      tradesPerRun: 4,
-      maxRuns: 3,
-
-      // Risk management
-      maxDailyLoss: 50,
-      maxTradesPerSession: 20,
-      stopOnLossStreak: 3,
-
-      // UI preferences
-      showManipulationAlerts: true,
-      showSignalConfidence: true,
-      autoFocusOnSignal: false,
-
-      setOteoEnabled: (val) => set({ oteoEnabled: val }),
-      setOteoWarmupBars: (val) => set({ oteoWarmupBars: val }),
-      setOteoCooldownBars: (val) => set({ oteoCooldownBars: val }),
-      setGhostTradingEnabled: (val) => set({ ghostTradingEnabled: val }),
-      setGhostAmount: (val) => set({ ghostAmount: val }),
-      setInitialBalance: (val) => set({ initialBalance: val }),
-      setPayoutPercentage: (val) => set({ payoutPercentage: val }),
-      setRiskPercentPerTrade: (val) => set({ riskPercentPerTrade: val }),
-      setDrawdownPercent: (val) => set({ drawdownPercent: val }),
-      setRiskRewardRatio: (val) => set({ riskRewardRatio: val }),
-      setUseFixedAmount: (val) => set({ useFixedAmount: val }),
-      setFixedRiskAmount: (val) => set({ fixedRiskAmount: val }),
-      setTradesPerRun: (val) => set({ tradesPerRun: val }),
-      setMaxRuns: (val) => set({ maxRuns: val }),
-      setMaxDailyLoss: (val) => set({ maxDailyLoss: val }),
-      setMaxTradesPerSession: (val) => set({ maxTradesPerSession: val }),
-      setStopOnLossStreak: (val) => set({ stopOnLossStreak: val }),
-      setShowManipulationAlerts: (val) => set({ showManipulationAlerts: val }),
-      setShowSignalConfidence: (val) => set({ showSignalConfidence: val }),
-      setAutoFocusOnSignal: (val) => set({ autoFocusOnSignal: val }),
+      setOteoEnabled: (val) => commitSettingsPatch(set, { oteoEnabled: val }),
+      setOteoWarmupBars: (val) => commitSettingsPatch(set, { oteoWarmupBars: val }),
+      setOteoCooldownBars: (val) => commitSettingsPatch(set, { oteoCooldownBars: val }),
+      setGhostTradingEnabled: (val) => commitSettingsPatch(set, { ghostTradingEnabled: val }),
+      setGhostAmount: (val) => commitSettingsPatch(set, { ghostAmount: val }),
+      setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),
+      setPayoutPercentage: (val) => commitSettingsPatch(set, { payoutPercentage: val }),
+      setRiskPercentPerTrade: (val) => commitSettingsPatch(set, { riskPercentPerTrade: val }),
+      setDrawdownPercent: (val) => commitSettingsPatch(set, { drawdownPercent: val }),
+      setRiskRewardRatio: (val) => commitSettingsPatch(set, { riskRewardRatio: val }),
+      setUseFixedAmount: (val) => commitSettingsPatch(set, { useFixedAmount: val }),
+      setFixedRiskAmount: (val) => commitSettingsPatch(set, { fixedRiskAmount: val }),
+      setTradesPerRun: (val) => commitSettingsPatch(set, { tradesPerRun: val }),
+      setMaxRuns: (val) => commitSettingsPatch(set, { maxRuns: val }),
+      setMaxDailyLoss: (val) => commitSettingsPatch(set, { maxDailyLoss: val }),
+      setMaxTradesPerSession: (val) => commitSettingsPatch(set, { maxTradesPerSession: val }),
+      setStopOnLossStreak: (val) => commitSettingsPatch(set, { stopOnLossStreak: val }),
+      setAiModel: (val) => commitSettingsPatch(set, { aiModel: val }),
+      setShowManipulationAlerts: (val) => commitSettingsPatch(set, { showManipulationAlerts: val }),
+      setShowSignalConfidence: (val) => commitSettingsPatch(set, { showSignalConfidence: val }),
+      setAutoFocusOnSignal: (val) => commitSettingsPatch(set, { autoFocusOnSignal: val }),
     }),
-    { name: 'otc-sniper-settings-storage' }
+    {
+      name: 'otc-sniper-settings-storage',
+      partialize: (state) => validateSettings(state),
+    }
   )
 );

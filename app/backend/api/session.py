@@ -41,6 +41,12 @@ class SessionConnectRequest(BaseModel):
     demo: bool = Field(default=False, description="Use demo SSID when auto-reconnecting")
 
 
+class SessionSsidClearRequest(BaseModel):
+    """Clear a saved SSID from .env for the requested account type."""
+
+    demo: bool = Field(default=False, description="Clear the demo SSID when true, otherwise the real SSID")
+
+
 # ── .env persistence helpers ──────────────────────────────────────────────────
 
 def _env_file_path() -> Path:
@@ -80,7 +86,31 @@ def _persist_ssid_to_env(ssid: str, demo: bool) -> None:
 
     # Refresh in-memory env immediately (avoids stale state until restart)
     os.environ[key] = ssid
+    get_settings.cache_clear()
     logger.info("SSID persisted to .env under key %s", key)
+
+
+def _clear_ssid_from_env(demo: bool) -> str:
+    """Remove the saved SSID from .env and the current process environment."""
+    key = "PO_SSID_DEMO" if demo else "PO_SSID_REAL"
+    env_path = _env_file_path()
+
+    lines: list[str] = []
+    if env_path.exists():
+        lines = env_path.read_text(encoding="utf-8").splitlines()
+
+    filtered_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(f"{key}=") or stripped.startswith(f"{key} ="):
+            continue
+        filtered_lines.append(line)
+
+    env_path.write_text(("\n".join(filtered_lines) + "\n") if filtered_lines else "", encoding="utf-8")
+    os.environ.pop(key, None)
+    get_settings.cache_clear()
+    logger.info("SSID cleared from .env under key %s", key)
+    return key
 
 
 def _resolve_ssid(ssid: str, demo: bool) -> str:
@@ -94,14 +124,10 @@ def _resolve_ssid(ssid: str, demo: bool) -> str:
     if ssid.strip():
         return ssid.strip()
 
-    settings = get_settings()
-    saved = settings.default_demo_ssid if demo else settings.default_real_ssid
-
-    if not saved:
-        # Re-read .env in case it was updated after server start
-        load_env_file(_env_file_path())
-        key = "PO_SSID_DEMO" if demo else "PO_SSID_REAL"
-        saved = os.environ.get(key, "")
+    # Re-read .env in case it was updated after server start
+    load_env_file(_env_file_path())
+    key = "PO_SSID_DEMO" if demo else "PO_SSID_REAL"
+    saved = os.environ.get(key, "").strip()
 
     if not saved:
         account_label = "demo" if demo else "real"
@@ -204,6 +230,26 @@ async def disconnect_session() -> JSONResponse:
             "ok": True,
             "connected": state.connected,
             "message": state.message,
+        }
+    )
+
+
+@router.post("/clear-ssid")
+async def clear_ssid(body: SessionSsidClearRequest) -> JSONResponse:
+    """Clear the saved SSID for the requested account type."""
+    key = _clear_ssid_from_env(body.demo)
+
+    load_env_file(_env_file_path())
+    has_demo = bool(os.environ.get("PO_SSID_DEMO", "").strip())
+    has_real = bool(os.environ.get("PO_SSID_REAL", "").strip())
+
+    return JSONResponse(
+        content={
+            "ok": True,
+            "cleared_key": key,
+            "has_demo_ssid": has_demo,
+            "has_real_ssid": has_real,
+            "message": f"Saved SSID cleared for {'demo' if body.demo else 'real'} account.",
         }
     )
 

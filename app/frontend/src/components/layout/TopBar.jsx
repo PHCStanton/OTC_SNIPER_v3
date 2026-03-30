@@ -19,7 +19,7 @@ import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
-import logoImg from '../../../assets/LOGO1-bg.png';
+import logoImg from '../../../assets/GOLD_LOGO1.jpg';
 
 export default function TopBar() {
   const { chromeStatus, sessionStatus, balance, accountType, setChromeStatus } = useOpsStore();
@@ -52,9 +52,9 @@ export default function TopBar() {
     <>
       <header className="flex h-16 items-center justify-between border-b border-white/10 bg-[#1a1717] px-6 shadow-2xl shadow-black/30 shrink-0 z-50">
         {/* ── Left: Logo + Tab Toggle ── */}
-        <div className="flex items-center gap-6">
-          <img src={logoImg} alt="OTC SNIPER" className="h-8 w-auto select-none" draggable={false} />
-
+        <div className="flex items-center gap-1">
+          <img src={logoImg} alt="OTC SNIPER" className="h-16 w-auto select-none" draggable={false} />
+OTC SNIPER
           <div className="flex items-center gap-1 rounded-lg p-0.5">
             <button
               onClick={() => setDashboardMode('trading')}
@@ -110,7 +110,7 @@ export default function TopBar() {
             className="rounded-md p-1.5 text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300"
             title="Settings"
           >
-            <Settings size={15} />
+            <Settings size={25} />
           </button>
         </div>
       </header>

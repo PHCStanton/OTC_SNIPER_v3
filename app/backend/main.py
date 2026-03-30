@@ -19,6 +19,7 @@ import socketio
 from fastapi import FastAPI, HTTPException
 
 from .api.ops import _is_port_open, router as ops_router
+from .api.ai import router as ai_router
 from .api.session import router as session_router
 from .api.trading import router as trading_router
 from .brokers.base import BrokerType
@@ -139,6 +140,7 @@ fastapi_app = FastAPI(title="OTC SNIPER v3", version="3.0.0", lifespan=lifespan)
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 fastapi_app.include_router(ops_router)      # Phase 0: /api/ops/*
+fastapi_app.include_router(ai_router)       # Phase 8: /api/ai/*
 fastapi_app.include_router(session_router)  # Phase 0: /api/session/*
 fastapi_app.include_router(trading_router)  # Phase 2: /api/trading/*
 

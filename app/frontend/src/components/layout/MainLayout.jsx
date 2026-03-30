@@ -7,6 +7,7 @@ import TopBar from './TopBar.jsx';
 import LeftSidebar from './LeftSidebar.jsx';
 import RightSidebar from './RightSidebar.jsx';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
+import SettingsView from '../settings/SettingsView.jsx';
 import TradingPlaceholder from '../shared/TradingPlaceholder.jsx';
 import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
 
@@ -35,23 +36,12 @@ export default function MainLayout() {
 
 function ActiveView({ view, mode }) {
   // Settings and journal are view-specific; trading/risk follow dashboardMode
-  if (view === 'settings') return <SettingsPlaceholder />;
+  if (view === 'settings') return <SettingsView />;
   if (view === 'journal') return <JournalPlaceholder />;
 
   // Default: show trading or risk based on dashboardMode
   if (mode === 'risk') return <RiskPlaceholder />;
   return <TradingPlaceholder />;
-}
-
-function SettingsPlaceholder() {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center text-gray-500">
-        <p className="text-lg font-semibold">Settings</p>
-        <p className="text-sm mt-1">Phase 7 — Coming soon</p>
-      </div>
-    </div>
-  );
 }
 
 function JournalPlaceholder() {

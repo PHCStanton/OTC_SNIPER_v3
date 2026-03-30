@@ -57,6 +57,9 @@ class RuntimeSettings:
     chrome_url: str
     chrome_executable: str  # empty string = auto-detect
     enable_ops: bool
+    grok_api_key: str
+    ai_model: str
+    ai_enabled: bool
     app_root: Path
     data_dir: Path
     default_real_ssid: str
@@ -112,6 +115,9 @@ class RuntimeSettings:
             ),
             chrome_executable=os.getenv("CHROME_PATH", ""),
             enable_ops=_parse_bool(os.getenv("QFLX_ENABLE_OPS"), False),
+            grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
+            ai_model=os.getenv("AI_MODEL", "grok-4-1-fast-non-reasoning").strip() or "grok-4-1-fast-non-reasoning",
+            ai_enabled=_parse_bool(os.getenv("AI_ENABLED"), True) and bool(os.getenv("GROK_API_KEY", "").strip()),
             app_root=app_root,
             data_dir=data_dir,
             default_real_ssid=os.getenv("PO_SSID_REAL", ""),
