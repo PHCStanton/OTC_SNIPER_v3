@@ -9,13 +9,22 @@ import { request } from './httpClient.js';
  * @param {object} payload - { asset, amount, direction, duration, demo }
  */
 export const executeTrade = (broker, payload) =>
-  request('POST', `/trading/${broker}/trade`, payload);
+  request('POST', `/brokers/${broker}/trade`, payload);
 
 /**
  * Fetch trade history for a broker.
  * @param {string} broker
+ * @param {string} sessionId
+ * @param {number} [limit=50]
  */
-export const getTrades = (broker) => request('GET', `/trading/${broker}/trades`);
+export const getTrades = (broker, sessionId, limit = 50) => {
+  if (!sessionId) {
+    throw new Error('sessionId is required to load trade history.');
+  }
+
+  const params = new URLSearchParams({ session_id: sessionId, limit: String(limit) });
+  return request('GET', `/brokers/${broker}/trades?${params.toString()}`);
+};
 
 /**
  * Get broker assets.

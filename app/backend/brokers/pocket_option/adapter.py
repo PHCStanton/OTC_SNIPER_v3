@@ -6,10 +6,10 @@ import asyncio
 import logging
 from typing import Dict, List
 
-from ...session.manager import SessionManager
+from ...dependencies import get_session_manager
 from ..base import Asset, Balance, BrokerAdapter, BrokerType, Tick, TradeOrder, TradeResult
 from ..registry import BrokerRegistry
-from .assets import build_asset_list, normalize_asset, to_pocket_option_format, verify_otc_asset
+from .assets import build_asset_list_with_live_payouts, normalize_asset, to_pocket_option_format, verify_otc_asset
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +21,17 @@ class PocketOptionAdapter(BrokerAdapter):
     supports_demo = True
 
     def __init__(self) -> None:
-        self._session_manager = SessionManager()
+        # NOTE: This adapter does NOT own a SessionManager.
+        # All session access goes through the global singleton via get_session_manager().
+        # This ensures that the session connected via /api/session/connect is the same
+        # session used for subscribe_ticks, execute_trade, and get_balance.
         self._connection_status = "disconnected"
         self._last_error: str | None = None
 
     @property
-    def session_manager(self) -> SessionManager:
-        return self._session_manager
+    def session_manager(self):
+        """Always returns the global singleton session manager."""
+        return get_session_manager()
 
     async def connect(self, credentials: Dict[str, str]) -> bool:
         ssid = credentials.get("ssid", "").strip()
@@ -38,7 +42,7 @@ class PocketOptionAdapter(BrokerAdapter):
 
         self._connection_status = "connecting"
         try:
-            self._session_manager.connect(ssid)
+            get_session_manager().connect(ssid)
             self._connection_status = "connected"
             self._last_error = None
             return True
@@ -49,16 +53,17 @@ class PocketOptionAdapter(BrokerAdapter):
             return False
 
     async def disconnect(self) -> None:
-        self._session_manager.disconnect()
+        get_session_manager().disconnect()
         self._connection_status = "disconnected"
         self._last_error = None
 
     async def get_assets(self, demo: bool = True) -> List[Asset]:
-        return build_asset_list()
+        """Return asset list with live payouts when available, else static fallback."""
+        return build_asset_list_with_live_payouts()
 
     async def subscribe_ticks(self, asset: str) -> None:
-        """Starts streaming ticks for the given asset."""
-        session = self._session_manager.current_session
+        """Starts streaming ticks for the given asset via the global session."""
+        session = get_session_manager().current_session
         if session and session.is_connected and session._api:
             # period 1 = 1 second candles/ticks
             pocket_asset = to_pocket_option_format(normalize_asset(asset))
@@ -66,9 +71,13 @@ class PocketOptionAdapter(BrokerAdapter):
                 None, session._api.change_symbol, pocket_asset, 1
             )
             logger.info("Subscribed to ticks for %s (%s)", asset, pocket_asset)
+        else:
+            logger.warning(
+                "subscribe_ticks(%s): no active session — ticks will not flow until connected.", asset
+            )
 
     async def execute_trade(self, order: TradeOrder) -> TradeResult:
-        session = self._session_manager.current_session
+        session = get_session_manager().current_session
         if session is None or not session.is_connected:
             return TradeResult(success=False, message="Not connected to Pocket Option.", broker=BrokerType.POCKET_OPTION)
 
@@ -116,7 +125,7 @@ class PocketOptionAdapter(BrokerAdapter):
             return TradeResult(success=False, message=str(exc), broker=BrokerType.POCKET_OPTION)
 
     async def get_balance(self, demo: bool = True) -> Balance:
-        session = self._session_manager.current_session
+        session = get_session_manager().current_session
         balance = session.get_balance() if session is not None else None
         result = Balance(broker=BrokerType.POCKET_OPTION)
 
@@ -133,6 +142,13 @@ class PocketOptionAdapter(BrokerAdapter):
         return []
 
     def get_connection_status(self) -> str:
+        # Sync connection status with the global session manager's live state
+        sm = get_session_manager()
+        if sm.check_connected():
+            self._connection_status = "connected"
+        elif self._connection_status == "connected":
+            # Session dropped externally
+            self._connection_status = "disconnected"
         return self._connection_status
 
 

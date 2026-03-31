@@ -59,7 +59,7 @@ export default function TradingWorkspace() {
   const chromeRunning = chromeStatus === 'running';
 
   const resultLabel = lastTradeResult
-    ? (lastTradeResult.outcome ? lastTradeResult.outcome.toUpperCase() : 'RECORDED')
+    ? (lastTradeResult.outcome ? lastTradeResult.outcome.toUpperCase() : lastTradeResult.message ? 'SUBMITTED' : 'RECORDED')
     : 'AWAITING TRADE';
 
   const resultTone = lastTradeResult && typeof lastTradeResult.pnl === 'number'
@@ -112,7 +112,7 @@ export default function TradingWorkspace() {
             value={resultLabel}
             note={lastTradeResult && typeof lastTradeResult.pnl === 'number'
               ? `PnL ${lastTradeResult.pnl > 0 ? '+' : ''}${lastTradeResult.pnl.toFixed(2)}`
-              : tradeError || opsError || 'Trade output will appear here.'}
+              : lastTradeResult?.message || tradeError || opsError || 'Trade output will appear here.'}
             icon={Wallet}
             tone={resultTone}
           />

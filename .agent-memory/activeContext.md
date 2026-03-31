@@ -1,6 +1,23 @@
 # Active Context
 
 ## Current Work
+**Three critical gaps fixed — live tick subscription, live payout fetch, payout UI badge**
+
+### Fixes Applied (2026-03-31)
+
+| Gap | File(s) Changed | What Was Fixed |
+|-----|----------------|----------------|
+| **GAP-A** — No live ticks after `focus_asset` | `app/backend/brokers/pocket_option/adapter.py` | Removed private `SessionManager()` instance from adapter. All session access now goes through `get_session_manager()` global singleton. `subscribe_ticks()`, `execute_trade()`, `get_balance()`, `connect()`, `disconnect()`, and `get_connection_status()` all use the singleton. |
+| **GAP-B** — Payout hardcoded at 80% | `app/backend/brokers/pocket_option/assets.py` | Added `_get_live_payout_map()` which reads `pocketoptionapi.global_value.asset_manager` for live `profit_percent` values. Added `build_asset_list_with_live_payouts()` which uses live data when available, falls back to 0.8. Adapter now calls this instead of `build_asset_list()`. |
+| **GAP-C** — Payout not shown in sidebar | `app/frontend/src/stores/useAssetStore.js`, `useAuthStore.js`, `LeftSidebar.jsx` | Added `assetPayouts` map to asset store. `useAuthStore.connect()` now builds and stores the payout map after fetching assets. `LeftSidebar` renders a payout badge (e.g. `85%`) next to each asset name. |
+
+### Verification
+- Backend import smoke test: ✅ `imports OK`, 13 assets, payout=0.8 (correct fallback before connect)
+- Frontend build: ✅ 1656 modules, 0 errors
+
+---
+
+## Previous Work
 **Inspection update complete — legacy Redis streaming vs current v3 live tick path**
 
 The current v3 app does **not** use Redis for live market streaming. The backend uses a direct broker tick callback:

@@ -12,8 +12,11 @@ removed — they are now owned by api/session.py (single source of truth).
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from dataclasses import asdict
 
 import socketio
 from fastapi import FastAPI, HTTPException
@@ -69,6 +72,14 @@ async def focus_asset(sid, data):
     streaming_service.clear_detector_buffers(asset)
     await sio.emit("status", {"status": "focused", "asset": asset}, to=sid)
 
+    try:
+        adapter = BrokerRegistry.get_adapter(BrokerType.POCKET_OPTION)
+        if adapter.get_connection_status() == "connected":
+            await adapter.subscribe_ticks(asset)
+    except Exception as sub_err:
+        logger = logging.getLogger("otc_sniper.streaming")
+        logger.warning("subscribe_ticks failed for %s: %s", asset, sub_err)
+
 
 @sio.event
 async def watch_assets(sid, data):
@@ -86,6 +97,15 @@ async def watch_assets(sid, data):
         await sio.enter_room(sid, room)
         new_rooms.append(room)
         streaming_service.clear_detector_buffers(asset)
+
+    try:
+        adapter = BrokerRegistry.get_adapter(BrokerType.POCKET_OPTION)
+        if adapter.get_connection_status() == "connected":
+            for asset in assets[:9]:
+                await adapter.subscribe_ticks(asset)
+    except Exception as sub_err:
+        logger = logging.getLogger("otc_sniper.streaming")
+        logger.warning("subscribe_ticks (multi) failed: %s", sub_err)
 
     await sio.save_session(sid, {"rooms": new_rooms})
 
@@ -120,6 +140,7 @@ async def check_status(sid, _data=None):
             "connected": snap.connected,
             "account_type": snap.account_type,
             "is_demo": snap.is_demo,
+            "session_id": snap.session_id,
             "balance": snap.balance,
         },
         "observed_at": datetime.now(timezone.utc).isoformat(),
@@ -133,6 +154,8 @@ async def check_status(sid, _data=None):
 async def lifespan(app: FastAPI):
     get_settings()
     get_data_repository()
+    app.state.sio = sio
+    PocketOptionSession.set_main_loop(asyncio.get_running_loop())
     yield
 
 
@@ -182,7 +205,7 @@ async def broker_assets(broker: str, account_key: str = "primary"):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     assets = await adapter.get_assets()
-    return {"broker": broker, "assets": [asset.__dict__ for asset in assets]}
+    return {"broker": broker, "assets": [asdict(asset) for asset in assets]}
 
 
 @fastapi_app.post("/api/brokers/{broker}/connect", response_model=BrokerActionResponse)

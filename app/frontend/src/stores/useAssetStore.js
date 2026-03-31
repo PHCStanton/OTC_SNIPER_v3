@@ -1,5 +1,9 @@
 /**
  * Asset store — selected asset, OTC asset list, multi-chart selection.
+ *
+ * assetPayouts: map of raw_id → payout fraction (e.g. { 'EURUSD_otc': 0.85 })
+ * Populated after a successful broker connect from the /api/brokers/pocket_option/assets response.
+ * availableAssets remains a string[] of raw_ids for backward compatibility with all consumers.
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -17,10 +21,14 @@ export const useAssetStore = create()(
     (set) => ({
       selectedAsset: 'EURUSD_otc',
       availableAssets: DEFAULT_ASSETS,
+      /** map of raw_id → payout fraction, e.g. { 'EURUSD_otc': 0.85 } */
+      assetPayouts: {},
       multiChartAssets: ['EURUSD_otc', 'GBPUSD_otc', 'USDJPY_otc'],
 
       setSelectedAsset: (asset) => set({ selectedAsset: asset }),
       setAvailableAssets: (assets) => set({ availableAssets: assets }),
+      /** Store payout fractions keyed by raw_id. */
+      setAssetPayouts: (payouts) => set({ assetPayouts: payouts }),
       setMultiChartAssets: (assets) => set({ multiChartAssets: assets.slice(0, 9) }),
 
       addMultiChartAsset: (asset) =>

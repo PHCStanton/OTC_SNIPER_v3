@@ -21,12 +21,18 @@ class SessionConnectionError(RuntimeError):
 class PocketOptionSession:
     _tick_callback: Optional[Callable[[str, float, float], None]] = None
     _original_set_csv: Optional[Callable] = None  # Fix #8: typed annotation
+    _main_loop: Optional[asyncio.AbstractEventLoop] = None
 
     @classmethod
     def set_tick_callback(cls, callback: Callable[[str, float, float], None]):
         """Inject a global callback for all PO ticks."""
         cls._tick_callback = callback
         cls._apply_hooks()
+
+    @classmethod
+    def set_main_loop(cls, loop: asyncio.AbstractEventLoop):
+        """Set the main asyncio loop for thread-safe tick dispatch."""
+        cls._main_loop = loop
 
     @classmethod
     def _apply_hooks(cls):
@@ -48,17 +54,17 @@ class PocketOptionSession:
                                 asset = str(key)
                                 price = float(tick['price'])
                                 ts = float(tick['time'])
-                                # Fix #6: use get_running_loop — safe from non-async thread
-                                # Fix #5: default-arg lambda to avoid closure stale-variable bug
-                                loop = asyncio.get_running_loop()
-                                loop.call_soon_threadsafe(
-                                    lambda a=asset, p=price, t=ts: asyncio.ensure_future(
-                                        cls._tick_callback(a, p, t), loop=loop
+                                loop = cls._main_loop
+                                if loop is None or not loop.is_running():
+                                    logging.getLogger("PocketOptionSession").warning(
+                                        "Tick hook ignored for %s because main loop is unavailable.", key
                                     )
+                                    return res
+
+                                asyncio.run_coroutine_threadsafe(
+                                    cls._tick_callback(asset, price, ts),
+                                    loop,
                                 )
-                            except RuntimeError:
-                                # No running loop — broker connected before app started, skip
-                                pass
                             except Exception as hook_err:
                                 # Fix #7: log instead of silently swallowing
                                 logging.getLogger("PocketOptionSession").warning(

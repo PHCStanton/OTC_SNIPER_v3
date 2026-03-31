@@ -149,7 +149,7 @@ export default function TradePanel() {
           <div className="rounded-xl border border-white/5 bg-[#212127] px-4 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Last trade</p>
             <p className="mt-1 text-sm font-bold text-[#e3e6e7]">
-              {lastTradeResult.outcome ? lastTradeResult.outcome.toUpperCase() : 'RECORDED'}
+              {lastTradeResult.outcome ? lastTradeResult.outcome.toUpperCase() : lastTradeResult.message ? 'SUBMITTED' : 'RECORDED'}
             </p>
             <p className="text-xs text-gray-500">
               {typeof lastTradeResult.pnl === 'number' ? `P&L ${lastTradeResult.pnl > 0 ? '+' : ''}${lastTradeResult.pnl.toFixed(2)}` : 'Result captured'}

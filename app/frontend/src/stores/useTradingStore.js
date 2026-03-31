@@ -3,6 +3,7 @@
  */
 import { create } from 'zustand';
 import { executeTrade, getTrades } from '../api/tradingApi.js';
+import { useOpsStore } from './useOpsStore.js';
 import { useRiskStore } from './useRiskStore.js';
 import { useToastStore } from './useToastStore.js';
 
@@ -26,48 +27,23 @@ export const useTradingStore = create((set, get) => ({
   setDirection: (direction) => set({ direction }),
   setDuration: (duration) => set({ duration }),
   setIsGhost: (val) => set({ isGhost: val }),
+  setLastTradeResult: (value) => set({ lastTradeResult: value }),
+  setTradeError: (value) => set({ tradeError: value }),
 
   executeTrade: async (broker, asset) => {
     const { amount, direction, duration, isGhost } = get();
     set({ isExecuting: true, tradeError: null, lastTradeResult: null });
     try {
       const result = await executeTrade(broker, {
-        asset,
+        asset_id: asset,
         amount,
         direction,
-        duration,
-        demo: isGhost,
-      });
-
-      const outcome = typeof result?.outcome === 'string' ? result.outcome.trim().toLowerCase() : '';
-      const pnl = Number(result?.pnl);
-
-      if (!outcome || !['win', 'loss', 'void'].includes(outcome)) {
-        throw new Error('Trade response is missing a valid outcome.');
-      }
-
-      if (!Number.isFinite(pnl)) {
-        throw new Error('Trade response is missing a numeric pnl.');
-      }
-
-      useRiskStore.getState().recordTradeResult({
-        outcome,
-        pnl,
-        stake: amount,
-        source: 'auto',
+        expiration: duration,
+        account_key: 'primary',
       });
 
       set({ lastTradeResult: result });
-
-      // Toast feedback for trade outcome
-      const pnlLabel = pnl > 0 ? `+$${pnl.toFixed(2)}` : pnl < 0 ? `-$${Math.abs(pnl).toFixed(2)}` : '$0.00';
-      if (outcome === 'win') {
-        useToastStore.getState().addToast({ type: 'success', message: `WIN — ${pnlLabel}` });
-      } else if (outcome === 'loss') {
-        useToastStore.getState().addToast({ type: 'error', message: `LOSS — ${pnlLabel}` });
-      } else {
-        useToastStore.getState().addToast({ type: 'warning', message: 'Trade recorded as VOID.' });
-      }
+      useToastStore.getState().addToast({ type: 'info', message: 'Trade submitted.' });
     } catch (err) {
       set({ tradeError: err.message });
       useToastStore.getState().addToast({ type: 'error', message: `Trade failed: ${err.message}` });
@@ -79,8 +55,14 @@ export const useTradingStore = create((set, get) => ({
   loadTrades: async (broker) => {
     set({ isLoadingTrades: true });
     try {
-      const data = await getTrades(broker);
-      set({ trades: data.trades ?? [], tradeError: null });
+      const sessionId = useOpsStore.getState().sessionId;
+      if (!sessionId) {
+        throw new Error('No active session ID available. Connect before loading trade history.');
+      }
+
+      const data = await getTrades(broker, sessionId);
+      const trades = Array.isArray(data) ? data : Array.isArray(data?.trades) ? data.trades : [];
+      set({ trades, tradeError: null });
     } catch (err) {
       set({ tradeError: err.message });
       useToastStore.getState().addToast({ type: 'error', message: `Failed to load trades: ${err.message}` });

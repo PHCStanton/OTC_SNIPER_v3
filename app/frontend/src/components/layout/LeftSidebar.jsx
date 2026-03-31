@@ -15,7 +15,7 @@ const NAV_ITEMS = [
 
 export default function LeftSidebar() {
   const { sidebarOpen, setSidebarOpen, activeView, setActiveView } = useLayoutStore();
-  const { selectedAsset, availableAssets, setSelectedAsset } = useAssetStore();
+  const { selectedAsset, availableAssets, assetPayouts, setSelectedAsset } = useAssetStore();
 
   return (
     <aside className={`
@@ -62,22 +62,41 @@ export default function LeftSidebar() {
             <span className="text-[10px] font-semibold uppercase tracking-wider text-[#f5df19]">OTC Assets</span>
           </div>
           <ul className="flex-1 overflow-y-auto py-1">
-            {availableAssets.map((asset) => (
-              <li key={asset}>
-                <button
-                  onClick={() => setSelectedAsset(asset)}
-                  className={`
-                    w-full text-left px-3 py-1.5 text-xs transition-colors
-                    ${selectedAsset === asset
-                      ? 'bg-[#f5df19]/15 text-[#f5df19] font-medium'
-                      : 'text-gray-400 hover:bg-white/5 hover:text-[#e3e6e7]'}
-                  `}
-                >
-                  {asset.replace('_otc', '')}
-                  <span className="ml-1 text-[9px] text-gray-500">OTC</span>
-                </button>
-              </li>
-            ))}
+            {availableAssets.map((asset) => {
+              const payout = assetPayouts?.[asset];
+              const payoutLabel = payout != null ? `${Math.round(payout * 100)}%` : null;
+              const isSelected = selectedAsset === asset;
+              return (
+                <li key={asset}>
+                  <button
+                    onClick={() => setSelectedAsset(asset)}
+                    className={`
+                      w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors
+                      ${isSelected
+                        ? 'bg-[#f5df19]/15 text-[#f5df19] font-medium'
+                        : 'text-gray-400 hover:bg-white/5 hover:text-[#e3e6e7]'}
+                    `}
+                  >
+                    <span>
+                      {asset.replace('_otc', '')}
+                      <span className="ml-1 text-[9px] text-gray-500">OTC</span>
+                    </span>
+                    {payoutLabel && (
+                      <span
+                        className={`
+                          text-[9px] font-semibold px-1 py-0.5 rounded
+                          ${isSelected
+                            ? 'bg-[#f5df19]/20 text-[#f5df19]'
+                            : 'bg-white/5 text-gray-500'}
+                        `}
+                      >
+                        {payoutLabel}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

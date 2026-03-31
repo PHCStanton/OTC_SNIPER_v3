@@ -13,8 +13,9 @@ from ..models.requests import TradeExecutionRequest
 logger = logging.getLogger(__name__)
 
 class TradeService:
-    def __init__(self, repository: DataRepository):
+    def __init__(self, repository: DataRepository, sio=None):
         self.repository = repository
+        self.sio = sio
 
     async def execute_trade(self, broker_type: BrokerType, request: TradeExecutionRequest) -> Dict[str, Any]:
         """Execute a trade securely mapping it to the broker adapter"""
@@ -102,8 +103,21 @@ class TradeService:
 
             # Fix #2: Structured outcome parsing with explicit type checks.
             if isinstance(outcome_data, dict):
-                raw_outcome = outcome_data.get("win") or outcome_data.get("result")
-                trade.outcome = str(raw_outcome) if raw_outcome is not None else "unknown"
+                raw_outcome = outcome_data.get("result")
+                if raw_outcome is None and "win" in outcome_data:
+                    raw_outcome = outcome_data.get("win")
+
+                if isinstance(raw_outcome, bool):
+                    trade.outcome = "win" if raw_outcome else "loss"
+                elif isinstance(raw_outcome, (int, float)):
+                    trade.outcome = "win" if float(raw_outcome) > 0 else "loss"
+                elif isinstance(raw_outcome, str) and raw_outcome.strip():
+                    trade.outcome = raw_outcome.strip().lower()
+                elif outcome_data.get("profit") is not None:
+                    trade.outcome = "win" if float(outcome_data.get("profit", 0) or 0) > 0 else "loss"
+                else:
+                    trade.outcome = "unknown"
+
                 raw_profit = outcome_data.get("profit")
                 trade.profit = float(raw_profit) if raw_profit is not None else 0.0
             elif isinstance(outcome_data, (int, float)):
@@ -119,6 +133,20 @@ class TradeService:
                 trade.profit = 0.0
 
             await self.repository.update_trade(trade)
+            if self.sio and trade.outcome in {"win", "loss", "void"}:
+                await self.sio.emit(
+                    "trade_result",
+                    {
+                        "trade_id": trade.trade_id,
+                        "asset": trade.asset,
+                        "direction": trade.direction,
+                        "outcome": trade.outcome,
+                        "profit": trade.profit,
+                        "amount": trade.amount,
+                        "session_id": trade.session_id,
+                        "expiration_seconds": trade.expiration_seconds,
+                    },
+                )
             logger.info(
                 "Trade %s tracked. Outcome: %s, Profit: %s",
                 trade.trade_id, trade.outcome, trade.profit

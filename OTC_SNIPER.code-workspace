@@ -1,14 +1,8 @@
 {
 	"folders": [
 		{
-			"path": "../.."
-		},
-		{
-			"path": "../../../../QuFLX/v2/ssid/web_app"
+			"path": "."
 		}
 	],
-	"settings": {
-		"python-envs.defaultEnvManager": "ms-python.python:conda",
-		"python-envs.defaultPackageManager": "ms-python.python:conda"
-	}
+	"settings": {}
 }

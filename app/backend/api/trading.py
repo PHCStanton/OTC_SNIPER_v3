@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from typing import List
 
 from ..brokers.base import BrokerType
@@ -11,8 +11,11 @@ from ..services.trade_service import TradeService
 
 router = APIRouter(prefix="/api/brokers")
 
-def get_trade_service(repo: DataRepository = Depends(get_data_repository)) -> TradeService:
-    return TradeService(repository=repo)
+def get_trade_service(
+    request: Request,
+    repo: DataRepository = Depends(get_data_repository),
+) -> TradeService:
+    return TradeService(repository=repo, sio=getattr(request.app.state, 'sio', None))
 
 @router.post("/{broker}/trade", response_model=TradeExecutionResponse)
 async def execute_trade(
