@@ -5,6 +5,7 @@
 import { create } from 'zustand';
 import { sessionConnect, sessionDisconnect } from '../api/opsApi.js';
 import { useOpsStore } from './useOpsStore.js';
+import { useToastStore } from './useToastStore.js';
 
 export const useAuthStore = create((set) => ({
   ssidInput: '',
@@ -25,8 +26,11 @@ export const useAuthStore = create((set) => ({
       if (data.balance != null) ops.setBalance(data.balance);
       if (data.account_type != null) ops.setAccountType(data.account_type);
       set({ ssidInput: '', connectError: null });
+      const accountLabel = (data.account_type ?? (demo ? 'demo' : 'real')).toUpperCase();
+      useToastStore.getState().addToast({ type: 'success', message: `Session connected — ${accountLabel} account` });
     } catch (err) {
       set({ connectError: err.message });
+      useToastStore.getState().addToast({ type: 'error', message: `Connection failed: ${err.message}` });
     } finally {
       set({ isConnecting: false });
     }
@@ -40,8 +44,10 @@ export const useAuthStore = create((set) => ({
       ops.setSessionStatus('disconnected');
       ops.setBalance(0);
       ops.setAccountType(null);
+      useToastStore.getState().addToast({ type: 'info', message: 'Session disconnected.' });
     } catch (err) {
       set({ connectError: err.message });
+      useToastStore.getState().addToast({ type: 'error', message: `Disconnect failed: ${err.message}` });
     } finally {
       set({ isDisconnecting: false });
     }

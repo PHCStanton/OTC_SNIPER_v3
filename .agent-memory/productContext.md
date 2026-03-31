@@ -10,7 +10,7 @@ The previous monolith legacy application was brittle and tightly coupled. The re
 Professional or algorithmic traders requiring complex risk managed strategies, live stream data integration, and execution via PocketOption.
 
 ## Core Functionality
-- Live real-time streaming of tick data and signals via a gateway.
+- Live real-time streaming of tick data and signals via the broker tick callback + Socket.IO pipeline in v3.
 - Risk management tracking per session, displaying Live P/L, win rates.
 - Multi-chart asset viewing and trading via PocketOption.
 - Ghost trading for strategy testing before committing real capital.

@@ -7,6 +7,11 @@
 - Frontend: React (JSX), Vite, Zustand, Tailwind CSS, lucide-react
 - AI Integration: Grok 4.1 API
 
+Current live data path:
+- Pocket Option broker ticks are captured through `PocketOptionSession`
+- `StreamingService` enriches and emits `market_data` / `warmup_status` events via Socket.IO
+- Redis is not part of the current runtime streaming path in v3
+
 ## Development Setup
 - Backend functional code runs inside `app/backend`.
 - Frontend code runs inside `app/frontend`.
@@ -24,6 +29,7 @@
 - Functional simplicity first; eliminate unnecessary complexity.
 - Zero assumptions: verify everything; ask if unclear.
 - Defensive & explicit error handling: never swallow errors.
+- Sparkline / live chart consumer still needs to be implemented in the frontend if automatic live chart population is required.
 
 ## Coding Standards
 - Strict separation of concerns (one purpose per module/file/class).

@@ -1,57 +1,75 @@
 # Active Context
 
 ## Current Work
-**Phase 7 (Settings System) — COMPLETE**
-**Phase 8 (AI Service Integration) — COMPLETE**
+**Inspection update complete — legacy Redis streaming vs current v3 live tick path**
 
-Tabbed Settings workspace built and verified (Phase 7).
-AI Service Integration (xAI Grok) built, verified with mocked service test, and production build-verified (Phase 8).
+The current v3 app does **not** use Redis for live market streaming. The backend uses a direct broker tick callback:
+- `app/backend/session/pocket_option_session.py` captures Pocket Option tick updates
+- `app/backend/main.py` wires the callback into `StreamingService.process_tick`
+- `app/backend/services/streaming.py` enriches/logs/emits `market_data` and `warmup_status` via Socket.IO
 
-**@Reviewer gate requested for Phase 7 & 8.** Implementation is complete and ready for final review before moving to Phase 9.
+The legacy reference `legacy_reference/backend_reuse/data_streaming/redis_gateway.py` shows the older Redis Pub/Sub architecture, but that gateway is **reference-only** for this rebuild.
 
-## Phase 7 Deliverables — Done
+## New Current Work
+**SSID integration package refactor documentation completed and ready for OTC_SNIPER streaming implementation**
 
-| File | Status | Notes |
-|------|--------|-------|
-| `app/frontend/src/components/settings/SettingsView.jsx` | ✅ Created | Tabbed Account / App / Risk settings workspace |
-| `app/frontend/src/components/settings/AccountSettings.jsx` | ✅ Created | Session identity, saved SSID inventory, Auth0-ready boundary |
-| `app/frontend/src/components/settings/AppSettings.jsx` | ✅ Created | OTEO, ghost trading, trading controls, UI preferences |
-| `app/frontend/src/components/settings/RiskSettings.jsx` | ✅ Created | Capital, payout, sizing, drawdown, Trade Run risk preview |
-| `app/frontend/src/stores/useSettingsStore.js` | ✅ Hardened | Validation + clamped persistence + reset/update helpers |
-| `app/frontend/src/stores/useUserStore.js` | ✅ Created | Reserved namespace for future Auth0/profile state |
-| `app/frontend/src/components/layout/MainLayout.jsx` | ✅ Updated | SettingsView wired into active view router |
-| `app/frontend/src/api/opsApi.js` | ✅ Updated | Added SSID inventory / clear endpoints |
-| `app/backend/api/session.py` | ✅ Updated | Added `/api/session/clear-ssid` |
+Two permanent documentation artifacts were created in `ssid_integration_package/integration_guides/dev_docs/`:
+- `ssid_integration_package/integration_guides/dev_docs/3_Phase_Refactor_Plan.md`
+- `ssid_integration_package/integration_guides/dev_docs/3Phase_Implementation_Report_26-03-31.md`
 
-## Phase 8 Deliverables — Done
+The supporting verification report remains here:
+- `ssid_integration_package/ssid_streaming_test/scripts/ssid_streaming_implementation_report_26-03-30.md`
 
-| File | Status | Notes |
-|------|--------|-------|
-| `app/backend/services/ai_providers/xai_provider.py` | ✅ Created | Provider-agnostic AI provider (httpx) |
-| `app/backend/services/ai_service.py` | ✅ Created | Provider-agnostic AI service wrapper |
-| `app/backend/api/ai.py` | ✅ Created | AI router for chat and image analysis |
-| `app/backend/models/ai_models.py` | ✅ Created | AI request/response schemas |
-| `app/frontend/src/api/aiApi.js` | ✅ Created | Frontend API client |
-| `app/frontend/src/stores/useAIStore.js` | ✅ Created | Chat/analysis state management |
-| `app/frontend/src/components/ai/AITab.jsx` | ✅ Created | RightSidebar AI chat UI |
-| `app/backend/config.py` | ✅ Updated | Added AI configuration fields |
-| `app/frontend/src/components/layout/RightSidebar.jsx` | ✅ Updated | Added Risk/AI tab toggle |
+### Key Refactor Outcome
+- Completed a safe 3-phase refactor of the local `ssid_integration_package/pocketoptionapi` copy
+- Removed dead/broken candle modules and empty channel code
+- Added a canonical frozen `Candle` dataclass plus `CandleCollection`
+- Merged duplicate time sync implementations into one `TimeSync` with backward-compatible aliases
+- Preserved the live tick streaming path entirely: `gv.set_csv` → `asyncio.run_coroutine_threadsafe` → `StreamingService.process_tick`
 
-## Key Design Decisions Made (Phase 7/8)
+### Verification Highlights
+- Import smoke test passed for `PocketOptionAPI` and `PocketOption`
+- Dead-symbol grep returned 0 results for `EnhancedCandles`, `CandleData`, `TimeSynchronizer`, `get_currency_pairs`, and old candle/time-sync imports
+- Direct smoke tests confirmed `Candle.to_list()` and `TimeSync.server_datetime` work as expected
+- Final multi-agent review passed with all four specialist verdicts: @Reviewer ✅, @Debugger ✅, @Optimizer ✅, @Code_Simplifier ✅
 
-- **Phase 7:** Explicit scope split (Account/App/Risk), store-level validation, reserved Auth0 namespace.
-- **Phase 8:** Advisory-only AI policy, provider-agnostic backend service layer (`xai_provider.py` via `httpx`), stateless backend (frontend owns conversation history via `useAIStore`), dedicated RightSidebar AI tab.
+## Current Status
+- Phase 9 (Polish and Hardening) remains COMPLETE ✅
+- Build verification remains valid: `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build` → 1654 modules, 0 errors
+- No code changes were required for the inspection task
+- SSID integration package refactor docs are now complete and stored in `ssid_integration_package/integration_guides/dev_docs/`
 
-## Recent Changes
-- Phase 8 AI Integration: Complete and build-verified (1650 modules).
-- Phase 7 Settings System: Complete.
+## Current Findings
+- Redis is **not implemented** in the current v3 runtime flow
+- Tick data is already captured and streamed server-side through Socket.IO
+- I did **not** find a frontend sparkline consumer in `app/frontend/src`, so the UI population path still appears incomplete
+- The next implementation target is now the SSID streaming integration into the OTC_SNIPER app using the documented 3-phase refactor baseline
+
+## Key Design Decisions Made (Phase 9)
+
+- **Toast system:** Zustand store (`useToastStore`) — no external library, self-expiring via `setTimeout`, accessible via `aria-live="polite"`.
+- **Error boundaries:** Class-based React boundaries at App root + per-zone (TopBar, LeftSidebar, MainView, RightSidebar). Never silent — always `console.error`.
+- **Ghost trading banner:** Driven by `useSettingsStore.ghostTradingEnabled` — zero prop drilling, one-click exit.
+- **Loading skeletons:** Reusable `LoadingSkeleton`, `CardSkeleton`, `TableRowSkeleton` — available for future async surfaces.
+- **Live tick stream (current v3):** Direct broker callback → `StreamingService` → Socket.IO `market_data` / `warmup_status` events.
+
+## Build Verification
+- `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build` → ✅ 1654 modules, 0 errors
+
+## Previous Phases
+- Phase 7 (Settings System) — COMPLETE ✅
+- Phase 8 (AI Service Integration) — COMPLETE ✅
+- Phase 9 (Polish and Hardening) — COMPLETE ✅
 
 ## Next Steps
-1. **Reviewer gate** — review Phase 7 and 8 implementations.
-2. **Phase 9** — Polish and Hardening.
+- If Redis-based transport is still desired, implement a Redis gateway/bridge based on the legacy reference
+- Add or restore the frontend `market_data` subscription and sparkline population path
+- Optional future work: Supabase migration, Auth0 integration, CDP SSID extraction
+- Use `ssid_integration_package/integration_guides/dev_docs/3Phase_Implementation_Report_26-03-31.md` as the implementation baseline for integrating SSID streaming into OTC_SNIPER
+- Keep `ssid_integration_package/ssid_streaming_test/scripts/ssid_streaming_implementation_report_26-03-30.md` as the verified runtime reference for thread-safe live tick capture
 
 ## Blockers
-None.
+None for the inspection task.
 
 ## Environment Notes
 - Backend: `cd C:\v3\OTC_SNIPER\app && python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload`

@@ -13,7 +13,16 @@ The backend uses FastAPI and Socket.IO for the backend server on port 8001. The 
 ## Data Flow
 Frontend (React) -> API Client (REST & Socket.IO) -> Controllers (Thin Routes) -> Business Services (Trade, Risk, Settings, AI) -> Repository -> Persisted state.
 
+Current live streaming path in v3:
+- Pocket Option tick callback (`PocketOptionSession`) -> `StreamingService.process_tick()`
+- `StreamingService` enriches/logs tick data and emits `market_data` / `warmup_status` over Socket.IO
+- Frontend consumer for live sparklines is still pending in `app/frontend/src`
+
+Legacy note:
+- The older Redis Pub/Sub gateway exists only in `legacy_reference/backend_reuse/data_streaming/redis_gateway.py` and is not part of the current v3 runtime path.
+
 ## Significant Technical Decisions
 - **JSON/JSONL as source of truth (v3):** Kept as the primary data store structure before executing the eventual Supabase migration.
 - **Port Isolation:** Running the app on port 8001 to prevent conflict with QuFLX v2 on 8000.
 - **AI Advisory Only:** The AI component (Grok) acts strictly as an advisory system for session analysis, signal confirmation, and risk insights. It does not execute live trades autonomously.
+- **Direct tick streaming in v3:** Live market data is currently routed directly from the broker tick callback into Socket.IO, without Redis in the runtime path.

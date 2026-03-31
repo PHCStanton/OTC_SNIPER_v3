@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
+import { useToastStore } from '../../stores/useToastStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
 import logoImg from '../../../assets/GOLD_LOGO1.jpg';
@@ -37,12 +38,15 @@ export default function TopBar() {
       if (chromeRunning) {
         await chromeStop();
         setChromeStatus('stopped');
+        useToastStore.getState().addToast({ type: 'info', message: 'Chrome stopped.' });
       } else {
         await chromeStart();
         setChromeStatus('running');
+        useToastStore.getState().addToast({ type: 'success', message: 'Chrome started — ready for SSID.' });
       }
     } catch (err) {
       console.error('[TopBar] Chrome toggle error:', err.message);
+      useToastStore.getState().addToast({ type: 'error', message: `Chrome error: ${err.message}` });
     } finally {
       setChromeLoading(false);
     }

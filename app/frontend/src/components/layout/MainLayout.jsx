@@ -2,6 +2,7 @@
  * MainLayout — overall app shell.
  * TopBar (fixed) + LeftSidebar + main content area + RightSidebar.
  * Content area renders the active view based on useLayoutStore.
+ * Phase 9: ErrorBoundary, ToastContainer, and GhostTradingBanner wired in.
  */
 import TopBar from './TopBar.jsx';
 import LeftSidebar from './LeftSidebar.jsx';
@@ -10,6 +11,9 @@ import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import SettingsView from '../settings/SettingsView.jsx';
 import TradingPlaceholder from '../shared/TradingPlaceholder.jsx';
 import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
+import ErrorBoundary from '../shared/ErrorBoundary.jsx';
+import ToastContainer from '../shared/ToastContainer.jsx';
+import GhostTradingBanner from '../shared/GhostTradingBanner.jsx';
 
 export default function MainLayout() {
   const { activeView, dashboardMode } = useLayoutStore();
@@ -17,19 +21,35 @@ export default function MainLayout() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#0c0f0f] text-[#e3e6e7]">
       {/* Top bar — fixed height */}
-      <TopBar />
+      <ErrorBoundary label="Top Bar">
+        <TopBar />
+      </ErrorBoundary>
 
       {/* Body — fills remaining height */}
       <div className="flex flex-1 overflow-hidden">
-        <LeftSidebar />
+        <ErrorBoundary label="Left Sidebar">
+          <LeftSidebar />
+        </ErrorBoundary>
 
         {/* Main content */}
-        <main className="flex-1 overflow-auto">
-          <ActiveView view={activeView} mode={dashboardMode} />
+        <main className="flex flex-col flex-1 overflow-auto">
+          {/* Ghost trading banner — shown at top of workspace when active */}
+          <div className="px-4 pt-3 empty:hidden">
+            <GhostTradingBanner />
+          </div>
+
+          <ErrorBoundary label="Main View">
+            <ActiveView view={activeView} mode={dashboardMode} />
+          </ErrorBoundary>
         </main>
 
-        <RightSidebar />
+        <ErrorBoundary label="Right Sidebar">
+          <RightSidebar />
+        </ErrorBoundary>
       </div>
+
+      {/* Global toast notification layer — always on top */}
+      <ToastContainer />
     </div>
   );
 }
@@ -49,7 +69,7 @@ function JournalPlaceholder() {
     <div className="flex items-center justify-center h-full">
       <div className="text-center text-gray-500">
         <p className="text-lg font-semibold">Journal</p>
-        <p className="text-sm mt-1">Phase 8 — Coming soon</p>
+        <p className="text-sm mt-1">Coming soon</p>
       </div>
     </div>
   );

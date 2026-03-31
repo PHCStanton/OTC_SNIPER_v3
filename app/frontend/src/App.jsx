@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useLayoutStore } from './stores/useLayoutStore.js';
 import { useOpsStore } from './stores/useOpsStore.js';
 import MainLayout from './components/layout/MainLayout.jsx';
+import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
 import { initSocket } from './api/socketClient.js';
 
 export default function App() {
@@ -36,7 +37,9 @@ export default function App() {
 
   return (
     <div className="dark" data-dashboard-mode={dashboardMode}>
-      <MainLayout />
+      <ErrorBoundary label="Application">
+        <MainLayout />
+      </ErrorBoundary>
     </div>
   );
 }
