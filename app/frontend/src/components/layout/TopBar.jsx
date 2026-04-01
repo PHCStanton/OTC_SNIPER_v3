@@ -20,7 +20,7 @@ import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
-import logoImg from '../../../assets/GOLD_LOGO1.jpg';
+import logoImg from '../../../assets/LOGO_GOLD_BG_REMOVED.png';
 
 export default function TopBar() {
   const { chromeStatus, sessionStatus, balance, accountType, setChromeStatus } = useOpsStore();

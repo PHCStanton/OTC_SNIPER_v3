@@ -251,14 +251,37 @@ class PocketOptionSession:
             self.logger.warning("get_balance() error: %s", exc)
             return self._balance
 
+    def get_payout_data(self):
+        if not self.is_connected or self._api is None:
+            raise SessionConnectionError("Not connected")
+
+        getter = getattr(self._api, "get_payout", None)
+        if getter is None:
+            raise SessionConnectionError("Pocket Option payout data API is unavailable")
+
+        return getter()
+
+    def get_payout(self, pair: str):
+        if not self.is_connected or self._api is None:
+            raise SessionConnectionError("Not connected")
+
+        getter = getattr(self._api, "GetPayout", None)
+        if getter is None:
+            raise SessionConnectionError("Pocket Option payout lookup API is unavailable")
+
+        return getter(pair)
+
     def buy(self, amount, active, action, expirations):
         if not self.is_connected or self._api is None:
             raise SessionConnectionError("Not connected")
+        # Pass the raw_id directly — the adapter already resolved the correct broker symbol.
+        # Do NOT re-format here; that would mangle stock symbols like '#BA_otc'.
         return self._api.buy(amount, active, action, expirations)
 
     def buy_advanced(self, amount, active, action, expirations, on_new_candle=False):
         if not self.is_connected or self._api is None:
             raise SessionConnectionError("Not connected")
+        # Pass the raw_id directly — the adapter already resolved the correct broker symbol.
         return self._api.buy_advanced(amount, active, action, expirations, on_new_candle)
 
     def get_candles(self, active, timeframe, count):

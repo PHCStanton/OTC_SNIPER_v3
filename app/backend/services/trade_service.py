@@ -92,7 +92,7 @@ class TradeService:
 
             # Fix #1: check_win is blocking — run it in a thread executor to avoid
             # blocking the asyncio event loop.
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             outcome_data = await loop.run_in_executor(None, session.check_win, trade.trade_id)
 
             if outcome_data is None:
@@ -102,7 +102,15 @@ class TradeService:
             trade.exit_time = unix_time()
 
             # Fix #2: Structured outcome parsing with explicit type checks.
-            if isinstance(outcome_data, dict):
+            if isinstance(outcome_data, tuple) and len(outcome_data) >= 2:
+                raw_profit, raw_outcome = outcome_data[0], outcome_data[1]
+                trade.profit = float(raw_profit) if raw_profit is not None else 0.0
+                if isinstance(raw_outcome, str) and raw_outcome.strip():
+                    normalized_outcome = raw_outcome.strip().lower()
+                    trade.outcome = "loss" if normalized_outcome == "loose" else normalized_outcome
+                else:
+                    trade.outcome = "win" if trade.profit > 0 else "loss"
+            elif isinstance(outcome_data, dict):
                 raw_outcome = outcome_data.get("result")
                 if raw_outcome is None and "win" in outcome_data:
                     raw_outcome = outcome_data.get("win")
@@ -112,7 +120,8 @@ class TradeService:
                 elif isinstance(raw_outcome, (int, float)):
                     trade.outcome = "win" if float(raw_outcome) > 0 else "loss"
                 elif isinstance(raw_outcome, str) and raw_outcome.strip():
-                    trade.outcome = raw_outcome.strip().lower()
+                    normalized_outcome = raw_outcome.strip().lower()
+                    trade.outcome = "loss" if normalized_outcome == "loose" else normalized_outcome
                 elif outcome_data.get("profit") is not None:
                     trade.outcome = "win" if float(outcome_data.get("profit", 0) or 0) > 0 else "loss"
                 else:

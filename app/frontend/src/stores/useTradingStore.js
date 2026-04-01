@@ -42,11 +42,21 @@ export const useTradingStore = create((set, get) => ({
         account_key: 'primary',
       });
 
-      set({ lastTradeResult: result });
+      if (!result?.success) {
+        const message = typeof result?.message === 'string' && result.message.trim().length > 0
+          ? result.message
+          : 'Trade was rejected before execution.';
+        set({ tradeError: message, lastTradeResult: null });
+        useToastStore.getState().addToast({ type: 'error', message: `Trade failed: ${message}` });
+        return;
+      }
+
+      set({ lastTradeResult: result, tradeError: null });
       useToastStore.getState().addToast({ type: 'info', message: 'Trade submitted.' });
     } catch (err) {
-      set({ tradeError: err.message });
-      useToastStore.getState().addToast({ type: 'error', message: `Trade failed: ${err.message}` });
+      const message = err instanceof Error ? err.message : String(err);
+      set({ tradeError: message });
+      useToastStore.getState().addToast({ type: 'error', message: `Trade failed: ${message}` });
     } finally {
       set({ isExecuting: false });
     }

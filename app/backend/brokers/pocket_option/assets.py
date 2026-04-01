@@ -1,7 +1,8 @@
-"""Pocket Option asset normalization and verified OTC asset list."""
+"""Pocket Option asset normalization and live asset list builder."""
 
 from __future__ import annotations
 
+import json
 import logging
 
 from ..base import Asset, AssetType, BrokerType
@@ -9,7 +10,7 @@ from ..base import Asset, AssetType, BrokerType
 logger = logging.getLogger(__name__)
 
 
-OTC_ASSETS = [
+_FALLBACK_OTC_ASSETS = [
     "EURUSD_otc",
     "GBPUSD_otc",
     "USDJPY_otc",
@@ -27,6 +28,7 @@ OTC_ASSETS = [
 
 
 def normalize_asset(value: str) -> str:
+    """Strip OTC suffix and non-alphanumeric chars, return uppercase canonical ID."""
     if not value:
         return ""
 
@@ -40,86 +42,121 @@ def normalize_asset(value: str) -> str:
     return "".join(ch for ch in cleaned if ch.isalnum())
 
 
-def to_pocket_option_format(value: str) -> str:
-    canonical = normalize_asset(value)
+def to_pocket_option_format(raw_id: str) -> str:
+    """
+    Return the raw_id as-is if it already contains an underscore (e.g. 'EURUSD_otc',
+    '#BA_otc', 'TSLA_otc'). Only apply normalization + _otc suffix for plain symbols
+    that have no underscore (legacy path).
+    """
+    if not raw_id:
+        return ""
+
+    if "_" in raw_id:
+        return raw_id
+
+    canonical = normalize_asset(raw_id)
     return f"{canonical}_otc" if canonical else ""
 
 
-def verify_otc_asset(value: str) -> bool:
-    return to_pocket_option_format(value) in OTC_ASSETS
+def _infer_asset_type(symbol: str, category: str) -> AssetType:
+    symbol_lower = symbol.lower()
+    category_lower = category.strip().lower()
+
+    if "_otc" in symbol_lower:
+        return AssetType.OTC
+    if category_lower == "stock" or symbol.startswith("#"):
+        return AssetType.STOCK
+    if category_lower == "crypto":
+        return AssetType.CRYPTO
+    return AssetType.FOREX
 
 
-def build_asset_list() -> list[Asset]:
-    assets: list[Asset] = []
-    for asset_id in OTC_ASSETS:
-        canonical = normalize_asset(asset_id)
-        assets.append(
-            Asset(
-                id=canonical,
-                name=asset_id.replace("_otc", " OTC"),
-                asset_type=AssetType.OTC,
-                payout=0.8,
-                broker=BrokerType.POCKET_OPTION,
-                raw_id=asset_id,
-            )
-        )
-    return assets
-
-
-def _get_live_payout_map() -> dict[str, float]:
-    """
-    Attempt to read live payout percentages from the pocketoptionapi asset_manager.
-
-    Returns a dict mapping raw_id (e.g. 'EURUSD_otc') → payout fraction (e.g. 0.85).
-    Returns an empty dict if the API is not connected or asset data is unavailable.
-    The pocketoptionapi stores profit_percent as an integer percentage (e.g. 85),
-    so we divide by 100 to normalise to a fraction.
-    """
+def _load_live_assets() -> list[Asset]:
     try:
         import pocketoptionapi.global_value as gv  # type: ignore
-        mgr = getattr(gv, "asset_manager", None)
-        if mgr is None:
-            return {}
 
-        payout_map: dict[str, float] = {}
-        for asset_obj in getattr(mgr, "assets", []):
-            symbol = getattr(asset_obj, "symbol", None)
-            profit_pct = getattr(asset_obj, "profit_percent", None)
-            if symbol and profit_pct is not None:
-                try:
-                    payout_map[str(symbol)] = float(profit_pct) / 100.0
-                except (TypeError, ValueError):
-                    pass
-        return payout_map
+        payout_data = getattr(gv, "PayoutData", None)
+        if not payout_data:
+            return []
+
+        if isinstance(payout_data, bytes):
+            payout_data = payout_data.decode("utf-8")
+
+        payload = json.loads(payout_data) if isinstance(payout_data, str) else payout_data
+        if not isinstance(payload, list):
+            logger.warning("Pocket Option payout payload is not a list: %s", type(payload).__name__)
+            return []
+
+        assets: list[Asset] = []
+        seen_symbols: set[str] = set()
+
+        for entry in payload:
+            if not isinstance(entry, list) or len(entry) < 6:
+                continue
+
+            symbol = str(entry[1]).strip() if entry[1] is not None else ""
+            if not symbol or symbol in seen_symbols:
+                continue
+
+            name = str(entry[2]).strip() if entry[2] is not None else symbol
+            category = str(entry[3]).strip() if entry[3] is not None else ""
+
+            try:
+                payout = float(entry[5]) / 100.0
+            except (TypeError, ValueError):
+                payout = 0.0
+
+            assets.append(
+                Asset(
+                    id=normalize_asset(symbol),
+                    name=name or symbol,
+                    asset_type=_infer_asset_type(symbol, category),
+                    payout=payout,
+                    broker=BrokerType.POCKET_OPTION,
+                    raw_id=symbol,
+                )
+            )
+            seen_symbols.add(symbol)
+
+        return assets
     except Exception as exc:
-        logger.warning("Live payout map unavailable (falling back to static 80%%): %s", exc)
-        return {}
+        logger.warning("Failed to read Pocket Option payout data: %s", exc)
+        return []
+
+
+def verify_asset_tradeable(raw_id: str) -> bool:
+    """Verify if an asset is valid for trading."""
+    if not raw_id:
+        return False
+
+    asset_id = raw_id.strip()
+    pocket_asset = to_pocket_option_format(asset_id)
+    live_assets = _load_live_assets()
+
+    if live_assets:
+        live_raw_ids = {asset.raw_id for asset in live_assets}
+        live_ids = {asset.id for asset in live_assets}
+        return asset_id in live_raw_ids or pocket_asset in live_raw_ids or normalize_asset(asset_id) in live_ids
+
+    return asset_id in _FALLBACK_OTC_ASSETS or pocket_asset in _FALLBACK_OTC_ASSETS
 
 
 def build_asset_list_with_live_payouts() -> list[Asset]:
-    """
-    Build the asset list, enriching each asset with a live payout percentage
-    from the broker API when available.  Falls back to 0.80 (80%) when the
-    broker has not yet sent asset data (e.g. before first connect).
-    """
-    live_payouts = _get_live_payout_map()
-    if live_payouts:
-        logger.debug("Live payout map loaded: %d assets", len(live_payouts))
-    else:
-        logger.debug("No live payout data available — using static 80%% fallback")
+    """Build the full asset list from the broker's live payout payload."""
+    live_assets = _load_live_assets()
+    if live_assets:
+        logger.debug("Live asset list: %d available assets from Pocket Option payout data", len(live_assets))
+        return live_assets
 
-    assets: list[Asset] = []
-    for asset_id in OTC_ASSETS:
-        canonical = normalize_asset(asset_id)
-        payout = live_payouts.get(asset_id, 0.8)
-        assets.append(
-            Asset(
-                id=canonical,
-                name=asset_id.replace("_otc", " OTC"),
-                asset_type=AssetType.OTC,
-                payout=payout,
-                broker=BrokerType.POCKET_OPTION,
-                raw_id=asset_id,
-            )
+    logger.debug("Broker not connected — returning minimal fallback asset list")
+    return [
+        Asset(
+            id=normalize_asset(asset_id),
+            name=asset_id.replace("_otc", " OTC"),
+            asset_type=AssetType.OTC,
+            payout=0.8,
+            broker=BrokerType.POCKET_OPTION,
+            raw_id=asset_id,
         )
-    return assets
+        for asset_id in _FALLBACK_OTC_ASSETS
+    ]

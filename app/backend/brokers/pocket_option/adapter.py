@@ -9,7 +9,7 @@ from typing import Dict, List
 from ...dependencies import get_session_manager
 from ..base import Asset, Balance, BrokerAdapter, BrokerType, Tick, TradeOrder, TradeResult
 from ..registry import BrokerRegistry
-from .assets import build_asset_list_with_live_payouts, normalize_asset, to_pocket_option_format, verify_otc_asset
+from .assets import build_asset_list_with_live_payouts, to_pocket_option_format, verify_asset_tradeable
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +65,9 @@ class PocketOptionAdapter(BrokerAdapter):
         """Starts streaming ticks for the given asset via the global session."""
         session = get_session_manager().current_session
         if session and session.is_connected and session._api:
-            # period 1 = 1 second candles/ticks
-            pocket_asset = to_pocket_option_format(normalize_asset(asset))
+            pocket_asset = asset.strip()
+            if pocket_asset and "_" not in pocket_asset:
+                pocket_asset = to_pocket_option_format(pocket_asset)
             await asyncio.get_running_loop().run_in_executor(
                 None, session._api.change_symbol, pocket_asset, 1
             )
@@ -81,12 +82,12 @@ class PocketOptionAdapter(BrokerAdapter):
         if session is None or not session.is_connected:
             return TradeResult(success=False, message="Not connected to Pocket Option.", broker=BrokerType.POCKET_OPTION)
 
-        canonical = normalize_asset(order.asset_id)
-        pocket_asset = to_pocket_option_format(canonical)
-        if not verify_otc_asset(canonical):
+        # Use the raw_id directly — it already has the correct broker format (e.g. 'EURUSD_otc', '#BA_otc')
+        pocket_asset = order.asset_id.strip()
+        if not verify_asset_tradeable(pocket_asset):
             return TradeResult(
                 success=False,
-                message=f"Asset not in verified OTC list: {pocket_asset}",
+                message=f"Asset not available for trading: {pocket_asset}",
                 broker=BrokerType.POCKET_OPTION,
             )
 
@@ -95,14 +96,51 @@ class PocketOptionAdapter(BrokerAdapter):
             return TradeResult(success=False, message="Direction must be 'call' or 'put'.", broker=BrokerType.POCKET_OPTION)
 
         try:
-            result = session.buy(order.amount, pocket_asset, direction, order.expiration)
+            loop = asyncio.get_running_loop()
+            started_at = loop.time()
+            timeout_seconds = max(10.0, float(getattr(session, "timeout", 15)))
+            logger.info(
+                "Submitting Pocket Option trade asset=%s direction=%s amount=%s expiration=%s timeout=%ss",
+                pocket_asset,
+                direction,
+                order.amount,
+                order.expiration,
+                timeout_seconds,
+            )
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    session.buy,
+                    order.amount,
+                    pocket_asset,
+                    direction,
+                    order.expiration,
+                ),
+                timeout=timeout_seconds,
+            )
+            elapsed = loop.time() - started_at
+            logger.info(
+                "Pocket Option trade response asset=%s direction=%s elapsed=%.2fs result_type=%s",
+                pocket_asset,
+                direction,
+                elapsed,
+                type(result).__name__,
+            )
             trade_id = None
             entry_price = None
 
             if isinstance(result, tuple):
                 if len(result) >= 2:
-                    trade_id = str(result[1])
-                if len(result) >= 1 and isinstance(result[0], (int, float)):
+                    trade_id = str(result[1]) if result[1] is not None else None
+                if len(result) >= 1 and isinstance(result[0], bool):
+                    if not result[0]:
+                        return TradeResult(
+                            success=False,
+                            trade_id=trade_id,
+                            message="Broker rejected the trade request.",
+                            broker=BrokerType.POCKET_OPTION,
+                        )
+                elif len(result) >= 1 and isinstance(result[0], (int, float)):
                     entry_price = float(result[0])
             elif isinstance(result, dict):
                 trade_id = str(result.get("trade_id")) if result.get("trade_id") is not None else None
@@ -119,9 +157,29 @@ class PocketOptionAdapter(BrokerAdapter):
                 message="Trade submitted successfully.",
                 broker=BrokerType.POCKET_OPTION,
             )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Pocket Option trade timed out asset=%s direction=%s amount=%s expiration=%s",
+                pocket_asset,
+                direction,
+                order.amount,
+                order.expiration,
+            )
+            return TradeResult(
+                success=False,
+                message="Trade request timed out before Pocket Option responded.",
+                broker=BrokerType.POCKET_OPTION,
+            )
         except Exception as exc:
             self._connection_status = "error"
             self._last_error = str(exc)
+            logger.exception(
+                "Pocket Option trade failed asset=%s direction=%s amount=%s expiration=%s",
+                pocket_asset,
+                direction,
+                order.amount,
+                order.expiration,
+            )
             return TradeResult(success=False, message=str(exc), broker=BrokerType.POCKET_OPTION)
 
     async def get_balance(self, demo: bool = True) -> Balance:

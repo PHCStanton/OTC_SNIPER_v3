@@ -1,35 +1,42 @@
 /**
- * Asset store — selected asset, OTC asset list, multi-chart selection.
+ * Asset store — selected asset, live asset list, multi-chart selection.
  *
+ * availableAssets: string[] of raw_ids populated from the broker after connect.
  * assetPayouts: map of raw_id → payout fraction (e.g. { 'EURUSD_otc': 0.85 })
- * Populated after a successful broker connect from the /api/brokers/pocket_option/assets response.
- * availableAssets remains a string[] of raw_ids for backward compatibility with all consumers.
+ * starredAssets: string[] of raw_ids the user has starred for Quick Select.
+ *
+ * NOTE: No default asset list — the list is empty until the broker sends live data.
+ * This ensures we never show stale or hardcoded assets.
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-
-// Default OTC assets (mirrors backend assets.py)
-const DEFAULT_ASSETS = [
-  'EURUSD_otc', 'GBPUSD_otc', 'USDJPY_otc', 'AUDUSD_otc',
-  'USDCAD_otc', 'USDCHF_otc', 'EURGBP_otc', 'EURJPY_otc',
-  'GBPJPY_otc', 'NZDUSD_otc', 'AUDCAD_otc', 'AUDCHF_otc',
-  'CADJPY_otc',
-];
 
 export const useAssetStore = create()(
   persist(
     (set) => ({
       selectedAsset: 'EURUSD_otc',
-      availableAssets: DEFAULT_ASSETS,
+      availableAssets: [],
       /** map of raw_id → payout fraction, e.g. { 'EURUSD_otc': 0.85 } */
       assetPayouts: {},
       multiChartAssets: ['EURUSD_otc', 'GBPUSD_otc', 'USDJPY_otc'],
+      /** list of raw_ids for starred/favorite assets (Quick Select) */
+      starredAssets: [],
 
       setSelectedAsset: (asset) => set({ selectedAsset: asset }),
       setAvailableAssets: (assets) => set({ availableAssets: assets }),
       /** Store payout fractions keyed by raw_id. */
       setAssetPayouts: (payouts) => set({ assetPayouts: payouts }),
       setMultiChartAssets: (assets) => set({ multiChartAssets: assets.slice(0, 9) }),
+
+      toggleStarredAsset: (asset) =>
+        set((state) => {
+          const isStarred = state.starredAssets.includes(asset);
+          return {
+            starredAssets: isStarred
+              ? state.starredAssets.filter((a) => a !== asset)
+              : [...state.starredAssets, asset],
+          };
+        }),
 
       addMultiChartAsset: (asset) =>
         set((state) => {
@@ -43,6 +50,15 @@ export const useAssetStore = create()(
           multiChartAssets: state.multiChartAssets.filter((a) => a !== asset),
         })),
     }),
-    { name: 'otc-sniper-asset-storage' }
+    {
+      name: 'otc-sniper-asset-storage',
+      // Only persist starred assets and selected asset — NOT the asset list itself.
+      // The asset list must always be refreshed from the broker on connect.
+      partialize: (state) => ({
+        selectedAsset: state.selectedAsset,
+        starredAssets: state.starredAssets,
+        multiChartAssets: state.multiChartAssets,
+      }),
+    }
   )
 );
