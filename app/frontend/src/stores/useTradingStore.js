@@ -6,13 +6,13 @@ import { executeTrade, getTrades } from '../api/tradingApi.js';
 import { useOpsStore } from './useOpsStore.js';
 import { useRiskStore } from './useRiskStore.js';
 import { useToastStore } from './useToastStore.js';
+import { useSettingsStore } from './useSettingsStore.js';
 
 export const useTradingStore = create((set, get) => ({
   // Form state
   amount: 1,
   direction: 'call', // 'call' | 'put'
   duration: 60,      // seconds
-  isGhost: false,
 
   // Execution state
   isExecuting: false,
@@ -26,12 +26,13 @@ export const useTradingStore = create((set, get) => ({
   setAmount: (amount) => set({ amount }),
   setDirection: (direction) => set({ direction }),
   setDuration: (duration) => set({ duration }),
-  setIsGhost: (val) => set({ isGhost: val }),
   setLastTradeResult: (value) => set({ lastTradeResult: value }),
   setTradeError: (value) => set({ tradeError: value }),
 
   executeTrade: async (broker, asset) => {
-    const { amount, direction, duration, isGhost } = get();
+    const { amount, direction, duration } = get();
+    const isGhost = useSettingsStore.getState().ghostTradingEnabled;
+    
     set({ isExecuting: true, tradeError: null, lastTradeResult: null });
     try {
       const result = await executeTrade(broker, {
@@ -40,6 +41,7 @@ export const useTradingStore = create((set, get) => ({
         direction,
         expiration: duration,
         account_key: 'primary',
+        demo: isGhost, // Passing the ghost flag as demo to the backend
       });
 
       if (!result?.success) {

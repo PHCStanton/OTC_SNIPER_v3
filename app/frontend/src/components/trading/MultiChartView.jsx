@@ -14,8 +14,8 @@ export default function MultiChartView() {
   const canAddSelected = !multiChartAssets.includes(selectedAsset) && multiChartAssets.length < 9;
 
   return (
-    <section className="rounded-xl border border-white/5 bg-[#1a1717] p-4 shadow-2xl shadow-black/30 backdrop-blur">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
+    <section className="flex h-full flex-col rounded-xl border border-white/5 bg-[#1a1717] p-4 shadow-2xl shadow-black/30 backdrop-blur">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3 shrink-0">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-500">Watchlist</p>
           <h3 className="text-lg font-black tracking-tight text-[#e3e6e7]">Multi-chart view</h3>
@@ -32,7 +32,7 @@ export default function MultiChartView() {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-4 grid gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3 flex-1">
         {multiChartAssets.map((asset) => {
           const series = extractNumericSeries(ticks[asset]);
           const latest = series.length > 0 ? series[series.length - 1] : null;

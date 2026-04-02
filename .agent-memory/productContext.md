@@ -1,22 +1,24 @@
 # Product Context
 
-## Project Purpose
-OTC SNIPER (QuFLX v2) is an advanced trading platform built for over-the-counter (OTC) assets, specifically designed to automate, analyze, and optimize trading strategies.
-
-## Problem Statement
-The previous monolith legacy application was brittle and tightly coupled. The rebuild creates a robust, modular, and performant platform that separates workspace management from the functional application root, ensuring scalable and reliable trading execution and risk management.
+## Summary
+- OTC_SNIPER is a modular OTC trading workspace focused on reliable execution, live market visibility, and disciplined risk management for Pocket Option style workflows
+- The rebuild separates the planning workspace from the functional application root so trading, streaming, risk, and UI concerns can be maintained and verified independently
+- This file captures stable product intent rather than temporary debugging state
 
 ## Intended Users
-Professional or algorithmic traders requiring complex risk managed strategies, live stream data integration, and execution via PocketOption.
+- Professional, discretionary, or algorithmic traders who need fast OTC execution
+- Users who depend on realtime session feedback, safer operational controls, and ghost trading support
 
 ## Core Functionality
-- Live real-time streaming of tick data and signals via the broker tick callback + Socket.IO pipeline in v3.
-- Risk management tracking per session, displaying Live P/L, win rates.
-- Multi-chart asset viewing and trading via PocketOption.
-- Ghost trading for strategy testing before committing real capital.
-- AI Integration (Grok) for trading journals, signal confirmation, and risk advisory.
+- Submit trades through the Pocket Option backend integration
+- Stream realtime data through the broker callback and Socket.IO pipeline
+- Track session performance, trade history, win rate, and P/L
+- Support ghost trading for safer strategy validation
+- Provide AI-assisted journaling and decision support without autonomous execution
+- Surface failures clearly so trade rejection, connectivity issues, and runtime errors are visible to the operator
 
 ## Success Metrics
-- Zero-downtime streaming and execution.
-- Maintain a strict boundary between the data repository, session logic, and the React UI.
-- Accurate and fail-fast validation of data models using Pydantic.
+- Stable trade execution without freezing the backend event loop
+- Reliable realtime delivery for sparklines and trade outcomes
+- Clear separation between repository, broker/session logic, services, and React UI
+- Explicit fail-fast validation and error reporting throughout the stack

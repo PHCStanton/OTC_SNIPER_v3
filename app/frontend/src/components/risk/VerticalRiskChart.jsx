@@ -1,5 +1,4 @@
-import { TrendingUp, TrendingDown, Target } from 'lucide-react';
-
+// No lucide-react icons needed in this simplified version
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -37,20 +36,9 @@ export default function VerticalRiskChart({
   const isProfit = currentBalance >= startBalance;
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-[#0f1419] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)]">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-gray-500">Session Visualizer</p>
-          <p className="mt-1 text-sm font-semibold text-[#e3e6e7]">Balance, target, and drawdown envelope</p>
-        </div>
-        <div className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${isProfit ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400' : 'border-red-400/20 bg-red-400/10 text-red-400'}`}>
-          {isProfit ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-          {isProfit ? 'Above baseline' : 'Below baseline'}
-        </div>
-      </div>
-
-      <div className="relative rounded-2xl border border-white/5 bg-[#0b0f13] p-3">
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" className="overflow-visible">
+    <div className="rounded-2xl border border-white/5 bg-[#0f1419] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)] flex-1 flex flex-col">
+      <div className="relative rounded-2xl border border-white/5 bg-[#0b0f13] p-3 flex-1 min-h-0">
+        <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" className="overflow-visible h-full">
           <defs>
             <linearGradient id="risk-bar" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#10b981" stopOpacity="0.95" />
@@ -118,29 +106,6 @@ export default function VerticalRiskChart({
           </g>
         </svg>
       </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
-        <MetricLabel label="To Target" value={`$${Math.max(0, takeProfitTarget - currentBalance).toFixed(2)}`} tone="emerald" icon={Target} />
-        <MetricLabel label="To Limit" value={`$${Math.max(0, currentBalance - maxDrawdownLimit).toFixed(2)}`} tone="rose" icon={Target} />
-      </div>
-    </div>
-  );
-}
-
-function MetricLabel({ label, value, tone = 'slate', icon: Icon }) {
-  const toneClasses = {
-    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400',
-    rose: 'border-red-400/20 bg-red-400/10 text-red-400',
-    slate: 'border-white/5 bg-white/5 text-[#e3e6e7]',
-  };
-
-  return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClasses[tone]}`}>
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] opacity-70">
-        {Icon && <Icon size={10} />}
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-bold tracking-tight">{value}</div>
     </div>
   );
 }

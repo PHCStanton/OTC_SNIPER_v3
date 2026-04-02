@@ -14,6 +14,8 @@ export const SETTINGS_DEFAULTS = {
   // Ghost trading
   ghostTradingEnabled: false,
   ghostAmount: 1,
+  ghostWidgetPosition: { x: 0, y: 0 },
+  ghostIcon: 'drift.gif',
 
   // Session risk defaults
   initialBalance: 1000,
@@ -55,6 +57,14 @@ function toNumber(value, fallback, { min = Number.NEGATIVE_INFINITY, max = Numbe
   return integer ? Math.trunc(clamped) : clamped;
 }
 
+function toPosition(value, fallback = { x: 0, y: 0 }) {
+  if (!value || typeof value !== 'object') return fallback;
+  return {
+    x: typeof value.x === 'number' && Number.isFinite(value.x) ? value.x : fallback.x,
+    y: typeof value.y === 'number' && Number.isFinite(value.y) ? value.y : fallback.y,
+  };
+}
+
 export function validateSettings(input = {}) {
   return {
     oteoEnabled: toBoolean(input.oteoEnabled, SETTINGS_DEFAULTS.oteoEnabled),
@@ -63,6 +73,10 @@ export function validateSettings(input = {}) {
 
     ghostTradingEnabled: toBoolean(input.ghostTradingEnabled, SETTINGS_DEFAULTS.ghostTradingEnabled),
     ghostAmount: toNumber(input.ghostAmount, SETTINGS_DEFAULTS.ghostAmount, { min: 0, max: 100000, integer: false }),
+    ghostWidgetPosition: toPosition(input.ghostWidgetPosition, SETTINGS_DEFAULTS.ghostWidgetPosition),
+    ghostIcon: typeof input.ghostIcon === 'string' && input.ghostIcon.trim()
+      ? input.ghostIcon.trim()
+      : SETTINGS_DEFAULTS.ghostIcon,
 
     initialBalance: toNumber(input.initialBalance, SETTINGS_DEFAULTS.initialBalance, { min: 0, max: 100000000, integer: false }),
     payoutPercentage: toNumber(input.payoutPercentage, SETTINGS_DEFAULTS.payoutPercentage, { min: 0, max: 1000, integer: false }),
@@ -108,6 +122,8 @@ export const useSettingsStore = create()(
       setOteoCooldownBars: (val) => commitSettingsPatch(set, { oteoCooldownBars: val }),
       setGhostTradingEnabled: (val) => commitSettingsPatch(set, { ghostTradingEnabled: val }),
       setGhostAmount: (val) => commitSettingsPatch(set, { ghostAmount: val }),
+      setGhostWidgetPosition: (val) => commitSettingsPatch(set, { ghostWidgetPosition: val }),
+      setGhostIcon: (val) => commitSettingsPatch(set, { ghostIcon: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),
       setPayoutPercentage: (val) => commitSettingsPatch(set, { payoutPercentage: val }),
       setRiskPercentPerTrade: (val) => commitSettingsPatch(set, { riskPercentPerTrade: val }),

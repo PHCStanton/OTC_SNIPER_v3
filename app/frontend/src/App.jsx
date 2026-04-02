@@ -8,6 +8,7 @@ import { useToastStore } from './stores/useToastStore.js';
 import { useTradingStore } from './stores/useTradingStore.js';
 import MainLayout from './components/layout/MainLayout.jsx';
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
+import ComponentsPage from './components/dev/ComponentsPage.jsx';
 
 const VALID_TRADE_OUTCOMES = new Set(['win', 'loss', 'void']);
 
@@ -84,7 +85,7 @@ export default function App() {
   return (
     <div className="dark" data-dashboard-mode={dashboardMode}>
       <ErrorBoundary label="Application">
-        <MainLayout />
+        {window.location.pathname === '/components' ? <ComponentsPage /> : <MainLayout />}
       </ErrorBoundary>
     </div>
   );

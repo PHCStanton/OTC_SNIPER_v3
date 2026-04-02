@@ -1,11 +1,12 @@
 /**
  * TradePanel — execution controls for the Phase 5 trading workspace.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight, AlertTriangle, DollarSign, Ghost, Loader2, Wallet } from 'lucide-react';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useTradingStore } from '../../stores/useTradingStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { formatAssetLabel } from './chartUtils.js';
 
 export default function TradePanel() {
@@ -14,16 +15,17 @@ export default function TradePanel() {
   const {
     amount,
     duration,
-    isGhost,
     isExecuting,
     tradeError,
     lastTradeResult,
     setAmount,
     setDuration,
-    setIsGhost,
     setDirection,
     executeTrade,
   } = useTradingStore();
+  
+  const { ghostTradingEnabled, setGhostTradingEnabled } = useSettingsStore();
+  const [amountType, setAmountType] = useState('$');
 
   const sessionConnected = sessionStatus === 'connected';
   const broker = 'pocket_option';
@@ -61,7 +63,23 @@ export default function TradePanel() {
 
       <div className="mt-4 space-y-4">
         <div>
-          <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Trade amount</label>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Trade amount</label>
+            <div className="flex bg-[#212127] rounded border border-white/10 p-0.5">
+              <button 
+                className={`px-2 py-0.5 text-xs font-bold rounded-sm transition-colors ${amountType === '$' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                onClick={() => setAmountType('$')}
+              >
+                $
+              </button>
+              <button 
+                className={`px-2 py-0.5 text-xs font-bold rounded-sm transition-colors ${amountType === '%' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                onClick={() => setAmountType('%')}
+              >
+                %
+              </button>
+            </div>
+          </div>
           <div className="relative">
             <input
               type="number"
@@ -78,31 +96,46 @@ export default function TradePanel() {
         </div>
 
         <div>
-          <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Expiration</label>
-          <input
-            type="number"
-            min="10"
-            step="5"
-            value={duration}
-            onChange={(event) => setDuration(Number(event.target.value))}
-            className="w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-base font-bold text-black outline-none transition focus:border-[#f5df19] focus:bg-white"
-          />
-          <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Seconds</p>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="block text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Expiration</label>
+          </div>
+          <div className="relative">
+            <input
+              type="number"
+              min="5"
+              step="1"
+              value={duration}
+              onChange={(event) => setDuration(Number(event.target.value))}
+              className="w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-base font-bold text-black outline-none transition focus:border-[#f5df19] focus:bg-white"
+            />
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Seconds</p>
+          </div>
+          <div className="mt-2 flex gap-1">
+            {[5, 15, 30, 45, 60].map((val) => (
+              <button
+                key={val}
+                onClick={() => setDuration(val)}
+                className={`flex-1 rounded border py-1 text-xs font-bold transition-colors ${duration === val ? 'border-[#f5df19] bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-[#212127] text-gray-400 hover:bg-white/5'}`}
+              >
+                {val === 60 ? '1M' : `${val}s`}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <label className="flex items-center justify-between rounded-xl border border-white/5 bg-[#212127] px-4 py-3">
+        <label className="flex items-center justify-between rounded-xl border border-white/5 bg-[#212127] px-4 py-3 cursor-pointer group">
           <div>
-            <p className="text-xs font-bold text-[#e3e6e7]">Ghost trading</p>
-            <p className="text-[10px] text-gray-500">Simulate the trade without using the live account</p>
+            <p className="text-xs font-bold text-[#e3e6e7] group-hover:text-white transition-colors">Demo / Real</p>
+            <p className="text-[10px] text-gray-500">Switch between demo and live account</p>
           </div>
           <button
             type="button"
-            onClick={() => setIsGhost(!isGhost)}
-            className={`flex h-7 w-12 items-center rounded-full p-1 transition ${isGhost ? 'bg-[#f5df19]' : 'bg-[#444949]'}`}
-            aria-pressed={isGhost}
-            aria-label="Toggle ghost trading"
+            onClick={() => setGhostTradingEnabled(!ghostTradingEnabled)}
+            className={`flex h-7 w-12 items-center rounded-full p-1 transition ${ghostTradingEnabled ? 'bg-[#f5df19]' : 'bg-emerald-500'}`}
+            aria-pressed={ghostTradingEnabled}
+            aria-label="Toggle demo/real account"
           >
-            <span className={`h-5 w-5 rounded-full bg-white transition ${isGhost ? 'translate-x-5' : 'translate-x-0'}`} />
+            <span className={`h-5 w-5 rounded-full bg-white transition ${ghostTradingEnabled ? 'translate-x-0' : 'translate-x-5'}`} />
           </button>
         </label>
 
@@ -130,30 +163,10 @@ export default function TradePanel() {
           </button>
         </div>
 
-        <div className="rounded-xl border border-white/5 bg-[#212127] px-4 py-3">
-          <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
-            <span>Account balance</span>
-            <span>{sessionConnected ? 'Live' : 'Disconnected'}</span>
-          </div>
-          <p className="mt-1 text-xl font-black text-[#e3e6e7]">${Number(balance || 0).toFixed(2)}</p>
-        </div>
-
         {tradeError && (
           <div className="flex items-start gap-2 rounded-xl border border-[#fe7453]/30 bg-[#3f1d00] px-4 py-3 text-[#ff9b82]">
             <AlertTriangle size={16} className="mt-0.5 shrink-0" />
             <p className="text-sm">{tradeError}</p>
-          </div>
-        )}
-
-        {lastTradeResult && (
-          <div className="rounded-xl border border-white/5 bg-[#212127] px-4 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Last trade</p>
-            <p className="mt-1 text-sm font-bold text-[#e3e6e7]">
-              {lastTradeResult.outcome ? lastTradeResult.outcome.toUpperCase() : lastTradeResult.message ? 'SUBMITTED' : 'RECORDED'}
-            </p>
-            <p className="text-xs text-gray-500">
-              {typeof lastTradeResult.pnl === 'number' ? `P&L ${lastTradeResult.pnl > 0 ? '+' : ''}${lastTradeResult.pnl.toFixed(2)}` : 'Result captured'}
-            </p>
           </div>
         )}
       </div>

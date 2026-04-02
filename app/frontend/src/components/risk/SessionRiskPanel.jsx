@@ -6,7 +6,6 @@ import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import SessionControls from './SessionControls.jsx';
 import TradeRunHistory from './TradeRunHistory.jsx';
-import VerticalRiskChart from './VerticalRiskChart.jsx';
 
 function StatCard({ label, value, sub, icon: Icon, tone = 'neutral' }) {
   const toneClasses = {
@@ -208,14 +207,7 @@ export default function SessionRiskPanel() {
           <StatCard label="Min Win Rate" value={`${metrics.minimumWinRate.toFixed(1)}%`} sub={`Risk/trade $${metrics.riskPerTrade.toFixed(2)}`} icon={Trophy} tone="amber" />
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <VerticalRiskChart
-            startBalance={metrics.startBalance}
-            currentBalance={currentBalance}
-            takeProfitTarget={metrics.takeProfitTarget}
-            maxDrawdownLimit={metrics.maxDrawdownLimit}
-          />
-
+        <section className="grid gap-4">
           <div className="flex flex-col gap-4">
             <SessionControls
               recordingMode={recordingMode}
@@ -228,11 +220,12 @@ export default function SessionRiskPanel() {
               canAddTrades={canAddTrades}
             />
 
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <StatCard label="Total Trades" value={totalTrades} sub={`${tradeCountForRun} active in current run`} icon={BarChart3} tone="neutral" />
               <StatCard label="Resolved Trades" value={resolvedTrades} sub="Excludes VOID from win-rate math" icon={PlayCircle} tone="neutral" />
-              <StatCard label="Void Trades" value={sessionVoids} sub="Break-even or corrected entries" icon={CircleDollarSign} tone="amber" />
               <StatCard label="Current Streak" value={currentStreak === 0 ? '—' : `${currentStreak > 0 ? '+' : ''}${currentStreak}`} sub={currentStreak === 0 ? 'No streak' : currentStreak > 0 ? 'Win streak' : 'Loss streak'} icon={Zap} tone={currentStreak === 0 ? 'neutral' : currentStreak > 0 ? 'emerald' : 'rose'} />
+              <StatCard label="Max Drawdown" value={`-$${maxDrawdown.toFixed(2)}`} sub={`Peak to trough drop`} icon={Wallet} tone={maxDrawdown > 0 ? 'rose' : 'neutral'} />
+              <StatCard label="Void Trades" value={sessionVoids} sub="Break-even or corrected entries" icon={CircleDollarSign} tone="amber" />
             </div>
 
             <TradeRunHistory

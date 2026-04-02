@@ -1,8 +1,45 @@
 /**
  * AppSettings — OTEO, ghost trading, trading controls, and UI preferences.
  */
-import { Circle, Eye, Gauge, Ghost, LayoutGrid, MessageSquareWarning, SlidersHorizontal, Target, Bot } from 'lucide-react';
+import { useState } from 'react';
+import { Circle, Eye, Gauge, Ghost, LayoutGrid, MessageSquareWarning, SlidersHorizontal, Target, Bot, ChevronDown } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+
+import ghostStatic from '../../../assets/Ghost_Icon.png';
+import bobble from '../../../assets/bobble.gif';
+import bounce from '../../../assets/bounce.gif';
+import cuteHop from '../../../assets/cute-hop.gif';
+import dealWithIt from '../../../assets/deal-with-it.gif';
+import drift from '../../../assets/drift.gif';
+import elastic from '../../../assets/elastic-corner-pinch.gif';
+import excited from '../../../assets/excited.gif';
+import flagWave from '../../../assets/flag-wave.gif';
+import hovering from '../../../assets/hovering.gif';
+import party from '../../../assets/party.gif';
+import radarPing from '../../../assets/radar-ping.gif';
+import scanning from '../../../assets/scanning.gif';
+import spin from '../../../assets/spin.gif';
+import weird from '../../../assets/weird.gif';
+import wobble from '../../../assets/wobble.gif';
+
+const GHOST_OPTIONS = [
+  { id: 'drift.gif', name: 'Drifting', src: drift },
+  { id: 'Ghost_Icon.png', name: 'Static (Original)', src: ghostStatic },
+  { id: 'bobble.gif', name: 'Bobble', src: bobble },
+  { id: 'bounce.gif', name: 'Bounce', src: bounce },
+  { id: 'cute-hop.gif', name: 'Cute Hop', src: cuteHop },
+  { id: 'deal-with-it.gif', name: 'Deal With It', src: dealWithIt },
+  { id: 'elastic-corner-pinch.gif', name: 'Elastic', src: elastic },
+  { id: 'excited.gif', name: 'Excited', src: excited },
+  { id: 'flag-wave.gif', name: 'Flag Wave', src: flagWave },
+  { id: 'hovering.gif', name: 'Hovering', src: hovering },
+  { id: 'party.gif', name: 'Party', src: party },
+  { id: 'radar-ping.gif', name: 'Radar Ping', src: radarPing },
+  { id: 'scanning.gif', name: 'Scanning', src: scanning },
+  { id: 'spin.gif', name: 'Spin', src: spin },
+  { id: 'weird.gif', name: 'Weird', src: weird },
+  { id: 'wobble.gif', name: 'Wobble', src: wobble },
+];
 
 function SectionCard({ title, subtitle, icon: Icon, children }) {
   return (
@@ -70,6 +107,7 @@ export default function AppSettings() {
     oteoCooldownBars,
     ghostTradingEnabled,
     ghostAmount,
+    ghostIcon,
     maxDailyLoss,
     maxTradesPerSession,
     stopOnLossStreak,
@@ -82,6 +120,7 @@ export default function AppSettings() {
     setOteoCooldownBars,
     setGhostTradingEnabled,
     setGhostAmount,
+    setGhostIcon,
     setMaxDailyLoss,
     setMaxTradesPerSession,
     setStopOnLossStreak,
@@ -90,6 +129,8 @@ export default function AppSettings() {
     setShowSignalConfidence,
     setAutoFocusOnSignal,
   } = useSettingsStore();
+
+  const [isGhostSelectorOpen, setIsGhostSelectorOpen] = useState(false);
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
@@ -122,6 +163,22 @@ export default function AppSettings() {
         </div>
       </SectionCard>
 
+      <SectionCard title="AI integration" subtitle="Choose the default model used by the advisory assistant." icon={Bot}>
+        <label className="block rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
+          <p className="text-sm font-bold text-[#e3e6e7]">Default AI model</p>
+          <p className="mt-1 text-xs leading-5 text-gray-500">Used by the AI tab when no model override is supplied.</p>
+          <select
+            value={aiModel}
+            onChange={(event) => setAiModel(event.target.value)}
+            className="mt-3 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-bold text-black outline-none transition focus:border-[#f5df19]"
+          >
+            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
+            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
+            <option value="grok-4">grok-4</option>
+          </select>
+        </label>
+      </SectionCard>
+
       <SectionCard title="Ghost trading" subtitle="Simulation mode for previewing execution without a live trade." icon={Ghost}>
         <ToggleRow
           label="Enable ghost trading"
@@ -138,6 +195,69 @@ export default function AppSettings() {
           step={0.1}
           suffix="amount"
         />
+
+        <div className="block rounded-2xl border border-white/5 bg-[#0f1419] overflow-hidden transition-all duration-300">
+          <button 
+            type="button"
+            onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
+            className="w-full flex items-center justify-between px-4 py-4 text-left hover:bg-white/5 transition-colors"
+          >
+            <div>
+              <p className="text-sm font-bold text-[#e3e6e7]">Choose your Ghost</p>
+              <p className="mt-1 text-xs leading-5 text-gray-500">Select the appearance of your ghost trading companion.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Show the currently selected ghost or static if closed */}
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#151a22]">
+                <img 
+                  src={isGhostSelectorOpen ? (GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic) : ghostStatic} 
+                  alt="Current Ghost" 
+                  className={`h-6 w-6 object-contain mix-blend-screen`}
+                />
+              </div>
+              <ChevronDown size={16} className={`text-gray-500 transition-transform duration-300 ${isGhostSelectorOpen ? 'rotate-180' : ''}`} />
+            </div>
+          </button>
+          
+          <div 
+            className={`grid transition-all duration-300 ease-in-out ${
+              isGhostSelectorOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+            }`}
+          >
+            <div className="overflow-hidden">
+              <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-8 p-4 pt-0 border-t border-white/5">
+                {GHOST_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => {
+                      setGhostIcon(option.id);
+                      // Optional: close after selection
+                      // setIsGhostSelectorOpen(false);
+                    }}
+                    className={`group relative flex aspect-square items-center justify-center rounded-xl border transition-all ${
+                      ghostIcon === option.id 
+                        ? 'border-[#f5df19] bg-[#f5df19]/10' 
+                        : 'border-white/5 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                    }`}
+                    title={option.name}
+                  >
+                    <img 
+                      src={option.src} 
+                      alt={option.name} 
+                      className={`h-8 w-8 object-contain transition-transform ${ghostIcon === option.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(245,223,25,0.4)]' : 'group-hover:scale-110'} ${option.id === 'Ghost_Icon.png' ? 'mix-blend-screen' : ''}`}
+                    />
+                    {ghostIcon === option.id && (
+                      <div className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-[#f5df19] text-black shadow-sm">
+                        <div className="h-1.5 w-1.5 rounded-full bg-black" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </SectionCard>
 
       <SectionCard title="Trading controls" subtitle="Session-level guardrails that shape how long the workspace can keep trading." icon={Gauge}>
@@ -168,22 +288,6 @@ export default function AppSettings() {
           step={1}
           suffix="streak"
         />
-      </SectionCard>
-
-      <SectionCard title="AI integration" subtitle="Choose the default model used by the advisory assistant." icon={Bot}>
-        <label className="block rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-          <p className="text-sm font-bold text-[#e3e6e7]">Default AI model</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500">Used by the AI tab when no model override is supplied.</p>
-          <select
-            value={aiModel}
-            onChange={(event) => setAiModel(event.target.value)}
-            className="mt-3 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-bold text-black outline-none transition focus:border-[#f5df19]"
-          >
-            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
-            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-            <option value="grok-4">grok-4</option>
-          </select>
-        </label>
       </SectionCard>
 
       <SectionCard title="UI preferences" subtitle="Visual and attention settings stay separate from execution logic." icon={LayoutGrid}>
