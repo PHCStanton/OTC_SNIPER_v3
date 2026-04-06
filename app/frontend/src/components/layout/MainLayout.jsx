@@ -8,6 +8,7 @@ import TopBar from './TopBar.jsx';
 import LeftSidebar from './LeftSidebar.jsx';
 import RightSidebar from './RightSidebar.jsx';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
+import AiSessionPanel from '../ai/AiSessionPanel.jsx';
 import SettingsView from '../settings/SettingsView.jsx';
 import TradingPlaceholder from '../shared/TradingPlaceholder.jsx';
 import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
@@ -59,11 +60,10 @@ export default function MainLayout() {
 }
 
 function ActiveView({ view, mode }) {
-  // Settings and journal are view-specific; trading/risk follow dashboardMode
+  if (view === 'ai') return <AiSessionPanel />;
   if (view === 'settings') return <SettingsView />;
   if (view === 'journal') return <JournalPlaceholder />;
 
-  // Default: show trading or risk based on dashboardMode
   if (mode === 'risk') return <RiskPlaceholder />;
   return <TradingPlaceholder />;
 }

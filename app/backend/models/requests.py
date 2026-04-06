@@ -15,3 +15,14 @@ class TradeExecutionRequest(BaseModel):
     amount: float = Field(gt=0)
     expiration: int = Field(gt=0)
     account_key: str = "primary"
+    trade_mode: str = Field(default="live", min_length=1)
+    demo: bool = False
+    session_id: str | None = None
+    confidence: str | None = None
+    oteo_score: float | None = None
+    base_oteo_score: float | None = None
+    level2_score_adjustment: float | None = None
+    strategy_level: str | None = None
+    manipulation_at_entry: dict | None = None
+    entry_context: dict | None = None
+    trigger_mode: str | None = None

@@ -16,16 +16,39 @@ export const useAssetStore = create()(
     (set) => ({
       selectedAsset: 'EURUSD_otc',
       availableAssets: [],
-      /** map of raw_id → payout fraction, e.g. { 'EURUSD_otc': 0.85 } */
       assetPayouts: {},
+      assetDetails: {},
       multiChartAssets: ['EURUSD_otc', 'GBPUSD_otc', 'USDJPY_otc'],
-      /** list of raw_ids for starred/favorite assets (Quick Select) */
       starredAssets: [],
 
       setSelectedAsset: (asset) => set({ selectedAsset: asset }),
       setAvailableAssets: (assets) => set({ availableAssets: assets }),
-      /** Store payout fractions keyed by raw_id. */
       setAssetPayouts: (payouts) => set({ assetPayouts: payouts }),
+      setAssetCatalog: (assets) =>
+        set(() => {
+          const availableAssets = [];
+          const assetPayouts = {};
+          const assetDetails = {};
+
+          for (const asset of assets) {
+            const rawId = String(asset?.raw_id ?? asset?.id ?? '').trim();
+            if (!rawId) continue;
+            availableAssets.push(rawId);
+            assetDetails[rawId] = {
+              raw_id: rawId,
+              id: String(asset?.id ?? '').trim(),
+              name: String(asset?.name ?? rawId).trim(),
+              asset_type: String(asset?.asset_type ?? '').trim().toLowerCase(),
+              payout: Number(asset?.payout ?? 0),
+              metadata: asset?.metadata && typeof asset.metadata === 'object' ? asset.metadata : {},
+            };
+            if (asset?.payout != null) {
+              assetPayouts[rawId] = Number(asset.payout);
+            }
+          }
+
+          return { availableAssets, assetPayouts, assetDetails };
+        }),
       setMultiChartAssets: (assets) => set({ multiChartAssets: assets.slice(0, 9) }),
 
       toggleStarredAsset: (asset) =>

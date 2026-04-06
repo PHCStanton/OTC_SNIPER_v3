@@ -8,12 +8,18 @@ import { persist } from 'zustand/middleware';
 export const SETTINGS_DEFAULTS = {
   // OTEO configuration
   oteoEnabled: true,
+  oteoLevel2Enabled: false,
+  oteoLevel3Enabled: false,
   oteoWarmupBars: 20,
   oteoCooldownBars: 3,
 
   // Ghost trading
   ghostTradingEnabled: false,
   ghostAmount: 1,
+  autoGhostEnabled: false,
+  autoGhostExpirationSeconds: 60,
+  autoGhostMaxConcurrentTrades: 3,
+  autoGhostPerAssetCooldownSeconds: 30,
   ghostWidgetPosition: { x: 0, y: 0 },
   ghostIcon: 'drift.gif',
 
@@ -66,13 +72,23 @@ function toPosition(value, fallback = { x: 0, y: 0 }) {
 }
 
 export function validateSettings(input = {}) {
+  const oteoLevel2Enabled = toBoolean(input.oteoLevel2Enabled, SETTINGS_DEFAULTS.oteoLevel2Enabled);
+  const oteoLevel3Requested = toBoolean(input.oteoLevel3Enabled, SETTINGS_DEFAULTS.oteoLevel3Enabled);
+  const oteoLevel3Enabled = oteoLevel2Enabled ? oteoLevel3Requested : false;
+
   return {
-    oteoEnabled: toBoolean(input.oteoEnabled, SETTINGS_DEFAULTS.oteoEnabled),
+    oteoEnabled: true,
+    oteoLevel2Enabled,
+    oteoLevel3Enabled,
     oteoWarmupBars: toNumber(input.oteoWarmupBars, SETTINGS_DEFAULTS.oteoWarmupBars, { min: 0, max: 500, integer: true }),
     oteoCooldownBars: toNumber(input.oteoCooldownBars, SETTINGS_DEFAULTS.oteoCooldownBars, { min: 0, max: 500, integer: true }),
 
     ghostTradingEnabled: toBoolean(input.ghostTradingEnabled, SETTINGS_DEFAULTS.ghostTradingEnabled),
     ghostAmount: toNumber(input.ghostAmount, SETTINGS_DEFAULTS.ghostAmount, { min: 0, max: 100000, integer: false }),
+    autoGhostEnabled: toBoolean(input.autoGhostEnabled, SETTINGS_DEFAULTS.autoGhostEnabled),
+    autoGhostExpirationSeconds: toNumber(input.autoGhostExpirationSeconds, SETTINGS_DEFAULTS.autoGhostExpirationSeconds, { min: 5, max: 3600, integer: true }),
+    autoGhostMaxConcurrentTrades: toNumber(input.autoGhostMaxConcurrentTrades, SETTINGS_DEFAULTS.autoGhostMaxConcurrentTrades, { min: 1, max: 20, integer: true }),
+    autoGhostPerAssetCooldownSeconds: toNumber(input.autoGhostPerAssetCooldownSeconds, SETTINGS_DEFAULTS.autoGhostPerAssetCooldownSeconds, { min: 0, max: 3600, integer: true }),
     ghostWidgetPosition: toPosition(input.ghostWidgetPosition, SETTINGS_DEFAULTS.ghostWidgetPosition),
     ghostIcon: typeof input.ghostIcon === 'string' && input.ghostIcon.trim()
       ? input.ghostIcon.trim()
@@ -118,10 +134,32 @@ export const useSettingsStore = create()(
       resetSettings: () => set({ ...SETTINGS_DEFAULTS }),
 
       setOteoEnabled: (val) => commitSettingsPatch(set, { oteoEnabled: val }),
+      setOteoLevel2Enabled: (val) =>
+        set((state) => ({
+          ...state,
+          ...validateSettings({
+            ...state,
+            oteoLevel2Enabled: val,
+            oteoLevel3Enabled: val ? state.oteoLevel3Enabled : false,
+          }),
+        })),
+      setOteoLevel3Enabled: (val) =>
+        set((state) => ({
+          ...state,
+          ...validateSettings({
+            ...state,
+            oteoLevel2Enabled: val ? true : state.oteoLevel2Enabled,
+            oteoLevel3Enabled: val,
+          }),
+        })),
       setOteoWarmupBars: (val) => commitSettingsPatch(set, { oteoWarmupBars: val }),
       setOteoCooldownBars: (val) => commitSettingsPatch(set, { oteoCooldownBars: val }),
       setGhostTradingEnabled: (val) => commitSettingsPatch(set, { ghostTradingEnabled: val }),
       setGhostAmount: (val) => commitSettingsPatch(set, { ghostAmount: val }),
+      setAutoGhostEnabled: (val) => commitSettingsPatch(set, { autoGhostEnabled: val }),
+      setAutoGhostExpirationSeconds: (val) => commitSettingsPatch(set, { autoGhostExpirationSeconds: val }),
+      setAutoGhostMaxConcurrentTrades: (val) => commitSettingsPatch(set, { autoGhostMaxConcurrentTrades: val }),
+      setAutoGhostPerAssetCooldownSeconds: (val) => commitSettingsPatch(set, { autoGhostPerAssetCooldownSeconds: val }),
       setGhostWidgetPosition: (val) => commitSettingsPatch(set, { ghostWidgetPosition: val }),
       setGhostIcon: (val) => commitSettingsPatch(set, { ghostIcon: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),

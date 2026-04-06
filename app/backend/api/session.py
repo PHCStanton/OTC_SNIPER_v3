@@ -411,3 +411,19 @@ async def ssid_status() -> JSONResponse:
             "has_real_ssid": has_real,
         }
     )
+
+
+@router.get("/saved-ssid")
+async def saved_ssid(demo: bool = False) -> JSONResponse:
+    load_env_file(_env_file_path())
+    key = "PO_SSID_DEMO" if demo else "PO_SSID_REAL"
+    saved = os.environ.get(key, "").strip()
+
+    return JSONResponse(
+        content={
+            "ok": True,
+            "demo": demo,
+            "has_saved_ssid": bool(saved),
+            "ssid": saved,
+        }
+    )

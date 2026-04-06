@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
 import { initSocket } from './api/socketClient.js';
+import { updateRuntimeStrategyConfig } from './api/strategyApi.js';
 import { useStreamConnection } from './hooks/useStreamConnection.js';
 import { useLayoutStore } from './stores/useLayoutStore.js';
 import { useOpsStore } from './stores/useOpsStore.js';
 import { useRiskStore } from './stores/useRiskStore.js';
+import { useSettingsStore } from './stores/useSettingsStore.js';
 import { useToastStore } from './stores/useToastStore.js';
 import { useTradingStore } from './stores/useTradingStore.js';
 import MainLayout from './components/layout/MainLayout.jsx';
@@ -15,6 +17,13 @@ const VALID_TRADE_OUTCOMES = new Set(['win', 'loss', 'void']);
 export default function App() {
   const dashboardMode = useLayoutStore((s) => s.dashboardMode);
   const { setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType } = useOpsStore();
+  const oteoLevel2Enabled = useSettingsStore((s) => s.oteoLevel2Enabled);
+  const oteoLevel3Enabled = useSettingsStore((s) => s.oteoLevel3Enabled);
+  const ghostAmount = useSettingsStore((s) => s.ghostAmount);
+  const autoGhostEnabled = useSettingsStore((s) => s.autoGhostEnabled);
+  const autoGhostExpirationSeconds = useSettingsStore((s) => s.autoGhostExpirationSeconds);
+  const autoGhostMaxConcurrentTrades = useSettingsStore((s) => s.autoGhostMaxConcurrentTrades);
+  const autoGhostPerAssetCooldownSeconds = useSettingsStore((s) => s.autoGhostPerAssetCooldownSeconds);
 
   useStreamConnection();
 
@@ -36,6 +45,8 @@ export default function App() {
 
     socket.on('trade_result', (data) => {
       const outcome = typeof data?.outcome === 'string' ? data.outcome.trim().toLowerCase() : '';
+      const tradeKind = typeof data?.kind === 'string' ? data.kind.trim().toLowerCase() : 'live';
+      const tradeSource = tradeKind === 'ghost' ? 'ghost' : 'live';
       if (!VALID_TRADE_OUTCOMES.has(outcome)) {
         useTradingStore.getState().setLastTradeResult(data);
         useToastStore.getState().addToast({ type: 'info', message: 'Trade result received.' });
@@ -50,6 +61,7 @@ export default function App() {
         ...data,
         outcome,
         pnl,
+        kind: tradeKind,
       });
 
       useRiskStore.getState().recordTradeResult({
@@ -57,16 +69,17 @@ export default function App() {
         pnl,
         stake,
         payoutPercentage: data?.payout_pct,
-        source: 'live',
+        source: tradeSource,
       });
 
       const pnlLabel = pnl > 0 ? `+$${pnl.toFixed(2)}` : pnl < 0 ? `-$${Math.abs(pnl).toFixed(2)}` : '$0.00';
+      const prefix = tradeKind === 'ghost' ? 'GHOST ' : '';
       if (outcome === 'win') {
-        useToastStore.getState().addToast({ type: 'success', message: `WIN — ${pnlLabel}` });
+        useToastStore.getState().addToast({ type: 'success', message: `${prefix}WIN — ${pnlLabel}` });
       } else if (outcome === 'loss') {
-        useToastStore.getState().addToast({ type: 'error', message: `LOSS — ${pnlLabel}` });
+        useToastStore.getState().addToast({ type: 'error', message: `${prefix}LOSS — ${pnlLabel}` });
       } else {
-        useToastStore.getState().addToast({ type: 'warning', message: 'Trade recorded as VOID.' });
+        useToastStore.getState().addToast({ type: 'warning', message: `${prefix}trade recorded as VOID.` });
       }
     });
 
@@ -81,6 +94,41 @@ export default function App() {
       socket.off('trade_result');
     };
   }, [setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const syncRuntimeConfig = async () => {
+      try {
+        await updateRuntimeStrategyConfig({
+          oteo_level2_enabled: oteoLevel2Enabled,
+          oteo_level3_enabled: oteoLevel3Enabled,
+          auto_ghost_enabled: autoGhostEnabled,
+          auto_ghost_amount: ghostAmount,
+          auto_ghost_expiration_seconds: autoGhostExpirationSeconds,
+          auto_ghost_max_concurrent_trades: autoGhostMaxConcurrentTrades,
+          auto_ghost_per_asset_cooldown_seconds: autoGhostPerAssetCooldownSeconds,
+        });
+      } catch (err) {
+        if (isMounted) {
+          console.warn('[App] Failed to sync runtime strategy config:', err.message);
+        }
+      }
+    };
+
+    void syncRuntimeConfig();
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    oteoLevel2Enabled,
+    oteoLevel3Enabled,
+    ghostAmount,
+    autoGhostEnabled,
+    autoGhostExpirationSeconds,
+    autoGhostMaxConcurrentTrades,
+    autoGhostPerAssetCooldownSeconds,
+  ]);
 
   return (
     <div className="dark" data-dashboard-mode={dashboardMode}>

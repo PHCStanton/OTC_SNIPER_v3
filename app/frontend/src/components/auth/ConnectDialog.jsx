@@ -8,7 +8,20 @@ import { useAuthStore } from '../../stores/useAuthStore.js';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 
 export default function ConnectDialog({ onClose }) {
-  const { ssidInput, isDemo, isConnecting, isDisconnecting, connectError, setSsidInput, setIsDemo, connect, disconnect } = useAuthStore();
+  const {
+    ssidInput,
+    isDemo,
+    isConnecting,
+    isDisconnecting,
+    isLoadingSavedSsid,
+    hasSavedSsid,
+    connectError,
+    setSsidInput,
+    loadSavedSsid,
+    hydrateSavedSsid,
+    connect,
+    disconnect,
+  } = useAuthStore();
   const { sessionStatus, balance, accountType } = useOpsStore();
   const sessionConnected = sessionStatus === 'connected';
   const overlayRef = useRef(null);
@@ -21,6 +34,12 @@ export default function ConnectDialog({ onClose }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!sessionConnected) {
+      void hydrateSavedSsid();
+    }
+  }, [hydrateSavedSsid, sessionConnected]);
 
   async function handleConnect() {
     await connect(ssidInput, isDemo);
@@ -97,7 +116,7 @@ export default function ConnectDialog({ onClose }) {
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block">Account Type</label>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setIsDemo(true)}
+                    onClick={() => void loadSavedSsid(true)}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border transition-all ${
                       isDemo
                         ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-600/40 text-amber-600 dark:text-amber-400'
@@ -108,7 +127,7 @@ export default function ConnectDialog({ onClose }) {
                     Demo
                   </button>
                   <button
-                    onClick={() => setIsDemo(false)}
+                    onClick={() => void loadSavedSsid(false)}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium border transition-all ${
                       !isDemo
                         ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-600/40 text-emerald-600 dark:text-emerald-400'
@@ -126,7 +145,7 @@ export default function ConnectDialog({ onClose }) {
                 <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2 block flex items-center gap-1">
                   <KeyRound size={11} />
                   SSID Frame
-                  <span className="text-slate-400 font-normal ml-1">(leave empty to auto-reconnect)</span>
+                  <span className="text-slate-400 font-normal ml-1">(auto-loaded from .env when available)</span>
                 </label>
                 <textarea
                   value={ssidInput}
@@ -135,6 +154,24 @@ export default function ConnectDialog({ onClose }) {
                   rows={3}
                   className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 resize-none"
                 />
+                <div className="mt-2 flex items-center justify-between text-[10px]">
+                  <span className={`${hasSavedSsid ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400'}`}>
+                    {isLoadingSavedSsid
+                      ? 'Loading saved SSID…'
+                      : hasSavedSsid
+                        ? 'Saved SSID loaded from .env'
+                        : `No saved ${isDemo ? 'demo' : 'real'} SSID found`}
+                  </span>
+                  {!isLoadingSavedSsid && (
+                    <button
+                      type="button"
+                      onClick={() => void loadSavedSsid(isDemo)}
+                      className="text-sky-500 hover:text-sky-400 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Error */}

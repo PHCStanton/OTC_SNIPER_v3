@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useRiskStore } from '../../stores/useRiskStore.js';
 import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award } from 'lucide-react';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
@@ -39,13 +40,14 @@ const GHOST_ICONS = {
 };
 
 export default function GhostTradingWidget() {
-  const { ghostTradingEnabled, ghostWidgetPosition, setGhostWidgetPosition, ghostIcon } = useSettingsStore();
+  const { ghostTradingEnabled, autoGhostEnabled, ghostWidgetPosition, setGhostWidgetPosition, ghostIcon } = useSettingsStore();
+  const { ghostPnl, ghostWinRate, ghostTotalTrades, ghostMaxDrawdown } = useRiskStore();
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0, isDragging: false });
   const containerRef = useRef(null);
 
-  if (!ghostTradingEnabled) return null;
+  if (!ghostTradingEnabled && !autoGhostEnabled) return null;
 
   // We use the persisted position or default to {x: 0, y: 0}
   const position = ghostWidgetPosition || { x: 0, y: 0 };
@@ -136,10 +138,10 @@ export default function GhostTradingWidget() {
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <StatBox label="Simulated P&L" value="+$450.00" tone="emerald" icon={TrendingUp} />
-              <StatBox label="Win Rate" value="76%" tone="emerald" icon={Award} />
-              <StatBox label="Total Trades" value="24" tone="slate" icon={Target} />
-              <StatBox label="Max Drawdown" value="-$45.00" tone="rose" icon={TrendingDown} />
+              <StatBox label="Simulated P&L" value={formatCurrency(ghostPnl)} tone={ghostPnl >= 0 ? 'emerald' : 'rose'} icon={ghostPnl >= 0 ? TrendingUp : TrendingDown} />
+              <StatBox label="Win Rate" value={`${Math.round(ghostWinRate)}%`} tone="emerald" icon={Award} />
+              <StatBox label="Total Trades" value={String(ghostTotalTrades)} tone="slate" icon={Target} />
+              <StatBox label="Max Drawdown" value={formatCurrency(-Math.abs(ghostMaxDrawdown))} tone="rose" icon={TrendingDown} />
             </div>
 
             <div className="rounded-xl border border-white/5 bg-[#151a22] p-3 text-xs text-gray-400 leading-relaxed">
@@ -150,6 +152,11 @@ export default function GhostTradingWidget() {
                   Live account balances remain completely unaffected.
                 </p>
               </div>
+              {autoGhostEnabled && (
+                <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-[#f5df19]">
+                  Auto-Ghost is active on currently streamed assets
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -178,6 +185,13 @@ export default function GhostTradingWidget() {
       </button>
     </div>
   );
+}
+
+function formatCurrency(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '$0.00';
+  const sign = numeric > 0 ? '+' : numeric < 0 ? '-' : '';
+  return `${sign}$${Math.abs(numeric).toFixed(2)}`;
 }
 
 function StatBox({ label, value, tone = 'slate', icon: Icon }) {

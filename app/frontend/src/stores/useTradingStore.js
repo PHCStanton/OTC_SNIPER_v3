@@ -32,6 +32,7 @@ export const useTradingStore = create((set, get) => ({
   executeTrade: async (broker, asset) => {
     const { amount, direction, duration } = get();
     const isGhost = useSettingsStore.getState().ghostTradingEnabled;
+    const tradeMode = isGhost ? 'ghost' : 'live';
     
     set({ isExecuting: true, tradeError: null, lastTradeResult: null });
     try {
@@ -41,7 +42,8 @@ export const useTradingStore = create((set, get) => ({
         direction,
         expiration: duration,
         account_key: 'primary',
-        demo: isGhost, // Passing the ghost flag as demo to the backend
+        trade_mode: tradeMode,
+        demo: false,
       });
 
       if (!result?.success) {
@@ -54,7 +56,7 @@ export const useTradingStore = create((set, get) => ({
       }
 
       set({ lastTradeResult: result, tradeError: null });
-      useToastStore.getState().addToast({ type: 'info', message: 'Trade submitted.' });
+      useToastStore.getState().addToast({ type: 'info', message: isGhost ? 'Ghost trade submitted.' : 'Trade submitted.' });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({ tradeError: message });

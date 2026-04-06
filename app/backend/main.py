@@ -24,6 +24,7 @@ from fastapi import FastAPI, HTTPException
 from .api.ops import _is_port_open, router as ops_router
 from .api.ai import router as ai_router
 from .api.session import router as session_router
+from .api.strategy import router as strategy_router
 from .api.trading import router as trading_router
 from .brokers.base import BrokerType
 from .brokers.pocket_option.adapter import PocketOptionAdapter  # noqa: F401 — triggers registration
@@ -155,6 +156,7 @@ async def lifespan(app: FastAPI):
     get_settings()
     get_data_repository()
     app.state.sio = sio
+    app.state.streaming_service = streaming_service
     PocketOptionSession.set_main_loop(asyncio.get_running_loop())
     yield
 
@@ -165,6 +167,7 @@ fastapi_app = FastAPI(title="OTC SNIPER v3", version="3.0.0", lifespan=lifespan)
 fastapi_app.include_router(ops_router)      # Phase 0: /api/ops/*
 fastapi_app.include_router(ai_router)       # Phase 8: /api/ai/*
 fastapi_app.include_router(session_router)  # Phase 0: /api/session/*
+fastapi_app.include_router(strategy_router) # Phase 10: /api/strategy/*
 fastapi_app.include_router(trading_router)  # Phase 2: /api/trading/*
 
 # Expose the Socket.IO-wrapped ASGI app for uvicorn

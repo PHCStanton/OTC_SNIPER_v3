@@ -1,0 +1,45 @@
+<svg width="400" height="500" viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+        <!-- Define glow filter -->
+        <defs>
+            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+                <feMerge>
+                    <feMergeNode in="blur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+        </defs>
+
+        <!-- Main Circle (3D effect with gradient) -->
+        <circle cx="200" cy="200" r="100" fill="none" stroke="#ffffff" stroke-width="20" opacity="0.8"/>
+        <circle cx="200" cy="200" r="90" fill="url(#circleGradient)" stroke="#1e90ff" stroke-width="5"/>
+        <radialGradient id="circleGradient" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" style="stop-color:#1e90ff;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#104e8b;stop-opacity:1"/>
+        </radialGradient>
+
+        <!-- Stylized "S" in the center -->
+        <path d="M 170 140 Q 230 140 230 200 Q 230 260 170 260 Q 110 260 110 200 Q 110 140 170 140" 
+                fill="none" stroke="#ffffff" stroke-width="20" stroke-linecap="round" class="glow"/>
+
+        <!-- Glowing Light Trails -->
+        <g transform-origin="200 200">
+            <circle cx="200" cy="200" r="120" fill="none" stroke="#00b7eb" stroke-width="3" 
+                    class="light-trail glow"/>
+            <circle cx="200" cy="200" r="130" fill="none" stroke="#00b7eb" stroke-width="2" 
+                    class="light-trail glow" style="animation-delay: 0.5s;"/>
+            <!-- Small dots at the end of trails -->
+            <circle cx="320" cy="200" r="5" fill="#00b7eb" class="glow"/>
+            <circle cx="330" cy="200" r="4" fill="#00b7eb" class="glow" style="animation-delay: 0.5s;"/>
+        </g>
+
+        <!-- Text: blueSTRAGGLER -->
+        <text x="200" y="350" font-family="Montserrat, sans-serif" font-size="40" font-weight="bold" text-anchor="middle">
+            <tspan fill="#00b7eb">blue</tspan><tspan fill="#104e8b">STRAGGLER</tspan>
+        </text>
+
+        <!-- Text: Web and AI Solutions -->
+        <text x="200" y="390" font-family="Montserrat, sans-serif" font-size="16" fill="#aaaaaa" text-anchor="middle">
+            Web and AI Solutions
+        </text>
+    </svg>

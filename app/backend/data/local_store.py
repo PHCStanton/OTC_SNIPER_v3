@@ -14,7 +14,7 @@ from .repository import DataRepository
 
 def _to_plain_dict(value: Any) -> Dict[str, Any]:
     if hasattr(value, "model_dump"):
-        return dict(value.model_dump())
+        return dict(value.model_dump(mode='json'))
     if hasattr(value, "dict"):
         return dict(value.dict())
     if isinstance(value, dict):
@@ -82,7 +82,8 @@ class LocalFileRepository(DataRepository):
         if not session_id:
             raise ValueError('Trade record is missing session_id')
 
-        kind = str(record.get('kind', TradeKind.LIVE.value))
+        kind_val = record.get('kind', TradeKind.LIVE)
+        kind = kind_val.value if hasattr(kind_val, 'value') else str(kind_val)
         if kind == TradeKind.GHOST.value:
             target = self.base_dir / 'ghost_trades' / 'sessions' / f"{session_id}.jsonl"
         else:
@@ -99,7 +100,8 @@ class LocalFileRepository(DataRepository):
         if not trade_id:
             raise ValueError('Trade record is missing id')
 
-        kind = str(record.get('kind', TradeKind.LIVE.value))
+        kind_val = record.get('kind', TradeKind.LIVE)
+        kind = kind_val.value if hasattr(kind_val, 'value') else str(kind_val)
         if kind == TradeKind.GHOST.value:
             target = self.base_dir / 'ghost_trades' / 'sessions' / f"{session_id}.jsonl"
         else:

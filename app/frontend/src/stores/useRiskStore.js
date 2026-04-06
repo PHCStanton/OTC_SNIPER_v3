@@ -160,6 +160,47 @@ function summarizeSession(startBalance, tradeRuns, currentTradeRun) {
   };
 }
 
+function summarizeGhostTrades(ghostTrades) {
+  const trades = ghostTrades.map((trade) => ({
+    ...trade,
+    outcome: VALID_OUTCOMES.has(trade.outcome) ? trade.outcome : 'void',
+    pnl: normalizeNumber(trade.pnl, 0),
+    stake: normalizeNumber(trade.stake, 0),
+  }));
+
+  let wins = 0;
+  let losses = 0;
+  let resolvedTrades = 0;
+  let pnl = 0;
+  let peak = 0;
+  let running = 0;
+  let maxDrawdown = 0;
+
+  trades.forEach((trade) => {
+    pnl += trade.pnl;
+    running += trade.pnl;
+    peak = Math.max(peak, running);
+    maxDrawdown = Math.max(maxDrawdown, peak - running);
+    if (trade.outcome === 'win') {
+      wins += 1;
+      resolvedTrades += 1;
+    } else if (trade.outcome === 'loss') {
+      losses += 1;
+      resolvedTrades += 1;
+    }
+  });
+
+  return {
+    ghostTrades: trades,
+    ghostWins: wins,
+    ghostLosses: losses,
+    ghostPnl: pnl,
+    ghostTotalTrades: trades.length,
+    ghostWinRate: resolvedTrades > 0 ? (wins / resolvedTrades) * 100 : 0,
+    ghostMaxDrawdown: maxDrawdown,
+  };
+}
+
 export const useRiskStore = create((set, get) => ({
   // Session configuration
   startBalance: 0,
@@ -183,6 +224,13 @@ export const useRiskStore = create((set, get) => ({
   // Trade run history
   tradeRuns: [],
   currentTradeRun: createRun(1),
+  ghostTrades: [],
+  ghostPnl: 0,
+  ghostWins: 0,
+  ghostLosses: 0,
+  ghostTotalTrades: 0,
+  ghostWinRate: 0,
+  ghostMaxDrawdown: 0,
 
   setRecordingMode: (mode) => {
     if (!['auto', 'manual'].includes(mode)) {
@@ -236,6 +284,13 @@ export const useRiskStore = create((set, get) => ({
       payoutPercentage: resolvedPayout,
       source,
     });
+
+    if (source === 'ghost') {
+      set({
+        ...summarizeGhostTrades([...state.ghostTrades, nextTrade]),
+      });
+      return;
+    }
 
     const nextCurrentTradeRun = {
       ...activeRun,
@@ -341,5 +396,12 @@ export const useRiskStore = create((set, get) => ({
       maxDrawdown: 0,
       tradeRuns: [],
       currentTradeRun: createRun(1),
+      ghostTrades: [],
+      ghostPnl: 0,
+      ghostWins: 0,
+      ghostLosses: 0,
+      ghostTotalTrades: 0,
+      ghostWinRate: 0,
+      ghostMaxDrawdown: 0,
     }),
 }));

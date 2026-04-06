@@ -47,6 +47,7 @@ async def execute_trade(
         session_id=result["session_id"],
         entry_price=result.get("entry_price"),
         connection_status=result["connection_status"],
+        trade_mode=result.get("trade_mode", request.trade_mode),
     )
 
 @router.get("/{broker}/trades", response_model=List[TradeRecord])

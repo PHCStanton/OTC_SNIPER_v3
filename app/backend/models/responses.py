@@ -47,6 +47,7 @@ class TradeExecutionResponse(BaseModel):
     session_id: str | None = None
     entry_price: float | None = None
     connection_status: str | None = None
+    trade_mode: str = "live"
 
 
 class DataStatsResponse(BaseModel):

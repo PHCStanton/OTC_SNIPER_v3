@@ -125,15 +125,15 @@ export default function TradePanel() {
 
         <label className="flex items-center justify-between rounded-xl border border-white/5 bg-[#212127] px-4 py-3 cursor-pointer group">
           <div>
-            <p className="text-xs font-bold text-[#e3e6e7] group-hover:text-white transition-colors">Demo / Real</p>
-            <p className="text-[10px] text-gray-500">Switch between demo and live account</p>
+            <p className="text-xs font-bold text-[#e3e6e7] group-hover:text-white transition-colors">Ghost / Live</p>
+            <p className="text-[10px] text-gray-500">Switch between ghost simulation and live execution</p>
           </div>
           <button
             type="button"
             onClick={() => setGhostTradingEnabled(!ghostTradingEnabled)}
             className={`flex h-7 w-12 items-center rounded-full p-1 transition ${ghostTradingEnabled ? 'bg-[#f5df19]' : 'bg-emerald-500'}`}
             aria-pressed={ghostTradingEnabled}
-            aria-label="Toggle demo/real account"
+            aria-label="Toggle ghost/live mode"
           >
             <span className={`h-5 w-5 rounded-full bg-white transition ${ghostTradingEnabled ? 'translate-x-0' : 'translate-x-5'}`} />
           </button>

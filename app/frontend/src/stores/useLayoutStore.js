@@ -6,7 +6,7 @@ export const useLayoutStore = create()(
     (set) => ({
       sidebarOpen: true,
       rightSidebarOpen: true,
-      activeView: 'trading', // 'trading' | 'risk' | 'journal' | 'settings'
+      activeView: 'trading',
       dashboardMode: 'trading', // 'trading' | 'risk' (for the dashboard toggle)
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),

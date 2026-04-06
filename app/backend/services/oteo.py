@@ -5,10 +5,28 @@ Primary implementation for OTC SNIPER v3.
 Score 0–100. >75 = high-probability reversion trade.
 Warms up after ≥50 ticks (~50 seconds). No external history required.
 """
+from dataclasses import dataclass
 import time as _time
-import numpy as np
 from collections import deque
-from typing import Dict, Any, Union
+from typing import Any, Dict, Union
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class OTEOConfig:
+    buffer_size: int = 300
+    warmup_ticks: int = 50
+    pressure_window: int = 24
+    macro_window: int = 120
+    baseline_exclusion: int = 20
+    full_maturity_baseline: int = 200
+    volatility_window: int = 100
+    cooldown_ticks: int = 30
+    score_center: float = 0.85
+    score_slope: float = 3.5
+    min_abs_z_score: float = 0.35
+    min_pressure_pct: float = 12.0
 
 
 class OTEO:
@@ -16,96 +34,124 @@ class OTEO:
     OTC Tick Exhaustion Oscillator.
     """
 
-    def __init__(self):
-        self.ticks: deque = deque(maxlen=300)       # live prices
-        self.timestamps: deque = deque(maxlen=300)  # parallel timestamps
-        self._cooldown_remaining: int = 0
-        self.COOLDOWN_TICKS: int = 30
+    def __init__(self, config: OTEOConfig | None = None):
+        self.config = config or OTEOConfig()
+        self.ticks: deque = deque(maxlen=self.config.buffer_size)
+        self.timestamps: deque = deque(maxlen=self.config.buffer_size)
+        self._cooldown_remaining = 0
+        self._last_signal_direction: str | None = None
+        self._last_signal_confidence: str | None = None
 
-    def update_tick(self, price: float, timestamp: float = None) -> Union[Dict[str, Any], float]:
-        """
-        Process a new tick price and return a scoring result.
-        Returns:
-            dict  — scoring result once warmed up (≥50 ticks).
-            float — 50.0 neutral default during warmup period.
-        """
-        # Guard against NaN / Inf prices
-        if not np.isfinite(price):
-            return 50.0
-
-        self.ticks.append(price)
+    def seed_tick(self, price: float, timestamp: float | None = None) -> None:
+        numeric_price = float(price)
+        if not np.isfinite(numeric_price):
+            return
+        self.ticks.append(numeric_price)
         self.timestamps.append(timestamp if timestamp is not None else _time.time())
 
-        # Warmup requires ≥50 ticks
-        if len(self.ticks) < 50:
+    def _weighted_pressure(self, prices: list[float], timestamps: list[float], window: int) -> tuple[float, float]:
+        if len(prices) < 2:
+            return 0.0, 0.0
+
+        effective_window = min(window, len(prices) - 1)
+        recent_prices = prices[-(effective_window + 1):]
+        recent_timestamps = timestamps[-(effective_window + 1):]
+
+        deltas = np.diff(np.asarray(recent_prices, dtype=float))
+        if deltas.size == 0:
+            return 0.0, 0.0
+
+        weights = np.arange(1, deltas.size + 1, dtype=float)
+        normalizer = float(weights.sum()) or 1.0
+        elapsed = max(float(recent_timestamps[-1] - recent_timestamps[0]), 0.1)
+
+        weighted_delta = float(np.dot(weights, deltas) / normalizer)
+        pressure = weighted_delta * deltas.size / elapsed
+
+        absolute_motion = float(np.dot(weights, np.abs(deltas)) / normalizer)
+        pressure_pct = 0.0 if absolute_motion <= 1e-12 else 100.0 * weighted_delta / absolute_motion
+        pressure_pct = max(-100.0, min(100.0, pressure_pct))
+        return pressure, pressure_pct
+
+    def _z_score(self, prices: list[float], price: float) -> tuple[float, float]:
+        baseline = prices[:-self.config.baseline_exclusion] if len(prices) > self.config.baseline_exclusion else prices
+        mu = float(np.mean(baseline))
+        sigma = float(np.std(baseline)) or 0.0001
+        return (price - mu) / sigma, sigma
+
+    def update_tick(self, price: float, timestamp: float = None) -> Union[Dict[str, Any], float]:
+        numeric_price = float(price)
+        if not np.isfinite(numeric_price):
             return 50.0
 
-        # Optimization: Single list conversion per tick
-        all_ticks = list(self.ticks)
-        recent = all_ticks[-50:]
+        self.seed_tick(numeric_price, timestamp=timestamp)
 
-        # 1. Velocity — time-aware (price change / elapsed seconds)
-        ts_list = list(self.timestamps)
-        time_delta = max(ts_list[-1] - ts_list[-50], 0.1)  # floor at 0.1s
-        velocity = (recent[-1] - recent[0]) / time_delta
+        if len(self.ticks) < self.config.warmup_ticks:
+            return 50.0
 
-        # Macro trend (200-tick window)
-        if len(all_ticks) >= 200:
-            slow_velocity = (all_ticks[-1] - all_ticks[-200]) / max(time_delta * 4, 0.4)
-        else:
-            slow_velocity = 0.0
+        prices = list(self.ticks)
+        timestamps = list(self.timestamps)
 
-        # Multi-timeframe confirmation
+        velocity, pressure_pct = self._weighted_pressure(prices, timestamps, self.config.pressure_window)
+        slow_velocity, _ = self._weighted_pressure(prices, timestamps, self.config.macro_window)
         trend_aligned = (velocity > 0 and slow_velocity > 0) or (velocity < 0 and slow_velocity < 0)
 
-        # 2. Z-score from tick buffer baseline
-        # Baseline = all ticks except the most recent 20 (avoids self-reference)
-        baseline = all_ticks[:-20] if len(all_ticks) > 20 else all_ticks
-        mu = np.mean(baseline)
-        sigma = float(np.std(baseline)) or 0.0001
-        z_score = (price - mu) / sigma
+        z_score, sigma = self._z_score(prices, numeric_price)
+        aligned_product = max(0.0, velocity * z_score)
 
-        # 3. OTEO score — sigmoid of velocity × z-score product
-        product = abs(velocity) * abs(z_score)
-
-        # Volatility-adaptive thresholds
-        if len(all_ticks) >= 100:
-            rolling_vol = float(np.std(all_ticks[-100:]))
-            baseline_vol = sigma
-            vol_ratio = rolling_vol / max(baseline_vol, 0.0001)
-            adaptive_center = 0.85 * max(0.5, min(2.0, vol_ratio))
+        if len(prices) >= self.config.volatility_window:
+            rolling_vol = float(np.std(prices[-self.config.volatility_window:]))
+            vol_ratio = rolling_vol / max(sigma, 0.0001)
+            adaptive_center = self.config.score_center * max(0.5, min(2.0, vol_ratio))
         else:
-            adaptive_center = 0.85
+            adaptive_center = self.config.score_center
 
-        raw_score = 100 * (1 - 1 / (1 + np.exp(-3.5 * (product - adaptive_center))))
-
-        # Maturity weighting — dampens early scores when baseline is small.
-        maturity = min(1.0, len(baseline) / 200.0)
+        raw_score = 100.0 * (1.0 - 1.0 / (1.0 + np.exp(-self.config.score_slope * (aligned_product - adaptive_center))))
+        baseline_size = max(0, len(prices) - self.config.baseline_exclusion)
+        maturity = min(1.0, baseline_size / float(self.config.full_maturity_baseline))
         score = raw_score * maturity
 
-        direction = "CALL" if velocity < 0 else "PUT"   # trade opposite momentum
-        confidence = "HIGH" if score > 75 else "MEDIUM" if score > 55 else "LOW"
+        direction = "NEUTRAL"
+        if aligned_product > 0 and abs(z_score) >= self.config.min_abs_z_score and abs(pressure_pct) >= self.config.min_pressure_pct:
+            direction = "CALL" if velocity < 0 else "PUT"
 
-        # Suppress HIGH if trend-aligned
-        if trend_aligned and confidence == "HIGH":
+        confidence = "HIGH" if score > 75 else "MEDIUM" if score > 55 else "LOW"
+        if direction == "NEUTRAL":
+            confidence = "LOW"
+        elif trend_aligned and confidence == "HIGH":
             confidence = "MEDIUM"
 
-        # Apply cooldown
-        if self._cooldown_remaining > 0:
+        cooldown_active = self._cooldown_remaining > 0
+        if cooldown_active:
             self._cooldown_remaining -= 1
-            if confidence == "HIGH":
-                confidence = "MEDIUM"
 
-        if confidence == "HIGH" and self._cooldown_remaining == 0:
-            self._cooldown_remaining = self.COOLDOWN_TICKS
+        same_direction_repeat = direction in {"CALL", "PUT"} and direction == self._last_signal_direction
+        actionable = (
+            direction in {"CALL", "PUT"}
+            and confidence in {"HIGH", "MEDIUM"}
+            and not (cooldown_active and same_direction_repeat)
+            and (not same_direction_repeat or confidence != self._last_signal_confidence)
+        )
+
+        if actionable:
+            self._last_signal_direction = direction
+            self._last_signal_confidence = confidence
+            if confidence == "HIGH":
+                self._cooldown_remaining = self.config.cooldown_ticks
+        elif confidence == "LOW" or direction == "NEUTRAL":
+            self._last_signal_direction = None
+            self._last_signal_confidence = None
 
         return {
             "oteo_score": round(score, 1),
             "recommended": direction,
             "confidence": confidence,
             "velocity": round(velocity, 6),
+            "pressure_pct": round(pressure_pct, 1),
             "z_score": round(z_score, 2),
             "maturity": round(maturity, 2),
             "slow_velocity": round(slow_velocity, 6),
             "trend_aligned": trend_aligned,
+            "actionable": actionable,
+            "stretch_alignment": round(aligned_product, 6),
         }

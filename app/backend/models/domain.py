@@ -59,6 +59,12 @@ class TradeRecord(BaseModel):
     profit: float | None = None
     payout_pct: float | None = None
     confidence: str | None = None
+    oteo_score: float | None = None
+    base_oteo_score: float | None = None
+    level2_score_adjustment: float | None = None
+    strategy_level: str | None = None
+    trigger_mode: str | None = None
     manipulation_at_entry: dict | None = None
+    entry_context: dict | None = None
     simulated_profit: float | None = None
     simulated_amount: float | None = None

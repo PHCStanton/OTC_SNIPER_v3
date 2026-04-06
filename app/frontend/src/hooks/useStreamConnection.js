@@ -20,14 +20,14 @@ function normalizeConfidence(payloadConfidence, score) {
     return Math.max(0, Math.min(100, numericConfidence <= 1 ? numericConfidence * 100 : numericConfidence));
   }
 
+  const numericScore = Number(score);
+  if (Number.isFinite(numericScore) && numericScore > 0) {
+    return Math.max(0, Math.min(100, numericScore));
+  }
+
   const level = typeof payloadConfidence === 'string' ? payloadConfidence.trim().toUpperCase() : '';
   if (level in CONFIDENCE_BY_LEVEL) {
     return CONFIDENCE_BY_LEVEL[level];
-  }
-
-  const numericScore = Number(score);
-  if (Number.isFinite(numericScore)) {
-    return Math.max(0, Math.min(100, numericScore));
   }
 
   return 0;

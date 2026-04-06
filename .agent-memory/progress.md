@@ -15,6 +15,8 @@
 - Phase 7: Settings System — SettingsView, AccountSettings, AppSettings, RiskSettings, useUserStore, settings validation
 - Phase 8: AI Service Integration — xAI Grok provider, image understanding, RightSidebar AI tab, provider-agnostic service layer
 - Phase 9: Polish and Hardening — Error boundaries, toast notifications, loading skeletons, ghost trading banner, ops toast integration
+- Level 2 OTEO Foundation — Context-aware filter layer, Support/Resistance proximity, ADX/DI trend regime integration
+- Auto-Ghost Mode — Automated simulated trading execution with concurrent capacity management and manipulation blocking
 - SSID integration package documentation baseline — `ssid_integration_package/integration_guides/dev_docs/3_Phase_Refactor_Plan.md`
 - SSID integration package implementation report — `ssid_integration_package/integration_guides/dev_docs/3Phase_Implementation_Report_26-03-31.md`
 - Streaming verification reference — `ssid_integration_package/ssid_streaming_test/scripts/ssid_streaming_implementation_report_26-03-30.md`
@@ -23,10 +25,18 @@
 - Local realtime connectivity stabilization — Socket.IO development client updated to connect directly to backend
 
 ## Recent Delivery Snapshot
-- Backend trade execution no longer freezes the app during live order submission
-- Persisted trade session data confirmed resolved outcomes are being written server-side
-- Frontend build passed after the trading store and socket client changes
-- Backend was stopped intentionally after verification so the next test round can start cleanly
+- Level 2 OTEO context foundation (Support/Resistance proximity, ADX trend classification) successfully integrated into the backend signal stream.
+- Auto-Ghost mode successfully integrated to process paper trades on actionable signals without risking live capital.
+- Ghost trade file path correctly resolves to `app/data/ghost_trades/sessions`.
+- Confidence gauge UI properly handles exact numeric confidence values.
+- Backend trade execution no longer freezes the app during live order submission.
+- Frontend build passed after the trading store and socket client changes.
+
+## Latest Review / Documentation Update
+- Level 2 implementation plan was reconciled against the current codebase and updated to reflect the actual state.
+- CCI is confirmed as implemented and active in the Level 2 policy; the plan was corrected to remove stale "not implemented" markers.
+- A new issue tracker was added to the Level 2 plan covering critical performance, reliability, and tuning gaps.
+- Implementation is paused pending approval before any code changes begin.
 
 ## Phase 9 Deliverables (Complete)
 | File | Status |
@@ -47,9 +57,10 @@
 - Latest frontend validation is green
 
 ## Open Validation
-- Realtime validation on the next test cycle
-- Confirm sparkline rendering through the repaired Socket.IO path
-- Confirm live trade-result delivery through the repaired Socket.IO path
+- Fix the Level 2 per-tick recomputation issue before using ghost data for further tuning.
+- Confirm CCI/ATR thresholds via analysis of collected Auto-Ghost trades after the critical engine fix.
+- Confirm sparkline rendering through the repaired Socket.IO path.
+- Confirm live trade-result delivery through the repaired Socket.IO path.
 
 ## Planned Work
 - (Future) Supabase migration
@@ -61,5 +72,6 @@
 
 ## Known Issues
 - No active blocker preventing manual trade execution
+- Level 2 tuning is currently blocked by the need to fix candle-close recomputation in `market_context.py`
 - Sparkline and live result flow should be revalidated in the next live test cycle after the Socket.IO client change
 - Pre-existing `api.py` cleanup items remain noted in the implementation report for future low-risk polish

@@ -102,11 +102,16 @@ function NumberField({ label, description, value, onChange, min, step = 1, suffi
 
 export default function AppSettings() {
   const {
-    oteoEnabled,
+    oteoLevel2Enabled,
+    oteoLevel3Enabled,
     oteoWarmupBars,
     oteoCooldownBars,
     ghostTradingEnabled,
     ghostAmount,
+    autoGhostEnabled,
+    autoGhostExpirationSeconds,
+    autoGhostMaxConcurrentTrades,
+    autoGhostPerAssetCooldownSeconds,
     ghostIcon,
     maxDailyLoss,
     maxTradesPerSession,
@@ -115,11 +120,16 @@ export default function AppSettings() {
     showManipulationAlerts,
     showSignalConfidence,
     autoFocusOnSignal,
-    setOteoEnabled,
+    setOteoLevel2Enabled,
+    setOteoLevel3Enabled,
     setOteoWarmupBars,
     setOteoCooldownBars,
     setGhostTradingEnabled,
     setGhostAmount,
+    setAutoGhostEnabled,
+    setAutoGhostExpirationSeconds,
+    setAutoGhostMaxConcurrentTrades,
+    setAutoGhostPerAssetCooldownSeconds,
     setGhostIcon,
     setMaxDailyLoss,
     setMaxTradesPerSession,
@@ -135,12 +145,36 @@ export default function AppSettings() {
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <SectionCard title="OTEO" subtitle="Signal warmup and cooldown stay in the app layer, not the session layer." icon={Target}>
+        <div className="rounded-2xl border border-[#f5df19]/20 bg-[#f5df19]/10 px-4 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-[#e3e6e7]">Level 1 baseline</p>
+              <p className="mt-1 text-xs leading-5 text-gray-400">
+                Core OTEO stays active as the baseline engine. Level 2 and Level 3 are additive filters layered on top.
+              </p>
+            </div>
+            <span className="rounded-full border border-[#f5df19]/30 bg-[#f5df19]/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#f5df19]">
+              Always on
+            </span>
+          </div>
+        </div>
         <ToggleRow
-          label="Enable OTEO"
-          description="Turn signal warmup / cooldown handling on or off for the trading workspace."
-          checked={oteoEnabled}
-          onChange={setOteoEnabled}
+          label="Level 2 context filter"
+          description="Enable market-context filtering so Support/Resistance and ADX can refine baseline OTEO entries when Level 2 is implemented."
+          checked={oteoLevel2Enabled}
+          onChange={setOteoLevel2Enabled}
         />
+        <ToggleRow
+          label="Level 3 regime + AI layer"
+          description="Enable the advanced regime and AI ranking layer when available. Level 3 depends on Level 2 and will automatically keep Level 2 on."
+          checked={oteoLevel3Enabled}
+          onChange={setOteoLevel3Enabled}
+        />
+        {oteoLevel3Enabled && (
+          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs leading-5 text-amber-200">
+            Level 3 depends on Level 2 context. When Level 3 is enabled, Level 2 stays enabled automatically.
+          </div>
+        )}
         <div className="grid gap-3 md:grid-cols-2">
           <NumberField
             label="Warmup bars"
@@ -160,6 +194,15 @@ export default function AppSettings() {
             step={1}
             suffix="bars"
           />
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
+          <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
+            <Circle size={10} className="fill-emerald-400 text-emerald-400" />
+            Rollout map
+          </div>
+          <p className="mt-2">
+            Level 1 is the core baseline. Level 2 and Level 3 are user-togglable overlays so traders can test progressively stronger filtering without branching into separate OTEO engines.
+          </p>
         </div>
       </SectionCard>
 
@@ -186,15 +229,59 @@ export default function AppSettings() {
           checked={ghostTradingEnabled}
           onChange={setGhostTradingEnabled}
         />
+        <ToggleRow
+          label="Enable Auto-Ghost trader"
+          description="Automatically open ghost trades on actionable signals for currently streamed assets while keeping live capital untouched."
+          checked={autoGhostEnabled}
+          onChange={setAutoGhostEnabled}
+        />
         <NumberField
           label="Ghost trade amount"
-          description="Simulated amount used when ghost trading is enabled."
+          description="Simulated amount used for both manual ghost trades and Auto-Ghost entries."
           value={ghostAmount}
           onChange={setGhostAmount}
           min={0}
           step={0.1}
           suffix="amount"
         />
+        <div className="grid gap-3 md:grid-cols-3">
+          <NumberField
+            label="Auto-Ghost expiry"
+            description="Expiry used by automatic ghost entries."
+            value={autoGhostExpirationSeconds}
+            onChange={setAutoGhostExpirationSeconds}
+            min={5}
+            step={1}
+            suffix="seconds"
+          />
+          <NumberField
+            label="Max concurrent"
+            description="Maximum number of simultaneous Auto-Ghost trades."
+            value={autoGhostMaxConcurrentTrades}
+            onChange={setAutoGhostMaxConcurrentTrades}
+            min={1}
+            step={1}
+            suffix="trades"
+          />
+          <NumberField
+            label="Per-asset cooldown"
+            description="Extra wait time after expiry before Auto-Ghost can reuse the same asset."
+            value={autoGhostPerAssetCooldownSeconds}
+            onChange={setAutoGhostPerAssetCooldownSeconds}
+            min={0}
+            step={1}
+            suffix="seconds"
+          />
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
+          <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
+            <Ghost size={14} className="text-[#f5df19]" />
+            Auto-Ghost scope
+          </div>
+          <p className="mt-2">
+            Auto-Ghost only evaluates assets that are currently being streamed by the workspace, which means the focused asset and any active multi-chart watchlist assets.
+          </p>
+        </div>
 
         <div className="block rounded-2xl border border-white/5 bg-[#0f1419] overflow-hidden transition-all duration-300">
           <button 

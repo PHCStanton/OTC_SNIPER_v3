@@ -114,6 +114,7 @@ def _load_live_assets() -> list[Asset]:
                     payout=payout,
                     broker=BrokerType.POCKET_OPTION,
                     raw_id=symbol,
+                    metadata={"category": category},
                 )
             )
             seen_symbols.add(symbol)
