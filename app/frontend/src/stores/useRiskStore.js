@@ -232,6 +232,9 @@ export const useRiskStore = create((set, get) => ({
   ghostWinRate: 0,
   ghostMaxDrawdown: 0,
 
+  // Per-asset session stats
+  assetStats: {}, // { [asset]: { w: number, l: number } }
+
   setRecordingMode: (mode) => {
     if (!['auto', 'manual'].includes(mode)) {
       throw new Error(`Invalid recording mode: ${mode}`);
@@ -403,5 +406,23 @@ export const useRiskStore = create((set, get) => ({
       ghostTotalTrades: 0,
       ghostWinRate: 0,
       ghostMaxDrawdown: 0,
+      assetStats: {},
     }),
+
+  recordAssetTrade: (asset, outcome) => {
+    if (!asset || !['win', 'loss'].includes(outcome)) return;
+    set((state) => {
+      const stats = state.assetStats[asset] || { w: 0, l: 0 };
+      return {
+        assetStats: {
+          ...state.assetStats,
+          [asset]: {
+            ...stats,
+            w: outcome === 'win' ? stats.w + 1 : stats.w,
+            l: outcome === 'loss' ? stats.l + 1 : stats.l,
+          },
+        },
+      };
+    });
+  },
 }));

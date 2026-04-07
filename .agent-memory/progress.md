@@ -31,12 +31,14 @@
 - Confidence gauge UI properly handles exact numeric confidence values.
 - Backend trade execution no longer freezes the app during live order submission.
 - Frontend build passed after the trading store and socket client changes.
+- Level 2 Performance: Added `_cached_context` to fix the per-tick recomputation issue on incomplete candles.
+- Level 2 Policy: Extracted magic numbers into `Level2PolicyConfig` and applied tighter thresholds for S/R proximity, weak ADX penalties, and neutral CCI suppression.
+- Manipulation Detection: Hardened Push & Snap to include a 15-second block, and loosened Pinning to check absolute range instead of strict 5-decimal matches.
 
 ## Latest Review / Documentation Update
-- Level 2 implementation plan was reconciled against the current codebase and updated to reflect the actual state.
-- CCI is confirmed as implemented and active in the Level 2 policy; the plan was corrected to remove stale "not implemented" markers.
-- A new issue tracker was added to the Level 2 plan covering critical performance, reliability, and tuning gaps.
-- Implementation is paused pending approval before any code changes begin.
+- A 401-trade Auto-Ghost session was analyzed to identify leaks in the manipulation detector and flaws in the original Level 2 policy weights.
+- The Level 2 implementation plan's Phase A (Critical Fixes) and Phase B (Tuning) have been executed and validated against smoke tests.
+- A full report on the 401-trade session and subsequent logic tightening was generated in `@reports/401Trades_Level2_Ghost_Trade_report_26-04-06.md`.
 
 ## Phase 9 Deliverables (Complete)
 | File | Status |
@@ -57,21 +59,20 @@
 - Latest frontend validation is green
 
 ## Open Validation
-- Fix the Level 2 per-tick recomputation issue before using ghost data for further tuning.
-- Confirm CCI/ATR thresholds via analysis of collected Auto-Ghost trades after the critical engine fix.
 - Confirm sparkline rendering through the repaired Socket.IO path.
 - Confirm live trade-result delivery through the repaired Socket.IO path.
+- Monitor the next Auto-Ghost session to benchmark the new `Level2PolicyConfig` and hardened Manipulation Detector.
 
 ## Planned Work
+- (Next) Begin Level 3 Regime Classification logic now that Level 2 is stable and tuned.
 - (Future) Supabase migration
 - (Future) Auth0 integration
 - (Future) CDP SSID auto-extraction
 - (Future, if required) Redis gateway / PubSub bridge for live market streaming
 - (Near-term validation) Confirm frontend sparkline subscription and live trade result wiring behave correctly in runtime
-- (Next) Implement SSID streaming into OTC_SNIPER app using the verified 3-phase refactor/report baseline
 
 ## Known Issues
 - No active blocker preventing manual trade execution
-- Level 2 tuning is currently blocked by the need to fix candle-close recomputation in `market_context.py`
-- Sparkline and live result flow should be revalidated in the next live test cycle after the Socket.IO client change
-- Pre-existing `api.py` cleanup items remain noted in the implementation report for future low-risk polish
+- Level 2 Macro S/R fallback uses absolute min/max instead of percentiles (ISSUE-11 - LOW severity).
+- Sparkline and live result flow should be revalidated in the next live test cycle after the Socket.IO client change.
+- Pre-existing `api.py` cleanup items remain noted in the implementation report for future low-risk polish.

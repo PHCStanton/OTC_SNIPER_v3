@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import MiniSparkline from '../trading/MiniSparkline.jsx';
 import PercentageGauge from '../shared/PercentageGauge.jsx';
 import OTEORing from '../trading/OTEORing.jsx';
+import { Star, X, Layers3, Activity, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 
 // --- AI SVG Icons from Ai_svg_icons.md ---
 
@@ -103,6 +104,105 @@ const AiInsightsIconV2 = ({ size = 24 }) => (
     />
   </svg>
 );
+
+// --- Enhanced MultiChartCard Mock for Showcase ---
+function MultiChartCardMock({ asset, isSelected, signal, manipulation, stats, regime }) {
+  const [isStarred, setIsStarred] = useState(false);
+  const trend = 1.25;
+  const positive = trend >= 0;
+
+  return (
+    <article className={`group relative rounded-2xl border ${isSelected ? 'border-[#f5df19]/50 bg-[#282d2e]' : 'border-white/5 bg-[#212127]'} p-3 transition-all hover:border-[#f5df19]/40 cursor-pointer overflow-hidden`}>
+      {/* Manipulation Pulse Overlay */}
+      {manipulation && (
+        <div className="absolute inset-0 bg-rose-500/5 animate-pulse pointer-events-none" />
+      )}
+
+      <div className="flex items-start justify-between gap-3 relative z-10">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={(e) => { e.stopPropagation(); setIsStarred(!isStarred); }}
+            className={`transition-colors ${isStarred ? 'text-[#f5df19]' : 'text-gray-600 hover:text-gray-400'}`}
+          >
+            <Star size={14} fill={isStarred ? "currentColor" : "none"} />
+          </button>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gray-500">Asset</p>
+            <h4 className="text-sm font-black text-[#e3e6e7]">{asset}</h4>
+          </div>
+        </div>
+
+        <button className="rounded-full p-1.5 text-gray-500 transition hover:bg-white/5 hover:text-[#e3e6e7]">
+          <X size={12} />
+        </button>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between gap-3 relative z-10">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Price</p>
+          <p className="text-base font-black text-[#e3e6e7]">1.08425</p>
+        </div>
+
+        <div className="flex flex-col items-end gap-1">
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[#fe7453]/10 text-[#fe7453]'}`}>
+            {positive ? '+' : ''}{trend.toFixed(2)}%
+          </span>
+          {regime && (
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white/5 text-gray-400 border border-white/5">
+              {regime}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 relative h-16 group-hover:opacity-40 transition-opacity">
+        <MiniSparkline ticks={[100, 102, 101, 104, 103, 106]} />
+      </div>
+
+      {/* Hybrid Gauge Overlay (visible on hover or signal) */}
+      {signal && (
+        <div className="absolute inset-x-0 top-12 flex flex-col items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="relative w-16 h-16">
+             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3" className="text-white/5" />
+                <circle 
+                  cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3" 
+                  strokeDasharray={`${(signal.confidence / 100) * 100} 100`}
+                  className={signal.direction === 'call' ? 'text-emerald-500' : 'text-[#fe7453]'}
+                />
+             </svg>
+             <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[10px] font-black">{signal.confidence}%</span>
+             </div>
+          </div>
+          <span className={`text-[9px] font-bold uppercase tracking-widest ${signal.direction === 'call' ? 'text-emerald-500' : 'text-[#fe7453]'}`}>
+            {signal.direction}
+          </span>
+        </div>
+      )}
+
+      <div className="mt-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500 relative z-10">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5">
+            <Layers3 size={11} />
+            300
+          </span>
+          {stats && (
+            <span className="flex items-center gap-1 text-gray-400">
+              <span className="text-emerald-500">{stats.w}W</span>
+              <span className="opacity-30">/</span>
+              <span className="text-rose-500">{stats.l}L</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {manipulation && <AlertTriangle size={12} className="text-rose-500 animate-pulse" />}
+          <span>{isSelected ? 'Selected' : 'Watching'}</span>
+        </div>
+      </div>
+    </article>
+  );
+}
 
 export default function ComponentsPage() {
   const [gaugeValue, setGaugeValue] = useState(75);
@@ -255,6 +355,47 @@ export default function ComponentsPage() {
                   <span className="text-sm text-gray-400 font-semibold">Strong Put</span>
                 </div>
              </div>
+          </div>
+        </section>
+
+        {/* Section 4: Enhanced Multi-Chart Cards (NEW) */}
+        <section>
+          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+            <span className="w-2 h-6 bg-[#f5df19] rounded-full"></span>
+            Proposed Asset Card Enhancements
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-gray-500 uppercase px-1">1. Active Signal (Hybrid View)</p>
+              <MultiChartCardMock 
+                asset="EURUSD OTC" 
+                signal={{ direction: 'call', confidence: 82 }}
+                regime="RANGE"
+              />
+              <p className="text-[10px] text-gray-500 italic px-1">Hover to reveal confidence gauge overlay</p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-gray-500 uppercase px-1">2. Manipulation Detected</p>
+              <MultiChartCardMock 
+                asset="GBPUSD OTC" 
+                manipulation={true}
+                regime="STRONG"
+              />
+              <p className="text-[10px] text-rose-500/70 italic px-1">Card pulses red when detector is active</p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-gray-500 uppercase px-1">3. Session Stats & Favorites</p>
+              <MultiChartCardMock 
+                asset="AUDCAD OTC" 
+                isSelected={true}
+                stats={{ w: 12, l: 4 }}
+                regime="WEAK"
+              />
+              <p className="text-[10px] text-gray-500 italic px-1">Star for Quick-Select, Session W/L in footer</p>
+            </div>
           </div>
         </section>
       </div>

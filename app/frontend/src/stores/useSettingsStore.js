@@ -46,6 +46,16 @@ export const SETTINGS_DEFAULTS = {
   showManipulationAlerts: true,
   showSignalConfidence: true,
   autoFocusOnSignal: false,
+
+  // Mini-Chart Modular Configuration
+  miniChartConfig: {
+    showSparkline: true,
+    showGauge: true,
+    hybridMode: true,
+    showStats: true,
+    showRegime: true,
+    showManipulation: true,
+  },
 };
 
 function toBoolean(value, fallback = false) {
@@ -115,6 +125,15 @@ export function validateSettings(input = {}) {
     showManipulationAlerts: toBoolean(input.showManipulationAlerts, SETTINGS_DEFAULTS.showManipulationAlerts),
     showSignalConfidence: toBoolean(input.showSignalConfidence, SETTINGS_DEFAULTS.showSignalConfidence),
     autoFocusOnSignal: toBoolean(input.autoFocusOnSignal, SETTINGS_DEFAULTS.autoFocusOnSignal),
+
+    miniChartConfig: {
+      showSparkline: toBoolean(input.miniChartConfig?.showSparkline, SETTINGS_DEFAULTS.miniChartConfig.showSparkline),
+      showGauge: toBoolean(input.miniChartConfig?.showGauge, SETTINGS_DEFAULTS.miniChartConfig.showGauge),
+      hybridMode: toBoolean(input.miniChartConfig?.hybridMode, SETTINGS_DEFAULTS.miniChartConfig.hybridMode),
+      showStats: toBoolean(input.miniChartConfig?.showStats, SETTINGS_DEFAULTS.miniChartConfig.showStats),
+      showRegime: toBoolean(input.miniChartConfig?.showRegime, SETTINGS_DEFAULTS.miniChartConfig.showRegime),
+      showManipulation: toBoolean(input.miniChartConfig?.showManipulation, SETTINGS_DEFAULTS.miniChartConfig.showManipulation),
+    },
   };
 }
 
@@ -178,6 +197,9 @@ export const useSettingsStore = create()(
       setShowManipulationAlerts: (val) => commitSettingsPatch(set, { showManipulationAlerts: val }),
       setShowSignalConfidence: (val) => commitSettingsPatch(set, { showSignalConfidence: val }),
       setAutoFocusOnSignal: (val) => commitSettingsPatch(set, { autoFocusOnSignal: val }),
+      setMiniChartConfig: (patch) => set((state) => ({
+        miniChartConfig: { ...state.miniChartConfig, ...patch }
+      })),
     }),
     {
       name: 'otc-sniper-settings-storage',

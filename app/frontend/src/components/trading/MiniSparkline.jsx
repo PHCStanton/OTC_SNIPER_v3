@@ -30,15 +30,16 @@ export default function MiniSparkline({ ticks, className = '' }) {
         </defs>
         <path d="M 0 56 L 240 56 L 240 64 L 0 64 Z" fill="rgba(15,23,42,0.04)" />
         {path && <path d={path} fill="none" stroke="url(#miniSparklineLine)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}
-        {points.map((point, index) => (
+        
+        {/* Only render the latest point as a circle to reduce DOM overhead */}
+        {points.length > 0 && (
           <circle
-            key={`${point.x}-${point.y}-${index}`}
-            cx={point.x}
-            cy={point.y}
-            r={index === points.length - 1 ? 3.25 : 2}
-            fill={index === points.length - 1 ? (positive ? '#ffed6d' : '#fe7453') : '#f2892c'}
+            cx={points[points.length - 1].x}
+            cy={points[points.length - 1].y}
+            r={3.25}
+            fill={positive ? '#ffed6d' : '#fe7453'}
           />
-        ))}
+        )}
       </svg>
     </div>
   );

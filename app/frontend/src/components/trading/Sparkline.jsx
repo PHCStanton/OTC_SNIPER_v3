@@ -119,16 +119,16 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
               </>
             )}
 
-            {points.map((point, index) => (
+            {/* Only render the latest point as a circle to reduce DOM overhead (was 300 circles) */}
+            {points.length > 0 && (
               <circle
-                key={`${point.x}-${point.y}-${index}`}
-                cx={point.x}
-                cy={point.y}
-                r={index === points.length - 1 ? 6 : 3}
-                fill={index === points.length - 1 ? '#ffed6d' : '#f2892c'}
-                opacity={index === points.length - 1 ? 1 : 0.65}
+                cx={points[points.length - 1].x}
+                cy={points[points.length - 1].y}
+                r={6}
+                fill="#ffed6d"
+                className="drop-shadow-[0_0_8px_rgba(255,237,109,0.8)]"
               />
-            ))}
+            )}
           </svg>
 
           {latest !== null && (

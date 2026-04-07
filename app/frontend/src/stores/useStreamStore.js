@@ -21,6 +21,39 @@ export const useStreamStore = create((set) => ({
       ticks: { ...state.ticks, [asset]: ticks },
     })),
 
+  // Efficient batch update for multiple assets at once
+  batchUpdate: (updates) =>
+    set((state) => {
+      const nextTicks = { ...state.ticks };
+      const nextSignals = { ...state.signals };
+      const nextManipulation = { ...state.manipulation };
+      
+      let hasTicks = false;
+      let hasSignals = false;
+      let hasManip = false;
+
+      for (const [asset, data] of Object.entries(updates)) {
+        if (data.ticks) {
+          nextTicks[asset] = data.ticks;
+          hasTicks = true;
+        }
+        if (data.signal) {
+          nextSignals[asset] = data.signal;
+          hasSignals = true;
+        }
+        if (data.manipulation) {
+          nextManipulation[asset] = data.manipulation;
+          hasManip = true;
+        }
+      }
+
+      return {
+        ...(hasTicks ? { ticks: nextTicks } : {}),
+        ...(hasSignals ? { signals: nextSignals } : {}),
+        ...(hasManip ? { manipulation: nextManipulation } : {}),
+      };
+    }),
+
   updateSignal: (asset, signal) =>
     set((state) => ({
       signals: { ...state.signals, [asset]: signal },

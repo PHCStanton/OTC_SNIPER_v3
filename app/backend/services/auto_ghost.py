@@ -79,6 +79,13 @@ class AutoGhostService:
         oteo_result: dict[str, Any],
         manipulation: dict[str, Any],
     ) -> dict[str, Any] | None:
+        # Clean up any stale active assets whose cooldown has already expired
+        now = unix_time()
+        stale = [a for a in self._active_assets if now >= self._cooldown_until.get(a, 0)]
+        for a in stale:
+            self._active_assets.discard(a)
+            logger.info("Cleaned up stale active asset: %s", a)
+
         if not self.config.enabled:
             return None
         if oteo_result.get("recommended") not in {"CALL", "PUT"}:
@@ -140,7 +147,8 @@ class AutoGhostService:
 
         self._active_assets.add(asset)
         self._cooldown_until[asset] = unix_time() + self.config.expiration_seconds + self.config.per_asset_cooldown_seconds
-        asyncio.create_task(self._release_asset(asset, self.config.expiration_seconds + 1))
+        task = asyncio.create_task(self._release_asset(asset, self.config.expiration_seconds + 1))
+        task.add_done_callback(lambda t: logger.error("_release_asset failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
         logger.info(
             "Auto-Ghost trade opened for %s (%s, %ss)",
             asset,

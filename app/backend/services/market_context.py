@@ -14,6 +14,27 @@ class Candle:
 
 
 @dataclass(frozen=True)
+class Level2PolicyConfig:
+    structure_boost: float = 8.0
+    conflicting_structure_penalty: float = -4.0
+    cci_aligned_boost: float = 4.0
+    cci_slope_bonus: float = 2.0
+    cci_opposing_penalty: float = -5.0
+    neutral_cci_penalty: float = -6.0  # Increased from -2.0
+    neutral_cci_band: float = 50.0     # Increased from 35.0
+    strong_trend_penalty: float = -8.0
+    trend_aligned_boost: float = 4.0
+    unavailable_adx_penalty: float = -5.0
+    weak_adx_unaligned_penalty: float = -3.0
+    distant_structure_penalty: float = -5.0
+    adx_falling_structure_bonus: float = 3.0
+    confidence_upgrade_threshold: float = 7.0
+    confidence_downgrade_threshold: float = -7.0
+    min_actionable_score: float = 55.0
+    high_confidence_score: float = 80.0
+    high_confidence_base_floor: float = 65.0  # Added to prevent weak setups from hitting HIGH
+
+@dataclass(frozen=True)
 class Level2Config:
     candle_seconds: int = 60
     max_candles: int = 240
@@ -24,8 +45,8 @@ class Level2Config:
     macro_pivot_span: int = 4
     micro_lookback: int = 18
     macro_lookback: int = 60
-    support_proximity_atr: float = 0.45
-    resistance_proximity_atr: float = 0.45
+    support_proximity_atr: float = 0.25
+    resistance_proximity_atr: float = 0.25
     distant_structure_atr: float = 1.35
 
 
@@ -161,6 +182,7 @@ class MarketContextEngine:
         self.config = config or Level2Config()
         self._closed_candles: list[Candle] = []
         self._current_candle: Candle | None = None
+        self._cached_context: dict[str, Any] | None = None
 
     def seed_tick(self, price: float, timestamp: float) -> None:
         self.update_tick(price, timestamp)
@@ -168,8 +190,10 @@ class MarketContextEngine:
     def update_tick(self, price: float, timestamp: float) -> dict[str, Any]:
         candle_start = _bucket_timestamp(timestamp, self.config.candle_seconds)
 
+        candle_closed = False
         if self._current_candle is None:
             self._current_candle = Candle(candle_start, price, price, price, price)
+            candle_closed = True
         elif candle_start == self._current_candle.start_ts:
             self._current_candle.high = max(self._current_candle.high, price)
             self._current_candle.low = min(self._current_candle.low, price)
@@ -179,97 +203,122 @@ class MarketContextEngine:
             if len(self._closed_candles) > self.config.max_candles:
                 self._closed_candles = self._closed_candles[-self.config.max_candles:]
             self._current_candle = Candle(candle_start, price, price, price, price)
+            candle_closed = True
 
-        candles = [*self._closed_candles]
-        if self._current_candle is not None:
-            candles.append(self._current_candle)
+        if self._cached_context is None or candle_closed:
+            candles = [*self._closed_candles]
+            if self._current_candle is not None:
+                candles.append(self._current_candle)
 
-        metrics = _compute_adx(candles, self.config.adx_period)
-        atr = metrics["atr"]
-        adx = metrics["adx"]
-        plus_di = metrics["plus_di"]
-        minus_di = metrics["minus_di"]
-        adx_slope = metrics["adx_slope"]
-        cci_metrics = _compute_cci(candles, self.config.cci_period)
-        cci = cci_metrics["cci"]
-        cci_slope = cci_metrics["cci_slope"]
+            metrics = _compute_adx(candles, self.config.adx_period)
+            atr = metrics["atr"]
+            adx = metrics["adx"]
+            plus_di = metrics["plus_di"]
+            minus_di = metrics["minus_di"]
+            adx_slope = metrics["adx_slope"]
+            cci_metrics = _compute_cci(candles, self.config.cci_period)
+            cci = cci_metrics["cci"]
+            cci_slope = cci_metrics["cci_slope"]
 
-        closed_candles = self._closed_candles
-        micro_support = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "low")
-        micro_resistance = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "high")
-        macro_support = _last_confirmed_pivot(closed_candles, self.config.macro_pivot_span, self.config.macro_lookback, "low")
-        macro_resistance = _last_confirmed_pivot(closed_candles, self.config.macro_pivot_span, self.config.macro_lookback, "high")
+            closed_candles = self._closed_candles
+            micro_support = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "low")
+            micro_resistance = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "high")
+            macro_support = _last_confirmed_pivot(closed_candles, self.config.macro_pivot_span, self.config.macro_lookback, "low")
+            macro_resistance = _last_confirmed_pivot(closed_candles, self.config.macro_pivot_span, self.config.macro_lookback, "high")
 
-        if macro_support is None and closed_candles:
-            macro_support = min(candle.low for candle in closed_candles[-self.config.macro_lookback:])
-        if macro_resistance is None and closed_candles:
-            macro_resistance = max(candle.high for candle in closed_candles[-self.config.macro_lookback:])
+            if macro_support is None and closed_candles:
+                macro_support = min(candle.low for candle in closed_candles[-self.config.macro_lookback:])
+            if macro_resistance is None and closed_candles:
+                macro_resistance = max(candle.high for candle in closed_candles[-self.config.macro_lookback:])
 
-        micro_support_proximity = _proximity_atr(price, micro_support, atr)
-        micro_resistance_proximity = _proximity_atr(price, micro_resistance, atr)
-        macro_support_proximity = _proximity_atr(price, macro_support, atr)
-        macro_resistance_proximity = _proximity_atr(price, macro_resistance, atr)
+            if adx is None:
+                adx_regime = "unavailable"
+            elif adx < 18:
+                adx_regime = "weak"
+            elif adx < 28:
+                adx_regime = "moderate"
+            else:
+                adx_regime = "strong"
+
+            di_delta = (plus_di or 0.0) - (minus_di or 0.0)
+            if di_delta > 5.0:
+                trend_direction = "up"
+            elif di_delta < -5.0:
+                trend_direction = "down"
+            else:
+                trend_direction = "flat"
+
+            if cci is None:
+                cci_state = "unavailable"
+            elif cci <= -self.config.cci_extreme_threshold:
+                cci_state = "oversold"
+            elif cci >= self.config.cci_extreme_threshold:
+                cci_state = "overbought"
+            else:
+                cci_state = "neutral"
+
+            self._cached_context = {
+                "ready": len(closed_candles) >= max(self.config.adx_period + 2, self.config.cci_period, self.config.micro_pivot_span * 3 + 2),
+                "candle_count": len(closed_candles),
+                "atr": atr,
+                "adx": adx,
+                "plus_di": plus_di,
+                "minus_di": minus_di,
+                "adx_slope": adx_slope,
+                "cci": cci,
+                "cci_slope": cci_slope,
+                "cci_state": cci_state,
+                "adx_regime": adx_regime,
+                "trend_direction": trend_direction,
+                "micro_support": micro_support,
+                "micro_resistance": micro_resistance,
+                "macro_support": macro_support,
+                "macro_resistance": macro_resistance,
+                "adx_falling": bool(adx_slope is not None and adx_slope < 0),
+                "reversal_friendly": adx is not None and (adx < 28 or (adx_slope is not None and adx_slope < -0.5)),
+            }
+
+        c = self._cached_context
+        atr = c["atr"]
+        micro_support_proximity = _proximity_atr(price, c["micro_support"], atr)
+        micro_resistance_proximity = _proximity_atr(price, c["micro_resistance"], atr)
+        macro_support_proximity = _proximity_atr(price, c["macro_support"], atr)
+        macro_resistance_proximity = _proximity_atr(price, c["macro_resistance"], atr)
 
         support_proximity_candidates = [value for value in [micro_support_proximity, macro_support_proximity] if value is not None]
         resistance_proximity_candidates = [value for value in [micro_resistance_proximity, macro_resistance_proximity] if value is not None]
         nearest_support_atr = min(support_proximity_candidates) if support_proximity_candidates else None
         nearest_resistance_atr = min(resistance_proximity_candidates) if resistance_proximity_candidates else None
 
-        if adx is None:
-            adx_regime = "unavailable"
-        elif adx < 18:
-            adx_regime = "weak"
-        elif adx < 28:
-            adx_regime = "moderate"
-        else:
-            adx_regime = "strong"
-
-        di_delta = (plus_di or 0.0) - (minus_di or 0.0)
-        if di_delta > 5.0:
-            trend_direction = "up"
-        elif di_delta < -5.0:
-            trend_direction = "down"
-        else:
-            trend_direction = "flat"
-
         support_alignment = nearest_support_atr is not None and nearest_support_atr <= self.config.support_proximity_atr
         resistance_alignment = nearest_resistance_atr is not None and nearest_resistance_atr <= self.config.resistance_proximity_atr
         structure_atr_candidates = [value for value in [nearest_support_atr, nearest_resistance_atr] if value is not None]
         nearest_structure_atr = min(structure_atr_candidates) if structure_atr_candidates else None
 
-        if cci is None:
-            cci_state = "unavailable"
-        elif cci <= -self.config.cci_extreme_threshold:
-            cci_state = "oversold"
-        elif cci >= self.config.cci_extreme_threshold:
-            cci_state = "overbought"
-        else:
-            cci_state = "neutral"
-
         return {
-            "ready": len(closed_candles) >= max(self.config.adx_period + 2, self.config.cci_period, self.config.micro_pivot_span * 3 + 2),
-            "candle_count": len(closed_candles),
-            "atr": round(float(atr), 6) if atr is not None else None,
-            "adx": round(float(adx), 2) if adx is not None else None,
-            "plus_di": round(float(plus_di), 2) if plus_di is not None else None,
-            "minus_di": round(float(minus_di), 2) if minus_di is not None else None,
-            "adx_slope": round(float(adx_slope), 2) if adx_slope is not None else None,
-            "cci": round(float(cci), 2) if cci is not None else None,
-            "cci_slope": round(float(cci_slope), 2) if cci_slope is not None else None,
-            "cci_state": cci_state,
-            "adx_regime": adx_regime,
-            "trend_direction": trend_direction,
-            "micro_support": round(float(micro_support), 6) if micro_support is not None else None,
-            "micro_resistance": round(float(micro_resistance), 6) if micro_resistance is not None else None,
-            "macro_support": round(float(macro_support), 6) if macro_support is not None else None,
-            "macro_resistance": round(float(macro_resistance), 6) if macro_resistance is not None else None,
+            "ready": c["ready"],
+            "candle_count": c["candle_count"],
+            "atr": round(float(c["atr"]), 6) if c["atr"] is not None else None,
+            "adx": round(float(c["adx"]), 2) if c["adx"] is not None else None,
+            "plus_di": round(float(c["plus_di"]), 2) if c["plus_di"] is not None else None,
+            "minus_di": round(float(c["minus_di"]), 2) if c["minus_di"] is not None else None,
+            "adx_slope": round(float(c["adx_slope"]), 2) if c["adx_slope"] is not None else None,
+            "cci": round(float(c["cci"]), 2) if c["cci"] is not None else None,
+            "cci_slope": round(float(c["cci_slope"]), 2) if c["cci_slope"] is not None else None,
+            "cci_state": c["cci_state"],
+            "adx_regime": c["adx_regime"],
+            "trend_direction": c["trend_direction"],
+            "micro_support": round(float(c["micro_support"]), 6) if c["micro_support"] is not None else None,
+            "micro_resistance": round(float(c["micro_resistance"]), 6) if c["micro_resistance"] is not None else None,
+            "macro_support": round(float(c["macro_support"]), 6) if c["macro_support"] is not None else None,
+            "macro_resistance": round(float(c["macro_resistance"]), 6) if c["macro_resistance"] is not None else None,
             "nearest_support_atr": round(float(nearest_support_atr), 3) if nearest_support_atr is not None else None,
             "nearest_resistance_atr": round(float(nearest_resistance_atr), 3) if nearest_resistance_atr is not None else None,
             "nearest_structure_atr": round(float(nearest_structure_atr), 3) if nearest_structure_atr is not None else None,
             "support_alignment": support_alignment,
             "resistance_alignment": resistance_alignment,
-            "adx_falling": bool(adx_slope is not None and adx_slope < 0),
-            "reversal_friendly": adx is not None and (adx < 28 or (adx_slope is not None and adx_slope < -0.5)),
+            "adx_falling": c["adx_falling"],
+            "reversal_friendly": c["reversal_friendly"],
         }
 
 
@@ -281,7 +330,9 @@ def _confidence_from_rank(rank: int) -> str:
     return ["LOW", "MEDIUM", "HIGH"][max(0, min(2, int(rank)))]
 
 
-def apply_level2_policy(oteo_result: dict[str, Any], market_context: dict[str, Any], enabled: bool) -> dict[str, Any]:
+def apply_level2_policy(oteo_result: dict[str, Any], market_context: dict[str, Any], enabled: bool, policy_config: Level2PolicyConfig | None = None) -> dict[str, Any]:
+    policy = policy_config or Level2PolicyConfig()
+    
     result = dict(oteo_result)
     result["base_oteo_score"] = oteo_result["oteo_score"]
     result["base_confidence"] = oteo_result["confidence"]
@@ -315,66 +366,73 @@ def apply_level2_policy(oteo_result: dict[str, Any], market_context: dict[str, A
 
     if direction == "CALL":
         if support_alignment:
-            score_adjustment += 8.0
+            score_adjustment += policy.structure_boost
         if resistance_alignment:
-            score_adjustment -= 4.0
+            score_adjustment += policy.conflicting_structure_penalty
         if cci_state == "oversold":
-            score_adjustment += 4.0
+            score_adjustment += policy.cci_aligned_boost
             if isinstance(cci_slope, (int, float)) and cci_slope > 0:
-                score_adjustment += 2.0
+                score_adjustment += policy.cci_slope_bonus
         elif cci_state == "overbought":
-            score_adjustment -= 5.0
+            score_adjustment += policy.cci_opposing_penalty
         if trend_direction == "down":
-            if adx_regime == "strong" and not support_alignment:
-                suppress_reason = "strong_downtrend_without_support"
+            if adx_regime == "strong" and cci_state != "oversold":
+                suppress_reason = "strong_downtrend_without_cci_exhaustion"
             elif adx_regime == "strong":
-                score_adjustment -= 8.0
+                score_adjustment += policy.strong_trend_penalty
         elif trend_direction == "up" and adx_regime in {"moderate", "strong"}:
-            score_adjustment += 4.0
+            score_adjustment += policy.trend_aligned_boost
     else:
         if resistance_alignment:
-            score_adjustment += 8.0
+            score_adjustment += policy.structure_boost
         if support_alignment:
-            score_adjustment -= 4.0
+            score_adjustment += policy.conflicting_structure_penalty
         if cci_state == "overbought":
-            score_adjustment += 4.0
+            score_adjustment += policy.cci_aligned_boost
             if isinstance(cci_slope, (int, float)) and cci_slope < 0:
-                score_adjustment += 2.0
+                score_adjustment += policy.cci_slope_bonus
         elif cci_state == "oversold":
-            score_adjustment -= 5.0
+            score_adjustment += policy.cci_opposing_penalty
         if trend_direction == "up":
-            if adx_regime == "strong" and not resistance_alignment:
-                suppress_reason = "strong_uptrend_without_resistance"
+            if adx_regime == "strong" and cci_state != "overbought":
+                suppress_reason = "strong_uptrend_without_cci_exhaustion"
             elif adx_regime == "strong":
-                score_adjustment -= 8.0
+                score_adjustment += policy.strong_trend_penalty
         elif trend_direction == "down" and adx_regime in {"moderate", "strong"}:
-            score_adjustment += 4.0
+            score_adjustment += policy.trend_aligned_boost
+
+    if adx_regime == "unavailable":
+        score_adjustment += policy.unavailable_adx_penalty
+    elif adx_regime == "weak" and not (support_alignment or resistance_alignment):
+        score_adjustment += policy.weak_adx_unaligned_penalty
 
     if nearest_structure_atr is not None and nearest_structure_atr > 1.35:
-        score_adjustment -= 5.0
+        score_adjustment += policy.distant_structure_penalty
 
-    if isinstance(cci, (int, float)) and abs(cci) < 35:
-        score_adjustment -= 2.0
+    if isinstance(cci, (int, float)) and abs(cci) < policy.neutral_cci_band:
+        score_adjustment += policy.neutral_cci_penalty
 
     if adx_falling and (support_alignment or resistance_alignment):
-        score_adjustment += 3.0
+        score_adjustment += policy.adx_falling_structure_bonus
 
     adjusted_score = round(_clamp(float(oteo_result["oteo_score"]) + score_adjustment, 0.0, 100.0), 1)
     adjusted_rank = _confidence_rank(str(oteo_result["confidence"]))
 
-    if score_adjustment >= 7.0:
+    if score_adjustment >= policy.confidence_upgrade_threshold:
         adjusted_rank += 1
-    elif score_adjustment <= -7.0:
+    elif score_adjustment <= policy.confidence_downgrade_threshold:
         adjusted_rank -= 1
 
     adjusted_confidence = _confidence_from_rank(adjusted_rank)
-    adjusted_actionable = bool(oteo_result["actionable"]) or score_adjustment >= 8.0
+    adjusted_actionable = bool(oteo_result["actionable"]) or score_adjustment >= policy.structure_boost
 
-    if adjusted_score <= 55.0:
+    if adjusted_score <= policy.min_actionable_score:
         adjusted_confidence = "LOW"
         adjusted_actionable = False
-    elif adjusted_score >= 80.0 and adjusted_confidence == "MEDIUM":
-        adjusted_confidence = "HIGH"
+    elif adjusted_score >= policy.high_confidence_score and adjusted_confidence == "MEDIUM":
+        # Hard floor for HIGH confidence: base score must be strong enough to warrant it
+        if float(oteo_result.get("oteo_score", 0.0)) >= policy.high_confidence_base_floor:
+            adjusted_confidence = "HIGH"
 
     if suppress_reason:
         adjusted_confidence = "LOW"

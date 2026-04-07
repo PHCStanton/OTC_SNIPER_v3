@@ -37,17 +37,26 @@ export function useStreamConnection() {
   const selectedAsset = useAssetStore((state) => state.selectedAsset);
   const multiChartAssets = useAssetStore((state) => state.multiChartAssets);
   const clearAsset = useStreamStore((state) => state.clearAsset);
-  const updateTicks = useStreamStore((state) => state.updateTicks);
-  const updateSignal = useStreamStore((state) => state.updateSignal);
-  const updateManipulation = useStreamStore((state) => state.updateManipulation);
+  const batchUpdate = useStreamStore((state) => state.batchUpdate);
   const setWarmup = useStreamStore((state) => state.setWarmup);
   const setIsStreaming = useStreamStore((state) => state.setIsStreaming);
 
   const tickBufferRef = useRef({});
+  const pendingUpdatesRef = useRef({});
+  const rafIdRef = useRef(null);
   const previousSelectedAssetRef = useRef(null);
 
   useEffect(() => {
     const socket = initSocket();
+
+    const processBatch = () => {
+      const updates = pendingUpdatesRef.current;
+      if (Object.keys(updates).length > 0) {
+        batchUpdate(updates);
+        pendingUpdatesRef.current = {};
+      }
+      rafIdRef.current = null;
+    };
 
     const handleMarketData = (payload = {}) => {
       const asset = typeof payload.asset === 'string' ? payload.asset.trim() : '';
@@ -66,14 +75,13 @@ export function useStreamConnection() {
       }
 
       bufferMap[asset] = assetBuffer;
-      updateTicks(asset, [...assetBuffer]);
 
       const recommended = typeof payload.recommended === 'string' ? payload.recommended.trim().toLowerCase() : '';
       const normalizedDirection = recommended === 'call' || recommended === 'put' ? recommended : null;
       const score = Number(payload.oteo_score);
       const confidence = normalizeConfidence(payload.confidence, score);
 
-      updateSignal(asset, {
+      const signal = {
         direction: normalizedDirection,
         confidence,
         score: Number.isFinite(score) ? score : confidence,
@@ -83,18 +91,33 @@ export function useStreamConnection() {
         maturity: Number(payload.maturity ?? 0),
         slow_velocity: Number(payload.slow_velocity ?? 0),
         trend_aligned: Boolean(payload.trend_aligned),
-      });
+      };
 
-      const manipulation = payload.manipulation;
-      if (manipulation && typeof manipulation === 'object') {
-        const keys = Object.keys(manipulation);
-        updateManipulation(asset, {
+      const manipulationPayload = payload.manipulation;
+      let manipulation = null;
+      if (manipulationPayload && typeof manipulationPayload === 'object') {
+        const keys = Object.keys(manipulationPayload);
+        manipulation = {
           detected: keys.length > 0,
           type: keys[0] ?? null,
-          flags: manipulation,
-        });
+          flags: manipulationPayload,
+        };
       }
-      setIsStreaming(true);
+
+      // Queue for batch update
+      pendingUpdatesRef.current[asset] = {
+        ticks: [...assetBuffer],
+        signal,
+        manipulation,
+      };
+
+      if (!rafIdRef.current) {
+        rafIdRef.current = requestAnimationFrame(processBatch);
+      }
+
+      if (!useStreamStore.getState().isStreaming) {
+        setIsStreaming(true);
+      }
     };
 
     const handleWarmupStatus = (payload = {}) => {
@@ -116,8 +139,9 @@ export function useStreamConnection() {
       socket.off('market_data', handleMarketData);
       socket.off('warmup_status', handleWarmupStatus);
       socket.off('disconnect', handleDisconnect);
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
-  }, [setIsStreaming, setWarmup, updateManipulation, updateSignal, updateTicks]);
+  }, [setIsStreaming, setWarmup, batchUpdate]);
 
   useEffect(() => {
     if (!selectedAsset) return;

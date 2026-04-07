@@ -72,6 +72,10 @@ export default function App() {
         source: tradeSource,
       });
 
+      if (data?.asset && (outcome === 'win' || outcome === 'loss')) {
+        useRiskStore.getState().recordAssetTrade(data.asset, outcome);
+      }
+
       const pnlLabel = pnl > 0 ? `+$${pnl.toFixed(2)}` : pnl < 0 ? `-$${Math.abs(pnl).toFixed(2)}` : '$0.00';
       const prefix = tradeKind === 'ghost' ? 'GHOST ' : '';
       if (outcome === 'win') {
@@ -116,9 +120,13 @@ export default function App() {
       }
     };
 
-    void syncRuntimeConfig();
+    const timer = setTimeout(() => {
+      void syncRuntimeConfig();
+    }, 400);
+
     return () => {
       isMounted = false;
+      clearTimeout(timer);
     };
   }, [
     oteoLevel2Enabled,

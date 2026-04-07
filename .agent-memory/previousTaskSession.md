@@ -21,18 +21,13 @@ Level 3 is designed as the highest tier of intelligence, adding macro-regime cla
 - **Predictive Analytics**: Incorporates historical performance weighting to favor assets and regimes that have historically yielded higher win rates.
 
 ## Recent Work Completed
-- Level 2 implementation plan was thoroughly reviewed and reconciled against the live codebase.
-- The plan document was updated to correct stale status markers, document all identified issues, and reorder implementation so critical fixes happen before tuning.
-- CCI confirmation was verified as already implemented in the Level 2 market-context policy.
-- No code changes were made during this review; the team is now waiting for explicit approval before implementing fixes.
-- **Auto-Ghost Mode**: Fully implemented and validated to manage concurrent paper trades with cooldowns and manipulation blocking.
-- **Ghost Trade Storage Fix**: Corrected Pydantic Enum serialization for `TradeKind` so ghost trades correctly save to `app/data/ghost_trades/sessions`.
-- **Level 2 Market Context**: Support/Resistance proximity and ADX/DI trend strength implemented into the backend stream enrichment path.
-- **Broker Trade Placement Fix**: Moved blocking `session.buy()` broker calls into a thread executor to prevent FastAPI event loop freezes.
-- **Socket.IO Dev Path Fix**: Switched local development to connect directly to the backend Socket.IO server.
+- A 401-trade Auto-Ghost session was analyzed to identify logic gaps in the Level 2 policy and manipulation detector.
+- `Level2PolicyConfig` was created to replace all magic numbers in `apply_level2_policy`, bringing tighter bounds to S/R proximity (0.25 ATR), heavier penalties for neutral CCI (-6.0), and stricter thresholds for `HIGH` confidence.
+- `ManipulationDetector` logic was hardened: added a 15-second memory block for Push & Snap velocity spikes, and loosened Pinning to look at overall price range instead of strict 5-decimal matches.
+- `MarketContextEngine` was optimized with `_cached_context` to stop computing ADX, CCI, and Pivots on every single tick, reserving heavy math only for when candles close.
+- Auto-Ghost tasks were hardened to catch silent exceptions and automatically clear stale lock entries.
+- The Level 2 plan's Phase A (Critical Fixes) and Phase B (Tuning) have been officially executed and verified via smoke tests.
 
 ## Next Steps
-- Await explicit approval to proceed with implementation.
-- Phase A critical fixes should be addressed first: candle-close caching / indicator recomputation, Auto-Ghost task cleanup, and stale active-asset protection.
-- After the engine is stabilized, tune Level 2 thresholds using the cleaned Auto-Ghost data.
-- Continue building out Level 3 regime classification logic only after Level 2 is stable.
+- Run a new Auto-Ghost session to benchmark the new `Level2PolicyConfig` and hardened Manipulation Detector.
+- Begin outlining Level 3 Regime Classification logic now that the Level 2 foundation is stable and performant.

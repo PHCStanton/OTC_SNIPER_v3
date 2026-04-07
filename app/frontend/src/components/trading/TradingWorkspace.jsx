@@ -11,6 +11,8 @@ import TradePanel from './TradePanel.jsx';
 import TradeHistory from './TradeHistory.jsx';
 import MultiChartView from './MultiChartView.jsx';
 
+const EMPTY_TICKS = [];
+
 function MetricCard({ label, value, note, icon: Icon, tone = 'neutral', children }) {
   const toneClasses = {
     neutral: 'border-white/5 bg-[#212127] text-[#e3e6e7]',
@@ -40,11 +42,12 @@ function MetricCard({ label, value, note, icon: Icon, tone = 'neutral', children
 }
 
 export default function TradingWorkspace() {
-  const { selectedAsset } = useAssetStore();
-  const { ticks, signals, warmup } = useStreamStore();
-
-  const selectedTicks = ticks[selectedAsset] || [];
-  const selectedSignal = signals[selectedAsset] || null;
+  const selectedAsset = useAssetStore((s) => s.selectedAsset);
+  
+  // Selective subscriptions to avoid re-rendering the whole workspace on every tick of any asset
+  const selectedTicks = useStreamStore((s) => s.ticks[selectedAsset] ?? EMPTY_TICKS);
+  const selectedSignal = useStreamStore((s) => s.signals[selectedAsset] ?? null);
+  const isWarmup = useStreamStore((s) => Boolean(s.warmup[selectedAsset]));
 
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top,_rgba(255,237,109,0.10),_transparent_35%),linear-gradient(180deg,#0c0f0f_0%,#111414_54%,#171a1b_100%)] px-4 py-4 text-[#e3e6e7] lg:px-6 lg:py-6">
@@ -59,14 +62,14 @@ export default function TradingWorkspace() {
             asset={selectedAsset}
             ticks={selectedTicks}
             signal={selectedSignal}
-            warmup={Boolean(warmup[selectedAsset])}
+            warmup={isWarmup}
           />
           <MetricCard
             label="Signal confidence"
             icon={Activity}
-            tone={warmup[selectedAsset] ? 'neutral' : 'sky'}
+            tone={isWarmup ? 'neutral' : 'sky'}
           >
-            <OTEORing asset={selectedAsset} signal={selectedSignal} warmup={Boolean(warmup[selectedAsset])} />
+            <OTEORing asset={selectedAsset} signal={selectedSignal} warmup={isWarmup} />
           </MetricCard>
         </section>
 

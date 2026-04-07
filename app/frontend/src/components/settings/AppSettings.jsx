@@ -138,6 +138,8 @@ export default function AppSettings() {
     setShowManipulationAlerts,
     setShowSignalConfidence,
     setAutoFocusOnSignal,
+    miniChartConfig,
+    setMiniChartConfig,
   } = useSettingsStore();
 
   const [isGhostSelectorOpen, setIsGhostSelectorOpen] = useState(false);
@@ -378,24 +380,65 @@ export default function AppSettings() {
       </SectionCard>
 
       <SectionCard title="UI preferences" subtitle="Visual and attention settings stay separate from execution logic." icon={LayoutGrid}>
-        <ToggleRow
-          label="Show manipulation alerts"
-          description="Surface manipulation warnings in the workspace when signals are flagged."
-          checked={showManipulationAlerts}
-          onChange={setShowManipulationAlerts}
-        />
-        <ToggleRow
-          label="Show signal confidence"
-          description="Display the confidence ring and signal confidence readouts."
-          checked={showSignalConfidence}
-          onChange={setShowSignalConfidence}
-        />
+        <div className="grid gap-3 md:grid-cols-2">
+          <ToggleRow
+            label="Manipulation alerts"
+            checked={showManipulationAlerts}
+            onChange={setShowManipulationAlerts}
+          />
+          <ToggleRow
+            label="Signal confidence"
+            checked={showSignalConfidence}
+            onChange={setShowSignalConfidence}
+          />
+        </div>
         <ToggleRow
           label="Auto-focus on signal"
           description="Move attention to the active signal area when a new setup appears."
           checked={autoFocusOnSignal}
           onChange={setAutoFocusOnSignal}
         />
+
+        <div className="mt-4 border-t border-white/5 pt-4">
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 mb-3">Mini-Chart Modules</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setMiniChartConfig({ showSparkline: !miniChartConfig.showSparkline })}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showSparkline ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showSparkline ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
+              Sparkline
+            </button>
+            <button
+              onClick={() => setMiniChartConfig({ showGauge: !miniChartConfig.showGauge })}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showGauge ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showGauge ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
+              Gauges
+            </button>
+            <button
+              onClick={() => setMiniChartConfig({ showStats: !miniChartConfig.showStats })}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showStats ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showStats ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
+              Stats (W/L)
+            </button>
+            <button
+              onClick={() => setMiniChartConfig({ showRegime: !miniChartConfig.showRegime })}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showRegime ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showRegime ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
+              Regime
+            </button>
+            <button
+              onClick={() => setMiniChartConfig({ showManipulation: !miniChartConfig.showManipulation })}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showManipulation ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
+            >
+              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showManipulation ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
+              Pulse
+            </button>
+          </div>
+        </div>
 
         <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
           <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
