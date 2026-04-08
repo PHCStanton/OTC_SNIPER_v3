@@ -47,6 +47,7 @@ export default function TradingWorkspace() {
   // Selective subscriptions to avoid re-rendering the whole workspace on every tick of any asset
   const selectedTicks = useStreamStore((s) => s.ticks[selectedAsset] ?? EMPTY_TICKS);
   const selectedSignal = useStreamStore((s) => s.signals[selectedAsset] ?? null);
+  const selectedManipulation = useStreamStore((s) => s.manipulation?.[selectedAsset] ?? s.manipulations?.[selectedAsset] ?? null);
   const isWarmup = useStreamStore((s) => Boolean(s.warmup[selectedAsset]));
 
   return (
@@ -69,7 +70,12 @@ export default function TradingWorkspace() {
             icon={Activity}
             tone={isWarmup ? 'neutral' : 'sky'}
           >
-            <OTEORing asset={selectedAsset} signal={selectedSignal} warmup={isWarmup} />
+            <OTEORing
+              asset={selectedAsset}
+              signal={selectedSignal}
+              manipulation={selectedManipulation}
+              warmup={isWarmup}
+            />
           </MetricCard>
         </section>
 

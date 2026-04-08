@@ -3,6 +3,8 @@ import { Layers3, Target, Trophy, Zap, Wallet, BarChart3, CircleDollarSign, Play
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useAssetStore } from '../../stores/useAssetStore.js';
+import { useTradingStore } from '../../stores/useTradingStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import SessionControls from './SessionControls.jsx';
 import TradeRunHistory from './TradeRunHistory.jsx';
@@ -45,6 +47,9 @@ function SummaryChip({ label, value }) {
 export default function SessionRiskPanel() {
   const { balance, accountType } = useOpsStore();
   const settings = useSettingsStore();
+  const selectedAsset = useAssetStore((s) => s.selectedAsset);
+  const executeTrade = useTradingStore((s) => s.executeTrade);
+  const setDirection = useTradingStore((s) => s.setDirection);
   const {
     startBalance,
     currentBalance,
@@ -202,8 +207,30 @@ export default function SessionRiskPanel() {
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Balance" value={`$${currentBalance.toFixed(2)}`} sub={`Peak $${peakBalance.toFixed(2)}`} icon={CircleDollarSign} tone="neutral" />
-          <StatCard label="To Target" value={`$${Math.max(0, metrics.takeProfitTarget - currentBalance).toFixed(2)}`} sub={`Target $${metrics.takeProfitTarget.toFixed(2)}`} icon={Target} tone="emerald" />
-          <StatCard label="To Limit" value={`$${Math.max(0, currentBalance - metrics.maxDrawdownLimit).toFixed(2)}`} sub={`Limit $${metrics.maxDrawdownLimit.toFixed(2)}`} icon={Layers3} tone="rose" />
+          <ActionStatCard 
+            label="To Target" 
+            value={`$${Math.max(0, metrics.takeProfitTarget - currentBalance).toFixed(2)}`} 
+            sub={`Target $${metrics.takeProfitTarget.toFixed(2)}`} 
+            icon={Target} 
+            tone="emerald" 
+            actionLabel="CALL"
+            onAction={() => {
+              setDirection('call');
+              executeTrade('pocket_option', selectedAsset);
+            }}
+          />
+          <ActionStatCard 
+            label="To Limit" 
+            value={`$${Math.max(0, currentBalance - metrics.maxDrawdownLimit).toFixed(2)}`} 
+            sub={`Limit $${metrics.maxDrawdownLimit.toFixed(2)}`} 
+            icon={Layers3} 
+            tone="rose"
+            actionLabel="PUT"
+            onAction={() => {
+              setDirection('put');
+              executeTrade('pocket_option', selectedAsset);
+            }}
+          />
           <StatCard label="Min Win Rate" value={`${metrics.minimumWinRate.toFixed(1)}%`} sub={`Risk/trade $${metrics.riskPerTrade.toFixed(2)}`} icon={Trophy} tone="amber" />
         </section>
 
@@ -237,5 +264,40 @@ export default function SessionRiskPanel() {
         </section>
       </div>
     </div>
+  );
+}
+
+function ActionStatCard({ label, value, sub, icon: Icon, tone = 'neutral', actionLabel, onAction }) {
+  const toneClasses = {
+    neutral: 'border-white/5 bg-[#10151a] text-[#e3e6e7] hover:bg-white/5',
+    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20 hover:border-emerald-400/40',
+    amber: 'border-[#f5df19]/20 bg-[#f5df19]/10 text-[#f5df19] hover:bg-[#f5df19]/20',
+    rose: 'border-red-400/20 bg-red-400/10 text-red-400 hover:bg-red-400/20 hover:border-red-400/40',
+  };
+
+  return (
+    <button onClick={onAction} className={`flex text-left flex-col justify-center rounded-2xl border p-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition-colors duration-200 cursor-pointer ${toneClasses[tone]}`}>
+      <div className="flex items-start justify-between gap-3 w-full">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-gray-500">{label}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xl font-black tracking-tight text-[#e3e6e7]">{value}</p>
+            {actionLabel && (
+              <span className={`text-[11px] px-1.5 py-0.5 rounded-md font-black tracking-widest ${
+                tone === 'emerald' ? 'bg-emerald-400/20 text-emerald-400' : 'bg-red-400/20 text-red-400'
+              }`}>
+                {actionLabel}
+              </span>
+            )}
+          </div>
+          {sub && <p className="mt-1 text-[11px] font-medium text-gray-500">{sub}</p>}
+        </div>
+        {Icon && (
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b0f13] text-[#f5df19] shadow-sm">
+            <Icon size={16} />
+          </div>
+        )}
+      </div>
+    </button>
   );
 }

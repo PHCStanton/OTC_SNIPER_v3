@@ -33,6 +33,7 @@ class StreamingService:
         self.level3_enabled = False
         self.trade_service = TradeService(repository=get_data_repository(), sio=sio_server)
         self.auto_ghost = AutoGhostService(self.trade_service)
+        self.trade_service.set_auto_ghost(self.auto_ghost)
         
         self._oteo_engines: Dict[str, OTEO] = {}
         self._market_context_engines: Dict[str, MarketContextEngine] = {}

@@ -30,8 +30,12 @@ export function extractNumericSeries(ticks) {
 export function buildChartPoints(series, width = 1000, height = 360, padding = 28) {
   if (!Array.isArray(series) || series.length === 0) return [];
 
-  const min = Math.min(...series);
-  const max = Math.max(...series);
+  let min = series[0];
+  let max = series[0];
+  for (let i = 1; i < series.length; i++) {
+    if (series[i] < min) min = series[i];
+    if (series[i] > max) max = series[i];
+  }
   const range = max - min || 1;
   const usableWidth = Math.max(1, width - padding * 2);
   const usableHeight = Math.max(1, height - padding * 2);

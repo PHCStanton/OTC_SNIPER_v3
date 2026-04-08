@@ -20,8 +20,15 @@ export const SETTINGS_DEFAULTS = {
   autoGhostExpirationSeconds: 60,
   autoGhostMaxConcurrentTrades: 3,
   autoGhostPerAssetCooldownSeconds: 30,
+  autoGhostMaxSessionTrades: 100,
+  autoGhostMaxDrawdownAmount: 100,
+  autoGhostDrawdownCooldownSeconds: 300,
   ghostWidgetPosition: { x: 0, y: 0 },
   ghostIcon: 'drift.gif',
+
+  // Trade Markers
+  showGhostEntryMarkers: true,
+  showLiveEntryMarkers: true,
 
   // Session risk defaults
   initialBalance: 1000,
@@ -99,10 +106,16 @@ export function validateSettings(input = {}) {
     autoGhostExpirationSeconds: toNumber(input.autoGhostExpirationSeconds, SETTINGS_DEFAULTS.autoGhostExpirationSeconds, { min: 5, max: 3600, integer: true }),
     autoGhostMaxConcurrentTrades: toNumber(input.autoGhostMaxConcurrentTrades, SETTINGS_DEFAULTS.autoGhostMaxConcurrentTrades, { min: 1, max: 20, integer: true }),
     autoGhostPerAssetCooldownSeconds: toNumber(input.autoGhostPerAssetCooldownSeconds, SETTINGS_DEFAULTS.autoGhostPerAssetCooldownSeconds, { min: 0, max: 3600, integer: true }),
+    autoGhostMaxSessionTrades: toNumber(input.autoGhostMaxSessionTrades, SETTINGS_DEFAULTS.autoGhostMaxSessionTrades, { min: 1, max: 10000, integer: true }),
+    autoGhostMaxDrawdownAmount: toNumber(input.autoGhostMaxDrawdownAmount, SETTINGS_DEFAULTS.autoGhostMaxDrawdownAmount, { min: 0, max: 100000, integer: false }),
+    autoGhostDrawdownCooldownSeconds: toNumber(input.autoGhostDrawdownCooldownSeconds, SETTINGS_DEFAULTS.autoGhostDrawdownCooldownSeconds, { min: 0, max: 36000, integer: true }),
     ghostWidgetPosition: toPosition(input.ghostWidgetPosition, SETTINGS_DEFAULTS.ghostWidgetPosition),
     ghostIcon: typeof input.ghostIcon === 'string' && input.ghostIcon.trim()
       ? input.ghostIcon.trim()
       : SETTINGS_DEFAULTS.ghostIcon,
+      
+    showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
+    showLiveEntryMarkers: toBoolean(input.showLiveEntryMarkers, SETTINGS_DEFAULTS.showLiveEntryMarkers),
 
     initialBalance: toNumber(input.initialBalance, SETTINGS_DEFAULTS.initialBalance, { min: 0, max: 100000000, integer: false }),
     payoutPercentage: toNumber(input.payoutPercentage, SETTINGS_DEFAULTS.payoutPercentage, { min: 0, max: 1000, integer: false }),
@@ -179,8 +192,13 @@ export const useSettingsStore = create()(
       setAutoGhostExpirationSeconds: (val) => commitSettingsPatch(set, { autoGhostExpirationSeconds: val }),
       setAutoGhostMaxConcurrentTrades: (val) => commitSettingsPatch(set, { autoGhostMaxConcurrentTrades: val }),
       setAutoGhostPerAssetCooldownSeconds: (val) => commitSettingsPatch(set, { autoGhostPerAssetCooldownSeconds: val }),
+      setAutoGhostMaxSessionTrades: (val) => commitSettingsPatch(set, { autoGhostMaxSessionTrades: val }),
+      setAutoGhostMaxDrawdownAmount: (val) => commitSettingsPatch(set, { autoGhostMaxDrawdownAmount: val }),
+      setAutoGhostDrawdownCooldownSeconds: (val) => commitSettingsPatch(set, { autoGhostDrawdownCooldownSeconds: val }),
       setGhostWidgetPosition: (val) => commitSettingsPatch(set, { ghostWidgetPosition: val }),
       setGhostIcon: (val) => commitSettingsPatch(set, { ghostIcon: val }),
+      setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),
+      setShowLiveEntryMarkers: (val) => commitSettingsPatch(set, { showLiveEntryMarkers: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),
       setPayoutPercentage: (val) => commitSettingsPatch(set, { payoutPercentage: val }),
       setRiskPercentPerTrade: (val) => commitSettingsPatch(set, { riskPercentPerTrade: val }),

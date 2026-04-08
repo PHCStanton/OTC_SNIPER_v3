@@ -22,7 +22,7 @@ import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
-import logoImg from '../../../assets/LOGO_GOLD_BG_REMOVED.png';
+import logoImg from '../../../assets/LOGO-rm_bg-.png';
 
 export default function TopBar() {
   const { chromeStatus, sessionStatus, balance, accountType, setChromeStatus } = useOpsStore();
@@ -68,7 +68,7 @@ export default function TopBar() {
       <header className="flex h-16 items-center justify-between border-b border-white/10 bg-[#1a1717] px-6 shadow-2xl shadow-black/30 shrink-0 z-50">
         {/* ── Left: Logo + Connections ── */}
         <div className="flex items-center gap-1">
-          <img src={logoImg} alt="OTC SNIPER" className="h-16 w-auto select-none" draggable={false} />
+          <img src={logoImg} alt="OTC SNIPER" className="h-35 w-auto select-none" draggable={false} />
           <div className="flex items-center gap-2 ml-4">
             <button
               onClick={handleChromeToggle}
@@ -132,7 +132,7 @@ export default function TopBar() {
               <TrendingUp size={13} />
               Trading
             </button>
-            
+
             <button
               onClick={() => setActiveView('ai')}
               title="AI Assistant"

@@ -2,7 +2,9 @@
  * Sparkline — live tick chart panel used in the Phase 5 trading workspace.
  */
 import { useMemo } from 'react';
-import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Layers3 } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Layers3, Ghost, User } from 'lucide-react';
+import { useStreamStore } from '../../stores/useStreamStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import {
   buildChartPoints,
   extractNumericSeries,
@@ -15,16 +17,52 @@ import {
   pointsToPath,
 } from './chartUtils.js';
 
+// Stable fallback — must NOT be defined inline (new [] ref each render = infinite loop)
+const EMPTY_MARKERS = Object.freeze([]);
+
 export default function Sparkline({ asset, ticks, signal, warmup = false, className = '' }) {
   const series = useMemo(() => extractNumericSeries(ticks), [ticks]);
   const points = useMemo(() => buildChartPoints(series), [series]);
   const path = useMemo(() => pointsToPath(points), [points]);
-  const latest = series.length > 0 ? series[series.length - 1] : null;
-  const trend = getTrendPercent(series);
-  const signalConfidence = getSignalConfidence(signal);
-  const signalDirection = getSignalDirection(signal);
-  const signalLabel = getSignalLabel(signal);
-  const trendUp = trend >= 0;
+  const { latest, trend, trendUp, signalConfidence, signalDirection, signalLabel } = useMemo(() => {
+    const t = getTrendPercent(series);
+    return {
+      latest: series.length > 0 ? series[series.length - 1] : null,
+      trend: t,
+      trendUp: t >= 0,
+      signalConfidence: getSignalConfidence(signal),
+      signalDirection: getSignalDirection(signal),
+      signalLabel: getSignalLabel(signal),
+    };
+  }, [series, signal]);
+
+  const showGhostMarkers = useSettingsStore((s) => s.showGhostEntryMarkers);
+  const showLiveMarkers = useSettingsStore((s) => s.showLiveEntryMarkers);
+  // Setters are stable singletons — read from getState() inside handlers to avoid render loops
+  const handleToggleGhostMarkers = () =>
+    useSettingsStore.getState().setShowGhostEntryMarkers(!useSettingsStore.getState().showGhostEntryMarkers);
+  const handleToggleLiveMarkers = () =>
+    useSettingsStore.getState().setShowLiveEntryMarkers(!useSettingsStore.getState().showLiveEntryMarkers);
+  const allMarkers = useStreamStore((s) => s.tradeMarkers[asset] ?? EMPTY_MARKERS);
+
+  const activeMarkers = useMemo(() => {
+    return allMarkers.filter(m => (m.kind === 'ghost' && showGhostMarkers) || (m.kind !== 'ghost' && showLiveMarkers));
+  }, [allMarkers, showGhostMarkers, showLiveMarkers]);
+
+  const priceToY = useMemo(() => {
+    if (series.length === 0) return () => 0;
+    let min = series[0];
+    let max = series[0];
+    for (let i = 1; i < series.length; i++) {
+        if (series[i] < min) min = series[i];
+        if (series[i] > max) max = series[i];
+    }
+    const range = max - min || 1;
+    const padding = 28;
+    const height = 360;
+    const usableHeight = Math.max(1, height - padding * 2);
+    return (price) => padding + usableHeight - ((price - min) / range) * usableHeight;
+  }, [series]);
 
   return (
     <section className={`relative overflow-hidden rounded-xl border border-white/5 bg-[#212127] shadow-2xl shadow-black/30 backdrop-blur ${className}`}>
@@ -45,15 +83,16 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
         </div>
 
         <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">
-          <span className="rounded-full border border-white/5 bg-[#1a1717] px-2.5 py-1 text-[#e3e6e7]">
-            30s
-          </span>
-          <span className="rounded-full border border-white/5 bg-[#1a1717] px-2.5 py-1 text-[#e3e6e7]">
-            1m
-          </span>
-          <span className="rounded-full border border-white/5 bg-[#f5df19] px-2.5 py-1 text-[#615700]">
-            5m
-          </span>
+          <button 
+            onClick={handleToggleGhostMarkers}
+            className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showGhostMarkers ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
+            <Ghost size={11} /> Markers
+          </button>
+          <button 
+            onClick={handleToggleLiveMarkers}
+            className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showLiveMarkers ? 'border-sky-400/30 bg-sky-400/10 text-sky-400' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
+            <User size={11} /> Markers
+          </button>
         </div>
       </div>
 
@@ -73,7 +112,7 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
         <div className="relative min-h-[390px] px-4 pb-4 pt-10">
           <div className="absolute left-4 top-4 z-10 rounded-2xl border border-white/10 bg-[#1a1717]/90 px-3 py-2 shadow-2xl backdrop-blur-md">
             <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${trendUp ? 'bg-emerald-400' : 'bg-[#fe7453]'}`} />
+              <span className={`h-2.5 w-2.5 rounded-full ${signalDirection === 'call' ? 'bg-emerald-400' : signalDirection === 'put' ? 'bg-[#fe7453]' : 'bg-gray-500'}`} />
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gray-500">Signal</p>
                 <p className="text-xs font-bold text-[#e3e6e7]">{signalLabel}</p>
@@ -129,6 +168,28 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
                 className="drop-shadow-[0_0_8px_rgba(255,237,109,0.8)]"
               />
             )}
+
+            {activeMarkers.map(m => {
+              const y = priceToY(m.entryPrice);
+              const isWin = m.outcome === 'win';
+              const isLoss = m.outcome === 'loss';
+              const color = isWin ? '#34d399' : isLoss ? '#f87171' : '#fbbf24'; // emerald-400, red-400, amber-400
+              const isGhost = m.kind === 'ghost';
+              
+              return (
+                <g key={m.tradeId}>
+                  <line x1="0" x2="1000" y1={y} y2={y} stroke={color} strokeWidth="1.5" strokeDasharray="6 6" strokeOpacity={isWin || isLoss ? "0.4" : "0.8"} />
+                  <text x="12" y={y - 8} fill={color} fontSize="12" fontWeight="bold">
+                    {isGhost ? '👻' : '👤'} {(m.direction ?? 'N/A').toUpperCase()}
+                  </text>
+                  {m.profit != null && (
+                    <text x="988" y={y - 8} textAnchor="end" fill={color} fontSize="12" fontWeight="bold">
+                       {m.profit > 0 ? '+' : ''}${Math.abs(m.profit).toFixed(2)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
           </svg>
 
           {latest !== null && (

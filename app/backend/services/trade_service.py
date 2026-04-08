@@ -19,8 +19,12 @@ class TradeService:
     def __init__(self, repository: DataRepository, sio=None):
         self.repository = repository
         self.sio = sio
+        self._auto_ghost = None
         settings = get_settings()
         self.tick_logger = TickLogger(settings.data_dir / "tick_logs")
+
+    def set_auto_ghost(self, auto_ghost) -> None:
+        self._auto_ghost = auto_ghost
 
     def _resolve_trade_kind(self, request: TradeExecutionRequest) -> TradeKind:
         trade_mode = str(getattr(request, "trade_mode", "live") or "live").strip().lower()
@@ -72,6 +76,24 @@ class TradeService:
             },
         )
 
+    async def _emit_trade_entry(self, trade: TradeRecord) -> None:
+        if not self.sio:
+            return
+        await self.sio.emit(
+            "trade_entry",
+            {
+                "trade_id": trade.trade_id,
+                "asset": trade.asset,
+                "direction": trade.direction,
+                "amount": trade.amount,
+                "kind": trade.kind.value,
+                "entry_price": trade.entry_price,
+                "entry_time": trade.entry_time,
+                "expiration_seconds": trade.expiration_seconds,
+                "session_id": trade.session_id,
+            },
+        )
+
     async def execute_trade(self, broker_type: BrokerType, request: TradeExecutionRequest) -> Dict[str, Any]:
         """Execute a trade securely mapping it to the broker adapter"""
         adapter = BrokerRegistry.get_adapter(broker_type, account_key=request.account_key)
@@ -106,6 +128,7 @@ class TradeService:
                 simulated_amount=request.amount,
             )
             await self.repository.write_trade(trade_record)
+            await self._emit_trade_entry(trade_record)
             asyncio.create_task(self._track_ghost_trade_outcome(trade_record, request.expiration))
             return {
                 "success": True,
@@ -167,6 +190,7 @@ class TradeService:
             logger.warning("Session ID is missing. Trade will be logged under 'unknown' session.")
 
         await self.repository.write_trade(trade_record)
+        await self._emit_trade_entry(trade_record)
 
         # Launch background task to check win
         asyncio.create_task(self._track_trade_outcome(trade_record, adapter, request.expiration))
@@ -211,6 +235,10 @@ class TradeService:
 
             await self.repository.update_trade(trade)
             await self._emit_trade_result(trade)
+            
+            if self._auto_ghost:
+                self._auto_ghost.report_outcome(trade.trade_id, trade.outcome, trade.profit or 0.0)
+                
             logger.info(
                 "Ghost trade %s tracked. Outcome: %s, Profit: %s",
                 trade.trade_id, trade.outcome, trade.profit

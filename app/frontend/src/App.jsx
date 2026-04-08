@@ -8,6 +8,7 @@ import { useRiskStore } from './stores/useRiskStore.js';
 import { useSettingsStore } from './stores/useSettingsStore.js';
 import { useToastStore } from './stores/useToastStore.js';
 import { useTradingStore } from './stores/useTradingStore.js';
+import { useStreamStore } from './stores/useStreamStore.js';
 import MainLayout from './components/layout/MainLayout.jsx';
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
 import ComponentsPage from './components/dev/ComponentsPage.jsx';
@@ -24,6 +25,9 @@ export default function App() {
   const autoGhostExpirationSeconds = useSettingsStore((s) => s.autoGhostExpirationSeconds);
   const autoGhostMaxConcurrentTrades = useSettingsStore((s) => s.autoGhostMaxConcurrentTrades);
   const autoGhostPerAssetCooldownSeconds = useSettingsStore((s) => s.autoGhostPerAssetCooldownSeconds);
+  const autoGhostMaxSessionTrades = useSettingsStore((s) => s.autoGhostMaxSessionTrades);
+  const autoGhostMaxDrawdownAmount = useSettingsStore((s) => s.autoGhostMaxDrawdownAmount);
+  const autoGhostDrawdownCooldownSeconds = useSettingsStore((s) => s.autoGhostDrawdownCooldownSeconds);
 
   useStreamConnection();
 
@@ -41,6 +45,21 @@ export default function App() {
         if (data.session.balance != null) setBalance(data.session.balance);
         if (data.session.account_type != null) setAccountType(data.session.account_type);
       }
+    });
+
+    socket.on('trade_entry', (data) => {
+      useStreamStore.getState().addTradeMarker({
+        tradeId: data.trade_id,
+        asset: data.asset,
+        direction: data.direction,
+        kind: data.kind,
+        entryPrice: data.entry_price,
+        entryTime: data.entry_time,
+        expirationSeconds: data.expiration_seconds,
+        amount: data.amount,
+        outcome: null,
+        profit: null,
+      });
     });
 
     socket.on('trade_result', (data) => {
@@ -75,6 +94,14 @@ export default function App() {
       if (data?.asset && (outcome === 'win' || outcome === 'loss')) {
         useRiskStore.getState().recordAssetTrade(data.asset, outcome);
       }
+      
+      if (data?.trade_id) {
+        useStreamStore.getState().updateTradeMarkerOutcome(
+          data.trade_id,
+          outcome,
+          pnl
+        );
+      }
 
       const pnlLabel = pnl > 0 ? `+$${pnl.toFixed(2)}` : pnl < 0 ? `-$${Math.abs(pnl).toFixed(2)}` : '$0.00';
       const prefix = tradeKind === 'ghost' ? 'GHOST ' : '';
@@ -95,6 +122,7 @@ export default function App() {
     return () => {
       clearInterval(interval);
       socket.off('status_update');
+      socket.off('trade_entry');
       socket.off('trade_result');
     };
   }, [setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType]);
@@ -112,6 +140,9 @@ export default function App() {
           auto_ghost_expiration_seconds: autoGhostExpirationSeconds,
           auto_ghost_max_concurrent_trades: autoGhostMaxConcurrentTrades,
           auto_ghost_per_asset_cooldown_seconds: autoGhostPerAssetCooldownSeconds,
+          auto_ghost_max_session_trades: autoGhostMaxSessionTrades,
+          auto_ghost_max_drawdown_amount: autoGhostMaxDrawdownAmount,
+          auto_ghost_drawdown_cooldown_seconds: autoGhostDrawdownCooldownSeconds,
         });
       } catch (err) {
         if (isMounted) {
@@ -136,6 +167,9 @@ export default function App() {
     autoGhostExpirationSeconds,
     autoGhostMaxConcurrentTrades,
     autoGhostPerAssetCooldownSeconds,
+    autoGhostMaxSessionTrades,
+    autoGhostMaxDrawdownAmount,
+    autoGhostDrawdownCooldownSeconds,
   ]);
 
   return (

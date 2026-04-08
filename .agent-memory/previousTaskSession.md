@@ -3,6 +3,7 @@
 ## Summary
 - This file captures the most recent task handoff and the reasoning behind the last implemented fixes.
 - It also includes a compiled summary of the implemented features for OTEO Level 1 and the planned features for OTEO Level 3.
+- The most recent frontend session focused on explainability, modular multi-chart UX, and selector hardening after the new card/gauge system was introduced.
 
 ## OTEO Implementation Summary
 ### Level 1 (Baseline Core) - [Fully Implemented]
@@ -27,7 +28,16 @@ Level 3 is designed as the highest tier of intelligence, adding macro-regime cla
 - `MarketContextEngine` was optimized with `_cached_context` to stop computing ADX, CCI, and Pivots on every single tick, reserving heavy math only for when candles close.
 - Auto-Ghost tasks were hardened to catch silent exceptions and automatically clear stale lock entries.
 - The Level 2 plan's Phase A (Critical Fixes) and Phase B (Tuning) have been officially executed and verified via smoke tests.
+- `useSettingsStore.js` was extended with `miniChartConfig`, enabling users to toggle mini-chart modules on and off.
+- `useRiskStore.js` and `App.jsx` were updated so trade results now maintain per-asset session W/L stats for mini-chart cards.
+- `MultiChartView.jsx` was upgraded with star/favorite actions, double-click focus selection, larger gauges, blue neutral styling, regime/manipulation overlays, and safe Zustand selectors to prevent crashes when optional store branches are absent.
+- `useStreamConnection.js` now forwards Level 2 and `market_context` details into the frontend signal model so the UI can explain why CALL/PUT/NEUTRAL is being shown.
+- `OTEORing.jsx` and `TradingWorkspace.jsx` now display active manipulation labels and confluence badges, including pressure, z-score, trend alignment, structure alignment, maturity, and Level 2 adjustment context.
+- Frontend validation is currently green and the latest `npm run build` passed successfully after the gauge and mini-chart enhancements.
+- `Sparkline.jsx` crash bugs related to missing `direction` parameters were patched natively alongside a safeguard logic iteration for UI profit `NaN` values resulting from generic store definitions.
+- `Math.max/min(...series)` spread operator bounding logic within `Sparkline.jsx` and `chartUtils.js` were migrated to strict traditional loop bindings to defend against stack-overflows common with array limit injections under high data payloads.
 
 ## Next Steps
 - Run a new Auto-Ghost session to benchmark the new `Level2PolicyConfig` and hardened Manipulation Detector.
 - Begin outlining Level 3 Regime Classification logic now that the Level 2 foundation is stable and performant.
+- Observe the new explainability UI in live conditions and decide whether more backend confluence metadata should be emitted for even richer badges.

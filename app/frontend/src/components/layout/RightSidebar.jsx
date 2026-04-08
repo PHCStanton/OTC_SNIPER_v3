@@ -2,11 +2,13 @@
  * RightSidebar — collapsible info/risk panel.
  * Shows session risk summary and AI assistant tabs when expanded.
  */
-import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Activity, Target } from 'lucide-react';
 import { useMemo } from 'react';
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Activity, Target } from 'lucide-react';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
+import { useAssetStore } from '../../stores/useAssetStore.js';
+import { useTradingStore } from '../../stores/useTradingStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import VerticalRiskChart from '../risk/VerticalRiskChart.jsx';
 
@@ -14,6 +16,9 @@ export default function RightSidebar() {
   const { rightSidebarOpen, toggleRightSidebar } = useLayoutStore();
   const { sessionPnl, winRate, totalTrades, startBalance, currentBalance } = useRiskStore();
   const settings = useSettingsStore();
+  const selectedAsset = useAssetStore((s) => s.selectedAsset);
+  const executeTrade = useTradingStore((s) => s.executeTrade);
+  const setDirection = useTradingStore((s) => s.setDirection);
 
   const pnlPositive = sessionPnl > 0;
   const pnlNegative = sessionPnl < 0;
@@ -74,8 +79,28 @@ export default function RightSidebar() {
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <MetricCard label="To Target" value={`$${Math.max(0, metrics.takeProfitTarget - currentBalance).toFixed(2)}`} tone="emerald" icon={Target} />
-            <MetricCard label="To Limit" value={`$${Math.max(0, currentBalance - metrics.maxDrawdownLimit).toFixed(2)}`} tone="rose" icon={Target} />
+            <ActionMetricCard 
+              label="To Target" 
+              value={`$${Math.max(0, metrics.takeProfitTarget - currentBalance).toFixed(2)}`} 
+              tone="emerald" 
+              icon={Target}
+              actionLabel="CALL"
+              onAction={() => {
+                setDirection('call');
+                executeTrade('pocket_option', selectedAsset);
+              }}
+            />
+            <ActionMetricCard 
+              label="To Limit" 
+              value={`$${Math.max(0, currentBalance - metrics.maxDrawdownLimit).toFixed(2)}`} 
+              tone="rose" 
+              icon={Target}
+              actionLabel="PUT"
+              onAction={() => {
+                setDirection('put');
+                executeTrade('pocket_option', selectedAsset);
+              }}
+            />
           </div>
 
           <div className="mt-2 mb-2 flex-1 min-h-[300px] flex flex-col">
@@ -128,5 +153,34 @@ function MetricCard({ label, value, tone = 'slate', icon: Icon }) {
       </div>
       <div className="mt-1 text-sm font-bold tracking-tight">{value}</div>
     </div>
+  );
+}
+
+function ActionMetricCard({ label, value, tone = 'slate', icon: Icon, actionLabel, onAction }) {
+  const toneClasses = {
+    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20 hover:border-emerald-400/40',
+    rose: 'border-red-400/20 bg-red-400/10 text-red-400 hover:bg-red-400/20 hover:border-red-400/40',
+    slate: 'border-white/5 bg-white/5 text-[#e3e6e7] hover:bg-white/10',
+  };
+
+  return (
+    <button onClick={onAction} className={`flex flex-col text-left rounded-xl border px-3 py-2 transition-colors duration-200 cursor-pointer ${toneClasses[tone]}`}>
+      <div className="flex items-center justify-between w-full text-[10px] uppercase tracking-[0.18em]">
+        <div className="flex items-center gap-1.5 opacity-70">
+          {Icon && <Icon size={10} />}
+          {label}
+        </div>
+      </div>
+      <div className="flex items-end justify-between w-full mt-1">
+        <span className="text-sm font-bold tracking-tight">{value}</span>
+        {actionLabel && (
+          <span className={`text-[10px] font-black tracking-widest ${
+            tone === 'emerald' ? 'text-emerald-400' : 'text-red-400'
+          }`}>
+            {actionLabel}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }

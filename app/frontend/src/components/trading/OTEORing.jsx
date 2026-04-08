@@ -1,65 +1,118 @@
 /**
  * OTEORing — circular confidence indicator used in the Phase 5 trading workspace.
  */
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { formatAssetLabel, getSignalConfidence, getSignalDirection, getSignalLabel } from './chartUtils.js';
 
-export default function OTEORing({ asset, signal, warmup = false }) {
+function toTitleCase(value) {
+  return String(value ?? '')
+    .replaceAll('_', ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getManipulationLabels(manipulation) {
+  if (!manipulation || typeof manipulation !== 'object') return [];
+
+  const flags = manipulation.flags && typeof manipulation.flags === 'object'
+    ? manipulation.flags
+    : manipulation;
+
+  const labels = Object.entries(flags)
+    .filter(([, active]) => Boolean(active))
+    .map(([key]) => {
+      if (key === 'push_snap') return 'Push & Snap';
+      if (key === 'pinning') return 'Pinning';
+      return toTitleCase(key);
+    });
+
+  if (labels.length > 0) return labels;
+  if (manipulation.type) return [toTitleCase(manipulation.type)];
+  return [];
+}
+
+function getConfluenceItems(signal, direction) {
+  if (!signal || typeof signal !== 'object') return [];
+
+  const marketContext = signal.marketContext && typeof signal.marketContext === 'object'
+    ? signal.marketContext
+    : {};
+
+  const items = [];
+  const velocity = Number(signal.velocity ?? 0);
+  const pressurePct = Number(signal.pressure_pct ?? 0);
+  const zScore = Number(signal.z_score ?? 0);
+  const maturity = Number(signal.maturity ?? 0);
+  const level2Adjustment = Number(signal.level2_score_adjustment ?? 0);
+
+  if (direction === 'call' && velocity < 0) items.push('Sell Exhaustion');
+  if (direction === 'put' && velocity > 0) items.push('Buy Exhaustion');
+  if (Math.abs(zScore) >= 0.35) items.push(`Z-Score ${zScore > 0 ? 'High' : 'Low'}`);
+  if (Math.abs(pressurePct) >= 12) items.push(`Pressure ${pressurePct > 0 ? 'Up' : 'Down'}`);
+  if (signal.trend_aligned) items.push('Trend Aligned');
+  if (direction === 'call' && marketContext.support_alignment) items.push('Support Align');
+  if (direction === 'put' && marketContext.resistance_alignment) items.push('Resistance Align');
+  if (marketContext.reversal_friendly) items.push('Reversal Friendly');
+  if (marketContext.cci_state) items.push(`CCI ${toTitleCase(marketContext.cci_state)}`);
+  if (marketContext.adx_regime) items.push(`ADX ${toTitleCase(marketContext.adx_regime)}`);
+  if (maturity >= 0.5) items.push(`Maturity ${Math.round(maturity * 100)}%`);
+  if (signal.level2_enabled && level2Adjustment !== 0) items.push(`L2 ${level2Adjustment > 0 ? '+' : ''}${level2Adjustment.toFixed(1)}`);
+  if (signal.actionable) items.push('Actionable');
+
+  return items.slice(0, 8);
+}
+
+export default function OTEORing({ asset, signal, manipulation = null, warmup = false }) {
   const confidence = warmup ? 0 : getSignalConfidence(signal);
   const direction = getSignalDirection(signal);
   const label = getSignalLabel(signal);
-
-  // Math for a large, crisp circle
   const size = 300;
   const strokeWidth = 24;
   const center = size / 2;
   const radius = center - strokeWidth;
   const circumference = 2 * Math.PI * radius;
-  // Calculate offset. We leave a small gap at the bottom for aesthetics (like in the screenshot)
-  // Let's say the arc covers 85% of the circle, so there's a 15% gap at the bottom.
-  // 15% of circumference is the gap. 
   const arcLength = 0.85 * circumference;
   const gapLength = circumference - arcLength;
-  
-  // We want the ring to start after the gap. 
-  // SVG circles start at 3 o'clock. We rotate it by 90deg to start at 6 o'clock.
-  // If we rotate it by 90deg, 0 is at bottom (6 o'clock). 
-  // We want a gap centered at the bottom. So the gap is from -7.5% to +7.5% (around bottom).
-  // This means the arc starts at +7.5% and ends at -7.5%.
-  
-  // To keep it simple and perfectly match standard circular progress bars:
-  // We will just draw the whole circumference but use strokeDasharray to leave the gap.
-  // We map the confidence (0-100) to the arcLength (0 to 85% of circumference).
-  
   const fillLength = (confidence / 100) * arcLength;
-  // Dasharray format: [dash, gap]
-  // We want the dash to be `fillLength`, and the gap to be the rest of the circumference.
-  
   const isPut = direction === 'put';
   const isCall = direction === 'call';
+  const isNeutral = !isCall && !isPut;
+  const manipulationLabels = warmup ? [] : getManipulationLabels(manipulation);
+  const confluenceItems = warmup ? [] : getConfluenceItems(signal, direction);
 
   const glowColor = warmup
     ? 'rgba(100,116,139,0.2)'
     : isPut
       ? 'rgba(254,116,83,0.4)'
-      : 'rgba(16,185,129,0.4)';
+      : isCall
+        ? 'rgba(16,185,129,0.4)'
+        : 'rgba(59,130,246,0.45)';
 
   const accentClass = warmup
     ? 'text-slate-400'
     : isPut
       ? 'text-[#fe7453]'
-      : 'text-emerald-500';
+      : isCall
+        ? 'text-emerald-500'
+        : 'text-blue-400';
 
-  // Rotation: We want the gap at the bottom. 
-  // Default start is 3 o'clock. We want it to start at roughly 7 o'clock.
-  // 7 o'clock is 120 degrees from 3 o'clock (clockwise). 
-  // Let's rotate by 115 degrees.
+  const stroke = warmup
+    ? 'url(#warmupGradient)'
+    : isPut
+      ? 'url(#putGradient)'
+      : isCall
+        ? 'url(#callGradient)'
+        : 'url(#neutralGradient)';
+
   const rotation = 117;
 
   return (
     <div className="flex h-full flex-col items-center justify-center py-4">
-      {/* Container for SVG */}
-      <div className="relative flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
+      <div className="text-center">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-500">Focused Asset</p>
+        <p className="mt-1 text-sm font-black tracking-tight text-[#e3e6e7]">{formatAssetLabel(asset)}</p>
+      </div>
+      <div className="relative mt-3 flex h-64 w-64 items-center justify-center sm:h-72 sm:w-72">
         <svg 
           className="h-full w-full" 
           viewBox={`0 0 ${size} ${size}`}
@@ -77,13 +130,16 @@ export default function OTEORing({ asset, signal, warmup = false }) {
               <stop offset="0%" stopColor="#10b981" />
               <stop offset="100%" stopColor="#34d399" />
             </linearGradient>
+            <linearGradient id="neutralGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#3b82f6" />
+              <stop offset="100%" stopColor="#60a5fa" />
+            </linearGradient>
             <linearGradient id="warmupGradient" x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor="#475569" />
               <stop offset="100%" stopColor="#64748b" />
             </linearGradient>
           </defs>
 
-          {/* Background track (shows the full 85% arc) */}
           <circle
             cx={center}
             cy={center}
@@ -96,13 +152,12 @@ export default function OTEORing({ asset, signal, warmup = false }) {
             className="text-white/5"
           />
 
-          {/* Progress ring */}
           <circle
             cx={center}
             cy={center}
             r={radius}
             fill="transparent"
-            stroke={warmup ? 'url(#warmupGradient)' : isPut ? 'url(#putGradient)' : 'url(#callGradient)'}
+            stroke={stroke}
             strokeWidth={strokeWidth}
             strokeDasharray={`${fillLength} ${circumference}`}
             strokeLinecap="round"
@@ -110,27 +165,67 @@ export default function OTEORing({ asset, signal, warmup = false }) {
           />
         </svg>
 
-        {/* Center content (un-rotated) */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`text-5xl sm:text-7xl font-black tracking-tighter ${accentClass}`}>
             {warmup ? '—' : `${Math.round(confidence)}%`}
           </span>
           <span className="mt-2 text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
-            {warmup ? 'Warming up' : isPut ? 'Sell Pressure' : isCall ? 'Buy Pressure' : 'Neutral'}
+            {warmup ? 'Warming up' : isPut ? 'Sell Pressure' : isCall ? 'Buy Pressure' : 'Neutral State'}
           </span>
         </div>
       </div>
 
-      {/* Label / Direction Badge */}
       {!warmup && (
-        <div className="mt-6 flex items-center gap-2 rounded-full border border-white/5 bg-[#1a1717]/80 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-gray-300 shadow-lg backdrop-blur">
-          {isPut ? (
-            <ArrowDownRight size={14} className="text-[#fe7453]" />
-          ) : (
-            <ArrowUpRight size={14} className="text-emerald-400" />
-          )}
-          <span>{label}</span>
-        </div>
+        <>
+          <div className="mt-6 flex items-center gap-2 rounded-full border border-white/5 bg-[#1a1717]/80 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-gray-300 shadow-lg backdrop-blur">
+            {isPut ? (
+              <ArrowDownRight size={14} className="text-[#fe7453]" />
+            ) : isCall ? (
+              <ArrowUpRight size={14} className="text-emerald-400" />
+            ) : (
+              <Minus size={14} className="text-blue-400" />
+            )}
+            <span className={accentClass}>{label}</span>
+          </div>
+          <div className="mt-4 flex w-full max-w-xl flex-col gap-3">
+            <div className="rounded-2xl border border-white/5 bg-[#1a1717]/80 px-4 py-3 backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Manipulation</span>
+                <span className={`text-[10px] font-bold uppercase tracking-[0.18em] ${manipulationLabels.length > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {manipulationLabels.length > 0 ? 'Flagged' : 'Clear'}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(manipulationLabels.length > 0 ? manipulationLabels : ['No Active Flags']).map((item) => (
+                  <span
+                    key={item}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${manipulationLabels.length > 0 ? 'border border-rose-500/20 bg-rose-500/10 text-rose-300' : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300'}`}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-[#1a1717]/80 px-4 py-3 backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Confluences</span>
+                <span className={`text-[10px] font-bold uppercase tracking-[0.18em] ${isPut ? 'text-[#fe7453]' : isCall ? 'text-emerald-400' : 'text-blue-400'}`}>
+                  {direction ? direction.toUpperCase() : 'NEUTRAL'}
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {(confluenceItems.length > 0 ? confluenceItems : ['No Strong Alignment']).map((item) => (
+                  <span
+                    key={item}
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${isPut ? 'border border-[#fe7453]/20 bg-[#fe7453]/10 text-[#ffb19f]' : isCall ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border border-blue-500/20 bg-blue-500/10 text-blue-300'}`}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -21,6 +21,9 @@ class AutoGhostConfig:
     max_concurrent_trades: int = 3
     per_asset_cooldown_seconds: int = 30
     block_on_manipulation: bool = True
+    max_session_trades: int = 100
+    max_drawdown_amount: float = 0.0
+    drawdown_cooldown_seconds: int = 300
 
 
 class AutoGhostService:
@@ -30,6 +33,12 @@ class AutoGhostService:
         self._active_assets: set[str] = set()
         self._cooldown_until: dict[str, float] = {}
         self._session_id: str | None = None
+        self._session_pnl: float = 0.0
+        self._session_trade_count: int = 0
+        self._session_wins: int = 0
+        self._session_losses: int = 0
+        self._drawdown_cooldown_until: float = 0.0
+        self._session_halted: bool = False
 
     def update_config(
         self,
@@ -39,6 +48,9 @@ class AutoGhostService:
         expiration_seconds: int | None = None,
         max_concurrent_trades: int | None = None,
         per_asset_cooldown_seconds: int | None = None,
+        max_session_trades: int | None = None,
+        max_drawdown_amount: float | None = None,
+        drawdown_cooldown_seconds: int | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         self.config = AutoGhostConfig(
@@ -52,9 +64,17 @@ class AutoGhostService:
                 else max(0, int(per_asset_cooldown_seconds))
             ),
             block_on_manipulation=self.config.block_on_manipulation,
+            max_session_trades=self.config.max_session_trades if max_session_trades is None else max(1, int(max_session_trades)),
+            max_drawdown_amount=self.config.max_drawdown_amount if max_drawdown_amount is None else max(0.0, float(max_drawdown_amount)),
+            drawdown_cooldown_seconds=self.config.drawdown_cooldown_seconds if drawdown_cooldown_seconds is None else max(0, int(drawdown_cooldown_seconds)),
         )
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
+            self._session_pnl = 0.0
+            self._session_trade_count = 0
+            self._session_wins = 0
+            self._session_losses = 0
+            self._session_halted = False
             logger.info("Started Auto-Ghost session %s", self._session_id)
         return self.status
 
@@ -68,7 +88,26 @@ class AutoGhostService:
             "auto_ghost_per_asset_cooldown_seconds": self.config.per_asset_cooldown_seconds,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
+            "auto_ghost_session_pnl": self._session_pnl,
+            "auto_ghost_session_trades": self._session_trade_count,
+            "auto_ghost_session_wins": self._session_wins,
+            "auto_ghost_session_losses": self._session_losses,
+            "auto_ghost_drawdown_cooldown_active": unix_time() < self._drawdown_cooldown_until,
+            "auto_ghost_session_halted": self._session_halted,
         }
+
+    def report_outcome(self, trade_id: str, outcome: str, profit: float) -> None:
+        self._session_trade_count += 1
+        self._session_pnl += profit
+        if outcome == "win":
+            self._session_wins += 1
+        elif outcome == "loss":
+            self._session_losses += 1
+
+        if self.config.max_drawdown_amount > 0 and self._session_pnl <= -abs(self.config.max_drawdown_amount):
+            self._drawdown_cooldown_until = unix_time() + self.config.drawdown_cooldown_seconds
+            logger.warning("Ghost session drawdown limit hit (%.2f <= -%.2f). Cooling down for %ds.",
+                           self._session_pnl, self.config.max_drawdown_amount, self.config.drawdown_cooldown_seconds)
 
     async def consider_signal(
         self,
@@ -87,6 +126,13 @@ class AutoGhostService:
             logger.info("Cleaned up stale active asset: %s", a)
 
         if not self.config.enabled:
+            return None
+            
+        if self._session_halted:
+            return None
+        if self._session_trade_count >= self.config.max_session_trades:
+            return None
+        if now < self._drawdown_cooldown_until:
             return None
         if oteo_result.get("recommended") not in {"CALL", "PUT"}:
             return None

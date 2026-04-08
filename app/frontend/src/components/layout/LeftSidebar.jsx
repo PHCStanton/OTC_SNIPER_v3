@@ -3,9 +3,11 @@
  * Collapse state persisted via useLayoutStore.
  */
 import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, BarChart2, Star, Search, Filter } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, BarChart2, Star, Search, Filter, RefreshCw } from 'lucide-react';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
+import { useToastStore } from '../../stores/useToastStore.js';
+import { getBrokerAssets } from '../../api/tradingApi.js';
 
 const DEFAULT_PAYOUT_THRESHOLD = 92;
 const QUICK_PAYOUT_PRESETS = [
@@ -44,6 +46,20 @@ export default function LeftSidebar() {
   const [otcOnly, setOtcOnly] = useState(false);
   const [assetTypeFilter, setAssetTypeFilter] = useState('all');
   const [filtersOpen, setFiltersOpen] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefreshAssets = async () => {
+    try {
+      setIsRefreshing(true);
+      const res = await getBrokerAssets('pocket_option');
+      useAssetStore.getState().setAssetCatalog(res.assets);
+      useToastStore.getState().addToast({ type: 'success', message: 'Assets refreshed successfully!' });
+    } catch (err) {
+      useToastStore.getState().addToast({ type: 'error', message: `Failed to refresh assets: ${err.message}` });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const searchFilteredAssets = useMemo(() => {
     if (!searchQuery.trim()) return availableAssets;
@@ -108,18 +124,30 @@ export default function LeftSidebar() {
       {sidebarOpen && (
         <div className="flex flex-col flex-1 overflow-hidden">
           <div className="px-2 py-2 border-b border-white/5">
-            <div className="relative group">
-              <Search
-                size={12}
-                className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#f5df19] transition-colors"
-              />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search Assets..."
-                className="w-full bg-white/5 border border-white/10 rounded-md py-1.5 pl-7 pr-2 text-[11px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-[#f5df19]/30 focus:bg-white/10 transition-all"
-              />
+            <div className="flex items-center gap-1">
+              <div className="relative group flex-1">
+                <Search
+                  size={12}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#f5df19] transition-colors"
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search Assets..."
+                  className="w-full bg-white/5 border border-white/10 rounded-md py-1.5 pl-7 pr-2 text-[11px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-[#f5df19]/30 focus:bg-white/10 transition-all"
+                />
+              </div>
+              <button 
+                onClick={handleRefreshAssets} 
+                disabled={isRefreshing}
+                className={`p-1.5 rounded-md border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors ${
+                  isRefreshing ? 'animate-spin text-[#f5df19]' : ''
+                }`}
+                title="Refresh Assets"
+              >
+                <RefreshCw size={12} />
+              </button>
             </div>
             <div className="mt-2 rounded-lg border border-white/5 bg-white/[0.02]">
               <button

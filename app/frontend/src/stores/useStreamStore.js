@@ -10,6 +10,7 @@ export const useStreamStore = create((set) => ({
   signals: {},     // { [asset]: SignalRecord }
   manipulation: {},// { [asset]: { detected: bool, type: string|null } }
   warmup: {},      // { [asset]: bool }
+  tradeMarkers: {},// { [asset]: TradeMarker[] }
 
   // Streaming state
   isStreaming: false,
@@ -69,16 +70,49 @@ export const useStreamStore = create((set) => ({
       warmup: { ...state.warmup, [asset]: isWarmup },
     })),
 
+  addTradeMarker: (marker) => set((state) => {
+    const asset = marker.asset;
+    const existing = state.tradeMarkers[asset] || [];
+    return {
+      tradeMarkers: {
+        ...state.tradeMarkers,
+        [asset]: [...existing, marker],
+      },
+    };
+  }),
+
+  updateTradeMarkerOutcome: (tradeId, outcome, profit) => set((state) => {
+    const next = { ...state.tradeMarkers };
+    for (const asset of Object.keys(next)) {
+      next[asset] = next[asset].map((m) =>
+        m.tradeId === tradeId ? { ...m, outcome, profit } : m
+      );
+    }
+    return { tradeMarkers: next };
+  }),
+
+  removeExpiredMarkers: (asset) => set((state) => {
+    const now = Date.now() / 1000;
+    const markers = (state.tradeMarkers[asset] || []).filter(
+      (m) => now < m.entryTime + m.expirationSeconds + 30
+    );
+    return {
+      tradeMarkers: { ...state.tradeMarkers, [asset]: markers },
+    };
+  }),
+
   clearAsset: (asset) =>
     set((state) => {
       const ticks = { ...state.ticks };
       const signals = { ...state.signals };
       const manipulation = { ...state.manipulation };
       const warmup = { ...state.warmup };
+      const tradeMarkers = { ...state.tradeMarkers };
       delete ticks[asset];
       delete signals[asset];
       delete manipulation[asset];
       delete warmup[asset];
-      return { ticks, signals, manipulation, warmup };
+      delete tradeMarkers[asset];
+      return { ticks, signals, manipulation, warmup, tradeMarkers };
     }),
 }));

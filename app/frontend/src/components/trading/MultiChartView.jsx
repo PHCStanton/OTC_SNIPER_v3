@@ -20,6 +20,27 @@ import MiniSparkline from './MiniSparkline.jsx';
 
 const EMPTY_TICKS = [];
 
+function getMiniGaugeTone(direction) {
+  if (direction === 'call') {
+    return {
+      stroke: 'text-emerald-500',
+      label: 'text-emerald-500',
+    };
+  }
+
+  if (direction === 'put') {
+    return {
+      stroke: 'text-[#fe7453]',
+      label: 'text-[#fe7453]',
+    };
+  }
+
+  return {
+    stroke: 'text-blue-400',
+    label: 'text-blue-400',
+  };
+}
+
 function MultiChartCard({ asset, isSelected, onRemove }) {
   const setSelectedAsset = useAssetStore((s) => s.setSelectedAsset);
   const starredAssets = useAssetStore((s) => s.starredAssets);
@@ -43,6 +64,7 @@ function MultiChartCard({ asset, isSelected, onRemove }) {
   const confidence = getSignalConfidence(signal);
   const regime = context?.regime ?? signal?.regime ?? null;
   const manipulationFlags = manipulation?.flags ?? manipulation;
+  const gaugeTone = getMiniGaugeTone(direction);
   const isManipulated = Boolean(
     manipulation?.detected
     || manipulation?.type
@@ -119,22 +141,22 @@ function MultiChartCard({ asset, isSelected, onRemove }) {
 
       {/* Hybrid Gauge Overlay */}
       {config.showGauge && confidence > 0 && (
-        <div className="absolute inset-x-0 top-12 flex flex-col items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-          <div className="relative w-16 h-16">
-             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+        <div className="absolute inset-x-0 top-8 flex flex-col items-center justify-center pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <div className="relative h-24 w-24">
+             <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
                 <circle cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3" className="text-white/5" />
                 <circle 
                   cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="3" 
                   strokeDasharray={`${confidence} 100`}
-                  className={direction === 'call' ? 'text-emerald-500' : 'text-[#fe7453]'}
+                  className={gaugeTone.stroke}
                   strokeLinecap="round"
                 />
              </svg>
              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[10px] font-black text-[#e3e6e7]">{Math.round(confidence)}%</span>
+                <span className="text-sm font-black text-[#e3e6e7]">{Math.round(confidence)}%</span>
              </div>
           </div>
-          <span className={`text-[9px] font-black uppercase tracking-[0.2em] mt-1 ${direction === 'call' ? 'text-emerald-500' : 'text-[#fe7453]'}`}>
+          <span className={`mt-1 text-[10px] font-black uppercase tracking-[0.22em] ${gaugeTone.label}`}>
             {direction || 'NEUTRAL'}
           </span>
         </div>
