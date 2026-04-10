@@ -14,7 +14,6 @@ export const SETTINGS_DEFAULTS = {
   oteoCooldownBars: 3,
 
   // Ghost trading
-  ghostTradingEnabled: false,
   ghostAmount: 1,
   autoGhostEnabled: false,
   autoGhostExpirationSeconds: 60,
@@ -100,7 +99,6 @@ export function validateSettings(input = {}) {
     oteoWarmupBars: toNumber(input.oteoWarmupBars, SETTINGS_DEFAULTS.oteoWarmupBars, { min: 0, max: 500, integer: true }),
     oteoCooldownBars: toNumber(input.oteoCooldownBars, SETTINGS_DEFAULTS.oteoCooldownBars, { min: 0, max: 500, integer: true }),
 
-    ghostTradingEnabled: toBoolean(input.ghostTradingEnabled, SETTINGS_DEFAULTS.ghostTradingEnabled),
     ghostAmount: toNumber(input.ghostAmount, SETTINGS_DEFAULTS.ghostAmount, { min: 0, max: 100000, integer: false }),
     autoGhostEnabled: toBoolean(input.autoGhostEnabled, SETTINGS_DEFAULTS.autoGhostEnabled),
     autoGhostExpirationSeconds: toNumber(input.autoGhostExpirationSeconds, SETTINGS_DEFAULTS.autoGhostExpirationSeconds, { min: 5, max: 3600, integer: true }),
@@ -186,7 +184,6 @@ export const useSettingsStore = create()(
         })),
       setOteoWarmupBars: (val) => commitSettingsPatch(set, { oteoWarmupBars: val }),
       setOteoCooldownBars: (val) => commitSettingsPatch(set, { oteoCooldownBars: val }),
-      setGhostTradingEnabled: (val) => commitSettingsPatch(set, { ghostTradingEnabled: val }),
       setGhostAmount: (val) => commitSettingsPatch(set, { ghostAmount: val }),
       setAutoGhostEnabled: (val) => commitSettingsPatch(set, { autoGhostEnabled: val }),
       setAutoGhostExpirationSeconds: (val) => commitSettingsPatch(set, { autoGhostExpirationSeconds: val }),

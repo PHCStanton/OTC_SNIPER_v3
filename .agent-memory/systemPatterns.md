@@ -13,6 +13,7 @@
 - **Fail-Fast Validation:** Pydantic validation is used to avoid silent runtime failures
 - **Async Boundary Protection:** Blocking broker calls are offloaded from the FastAPI event loop and wrapped with timeouts
 - **Split Transport Model:** Trade execution flows over HTTP, while sparklines and trade result updates flow over Socket.IO
+- **Auto-Ghost Simulation Pattern:** Purpose-built background execution engine for automated strategy validation. It uses the `trigger_mode` metadata in WebSocket payloads to differentiate background activity from manual user actions.
 
 ## Data Flow
 - Frontend → API client → thin routes → business services → repository → persisted state

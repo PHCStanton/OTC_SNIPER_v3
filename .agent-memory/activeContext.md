@@ -5,7 +5,8 @@
 - The Auto-Ghost trader executed a 401-trade test session, providing data that drove Phase A (Critical Fixes) and Phase B (Policy Tuning) of the Level 2 Implementation Plan
 - Critical issues involving per-tick recomputation, Auto-Ghost task leaks, and Manipulation Detection accuracy have been successfully resolved
 - The Level 2 policy has been converted into a formalized `Level2PolicyConfig` dataclass and tightened based on data-driven analysis
-- The frontend trading workspace has now been upgraded with modular mini-chart cards, per-asset session stats, and a more explainable main OTEO gauge with manipulation and confluence detail
+- The frontend trading workspace has been refined for maximum focus on live/demo execution, while the Auto-Ghost trader operates in the background to provide a low-risk data stream for OTEO Strategy improvement and market behavior analysis.
+- The UI now features modular mini-chart cards, per-asset session stats, and a high-fidelity OTEO gauge with manipulation and confluence detail.
 
 ## Latest Changes
 ### Applied on 2026-04-06
@@ -29,6 +30,14 @@
 | Visual Polish | `app/frontend/src/components/trading/OTEORing.jsx`, `app/frontend/src/components/trading/MultiChartView.jsx` | Neutral state styling now uses blue, and mini-chart gauge overlays were enlarged for stronger visual emphasis. |
 | Stability Fix | `app/frontend/src/components/trading/MultiChartView.jsx` | Hardened Zustand selectors against missing store branches (`contexts`, `manipulations`) to stop runtime crashes in the multi-chart view. |
 
+### Applied on 2026-04-09
+
+| Area | File(s) | Outcome |
+|------|---------|---------|
+| UI Refinement | `useSettingsStore.js`, `useTradingStore.js`, `TradePanel.jsx`, `AppSettings.jsx` | Streamlined workspace UI by removing manual Ghost Mode controls to prevent user confusion. Manual execution now defaults strictly to the active SSID environment. |
+| Auto-Ghost VX | `App.jsx`, `trade_service.py` | Enhanced Auto-Ghost visibility with detailed toast notifications (Asset + Expiry) upon background execution, driven by new `trigger_mode` metadata in the backend payload. |
+| Component Cleanup | `GhostTradingBanner.jsx` | Deleted legacy banner component, simplifying the `MainLayout` DOM tree. |
+
 ### Applied on 2026-04-08
 
 | Area | File(s) | Outcome |
@@ -43,8 +52,8 @@
 ## Current State
 - The Level 2 OTEO backend foundation is fully operational, performant, and tuned for stricter exhaustion reversals.
 - Manipulation Detection now has state persistence (15s block on spikes) and realistic OTC pinning bounds.
-- Auto-Ghost is hardened against silent asyncio task failures and stale locks.
-- The trading workspace UI is stable and now exposes more interpretable signal context, including manipulation labels and live confluence badges.
+- Auto-Ghost is hardened against silent asyncio task failures and stale locks, serving as the project's primary data-gathering engine.
+- The trading workspace UI is leaner and more focused, exposing interpretable signal context, manipulation labels, and live confluence badges without simulation mode overlap.
 - Multi-chart cards are modular, performant, and user-configurable, with per-asset stats and improved focus/watchlist interactions.
 
 ## Validation

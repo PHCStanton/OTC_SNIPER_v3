@@ -51,8 +51,16 @@ export function useStreamConnection() {
 
     const processBatch = () => {
       const updates = pendingUpdatesRef.current;
-      if (Object.keys(updates).length > 0) {
-        batchUpdate(updates);
+      const entries = Object.entries(updates);
+      if (entries.length > 0) {
+        const resolved = {};
+        for (const [asset, data] of entries) {
+           resolved[asset] = {
+             ...data,
+             ticks: [...(tickBufferRef.current[asset] || [])],
+           };
+        }
+        batchUpdate(resolved);
         pendingUpdatesRef.current = {};
       }
       rafIdRef.current = null;
@@ -116,11 +124,7 @@ export function useStreamConnection() {
       }
 
       // Queue for batch update
-      pendingUpdatesRef.current[asset] = {
-        ticks: [...assetBuffer],
-        signal,
-        manipulation,
-      };
+      pendingUpdatesRef.current[asset] = { signal, manipulation };
 
       if (!rafIdRef.current) {
         rafIdRef.current = requestAnimationFrame(processBatch);
@@ -159,8 +163,11 @@ export function useStreamConnection() {
 
     const previousAsset = previousSelectedAssetRef.current;
     if (previousAsset && previousAsset !== selectedAsset) {
-      clearAsset(previousAsset);
-      delete tickBufferRef.current[previousAsset];
+      const multiAssets = useAssetStore.getState().multiChartAssets;
+      if (!multiAssets.includes(previousAsset)) {
+        clearAsset(previousAsset);
+        delete tickBufferRef.current[previousAsset];
+      }
     }
 
     previousSelectedAssetRef.current = selectedAsset;

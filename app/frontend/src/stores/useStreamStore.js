@@ -4,6 +4,8 @@
  */
 import { create } from 'zustand';
 
+export const EMPTY_TICKS = Object.freeze([]);
+
 export const useStreamStore = create((set) => ({
   // Keyed by asset symbol
   ticks: {},       // { [asset]: TickRecord[] }

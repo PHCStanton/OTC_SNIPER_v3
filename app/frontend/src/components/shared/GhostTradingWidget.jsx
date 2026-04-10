@@ -40,14 +40,14 @@ const GHOST_ICONS = {
 };
 
 export default function GhostTradingWidget() {
-  const { ghostTradingEnabled, autoGhostEnabled, ghostWidgetPosition, setGhostWidgetPosition, ghostIcon, setAutoGhostEnabled } = useSettingsStore();
+  const { autoGhostEnabled, ghostWidgetPosition, setGhostWidgetPosition, ghostIcon, setAutoGhostEnabled } = useSettingsStore();
   const { ghostPnl, ghostWinRate, ghostTotalTrades, ghostMaxDrawdown } = useRiskStore();
   const [isOpen, setIsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0, isDragging: false });
   const containerRef = useRef(null);
 
-  if (!ghostTradingEnabled && !autoGhostEnabled) return null;
+  if (!autoGhostEnabled) return null;
 
   // We use the persisted position or default to {x: 0, y: 0}
   const position = ghostWidgetPosition || { x: 0, y: 0 };

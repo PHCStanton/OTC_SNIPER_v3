@@ -3,7 +3,7 @@
 ## Summary
 - This file captures the most recent task handoff and the reasoning behind the last implemented fixes.
 - It also includes a compiled summary of the implemented features for OTEO Level 1 and the planned features for OTEO Level 3.
-- The most recent frontend session focused on explainability, modular multi-chart UX, and selector hardening after the new card/gauge system was introduced.
+- The most recent frontend session focused on explainability, Auto-Ghost notification enhancements, and pure manual execution focus (SSID Live/Demo strictly) after deprecating manual simulation mode.
 
 ## OTEO Implementation Summary
 ### Level 1 (Baseline Core) - [Fully Implemented]
@@ -36,8 +36,13 @@ Level 3 is designed as the highest tier of intelligence, adding macro-regime cla
 - Frontend validation is currently green and the latest `npm run build` passed successfully after the gauge and mini-chart enhancements.
 - `Sparkline.jsx` crash bugs related to missing `direction` parameters were patched natively alongside a safeguard logic iteration for UI profit `NaN` values resulting from generic store definitions.
 - `Math.max/min(...series)` spread operator bounding logic within `Sparkline.jsx` and `chartUtils.js` were migrated to strict traditional loop bindings to defend against stack-overflows common with array limit injections under high data payloads.
+- Manual Ghost Mode was fully deprecated and removed from the system. Manual trading now defaults strictly to the active SSID environment (Live/Demo), eliminating simulation mode confusion.
+- `useSettingsStore.js`, `useTradingStore.js`, `TradePanel.jsx`, and `AppSettings.jsx` were cleaned up to remove manual ghost toggles and state references.
+- Auto-Ghost trade notifications were enhanced with Asset ID and Expiry details (e.g., "Auto-Ghost trade executed: EURUSD OTC | Expiry: 1M").
+- Backend `trade_service.py` was updated to include `trigger_mode` metadata in the `trade_entry` WebSocket payload, allowing the frontend to distinguish background automated action.
+- `GhostTradingBanner.jsx` was deleted and `MainLayout.jsx` was simplified to focus on live execution.
 
 ## Next Steps
 - Run a new Auto-Ghost session to benchmark the new `Level2PolicyConfig` and hardened Manipulation Detector.
 - Begin outlining Level 3 Regime Classification logic now that the Level 2 foundation is stable and performant.
-- Observe the new explainability UI in live conditions and decide whether more backend confluence metadata should be emitted for even richer badges.
+- Observe the new explainability UI and Auto-Ghost alerts during a live session to confirm visibility and focus.

@@ -23,8 +23,8 @@ export default function TradePanel() {
     setDirection,
     executeTrade,
   } = useTradingStore();
-  
-  const { ghostTradingEnabled, setGhostTradingEnabled } = useSettingsStore();
+
+  const { ghostAmount } = useSettingsStore();
   const [amountType, setAmountType] = useState('$');
 
   const sessionConnected = sessionStatus === 'connected';
@@ -56,7 +56,7 @@ export default function TradePanel() {
           <h3 className="text-lg font-black tracking-tight text-[#e3e6e7]">{formatAssetLabel(selectedAsset)}</h3>
         </div>
         <div className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${sessionConnected ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-[#212127] text-gray-500'}`}>
-          {sessionConnected ? <DollarSign size={11} /> : <Ghost size={11} />}
+          <DollarSign size={11} />
           {accountType ? accountType.toUpperCase() : 'NO SESSION'}
         </div>
       </div>
@@ -66,13 +66,13 @@ export default function TradePanel() {
           <div className="mb-1 flex items-center justify-between">
             <label className="block text-[10px] font-bold uppercase tracking-[0.22em] text-gray-500">Trade amount</label>
             <div className="flex bg-[#212127] rounded border border-white/10 p-0.5">
-              <button 
+              <button
                 className={`px-2 py-0.5 text-xs font-bold rounded-sm transition-colors ${amountType === '$' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 onClick={() => setAmountType('$')}
               >
                 $
               </button>
-              <button 
+              <button
                 className={`px-2 py-0.5 text-xs font-bold rounded-sm transition-colors ${amountType === '%' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
                 onClick={() => setAmountType('%')}
               >
@@ -123,21 +123,7 @@ export default function TradePanel() {
           </div>
         </div>
 
-        <label className="flex items-center justify-between rounded-xl border border-white/5 bg-[#212127] px-4 py-3 cursor-pointer group">
-          <div>
-            <p className="text-xs font-bold text-[#e3e6e7] group-hover:text-white transition-colors">Ghost / Live</p>
-            <p className="text-[10px] text-gray-500">Switch between ghost simulation and live execution</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setGhostTradingEnabled(!ghostTradingEnabled)}
-            className={`flex h-7 w-12 items-center rounded-full p-1 transition ${ghostTradingEnabled ? 'bg-[#f5df19]' : 'bg-emerald-500'}`}
-            aria-pressed={ghostTradingEnabled}
-            aria-label="Toggle ghost/live mode"
-          >
-            <span className={`h-5 w-5 rounded-full bg-white transition ${ghostTradingEnabled ? 'translate-x-0' : 'translate-x-5'}`} />
-          </button>
-        </label>
+
 
         <div className="grid grid-cols-2 gap-3">
           <button

@@ -1,7 +1,7 @@
 /**
  * Sparkline — live tick chart panel used in the Phase 5 trading workspace.
  */
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Layers3, Ghost, User } from 'lucide-react';
 import { useStreamStore } from '../../stores/useStreamStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
@@ -39,10 +39,10 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
   const showGhostMarkers = useSettingsStore((s) => s.showGhostEntryMarkers);
   const showLiveMarkers = useSettingsStore((s) => s.showLiveEntryMarkers);
   // Setters are stable singletons — read from getState() inside handlers to avoid render loops
-  const handleToggleGhostMarkers = () =>
-    useSettingsStore.getState().setShowGhostEntryMarkers(!useSettingsStore.getState().showGhostEntryMarkers);
-  const handleToggleLiveMarkers = () =>
-    useSettingsStore.getState().setShowLiveEntryMarkers(!useSettingsStore.getState().showLiveEntryMarkers);
+  const handleToggleGhostMarkers = useCallback(() =>
+    useSettingsStore.getState().setShowGhostEntryMarkers(!useSettingsStore.getState().showGhostEntryMarkers), []);
+  const handleToggleLiveMarkers = useCallback(() =>
+    useSettingsStore.getState().setShowLiveEntryMarkers(!useSettingsStore.getState().showLiveEntryMarkers), []);
   const allMarkers = useStreamStore((s) => s.tradeMarkers[asset] ?? EMPTY_MARKERS);
 
   const activeMarkers = useMemo(() => {
@@ -85,11 +85,15 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
         <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">
           <button 
             onClick={handleToggleGhostMarkers}
+            aria-label="Toggle ghost trade markers"
+            aria-pressed={showGhostMarkers}
             className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showGhostMarkers ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
             <Ghost size={11} /> Markers
           </button>
           <button 
             onClick={handleToggleLiveMarkers}
+            aria-label="Toggle live trade markers"
+            aria-pressed={showLiveMarkers}
             className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showLiveMarkers ? 'border-sky-400/30 bg-sky-400/10 text-sky-400' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
             <User size={11} /> Markers
           </button>

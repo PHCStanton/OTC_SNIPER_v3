@@ -31,8 +31,6 @@ export const useTradingStore = create((set, get) => ({
 
   executeTrade: async (broker, asset) => {
     const { amount, direction, duration } = get();
-    const isGhost = useSettingsStore.getState().ghostTradingEnabled;
-    const tradeMode = isGhost ? 'ghost' : 'live';
     
     set({ isExecuting: true, tradeError: null, lastTradeResult: null });
     try {
@@ -42,7 +40,7 @@ export const useTradingStore = create((set, get) => ({
         direction,
         expiration: duration,
         account_key: 'primary',
-        trade_mode: tradeMode,
+        trade_mode: 'live',
         demo: false,
       });
 
@@ -56,7 +54,12 @@ export const useTradingStore = create((set, get) => ({
       }
 
       set({ lastTradeResult: result, tradeError: null });
-      useToastStore.getState().addToast({ type: 'info', message: isGhost ? 'Ghost trade submitted.' : 'Trade submitted.' });
+
+      const assetLabel = typeof asset === 'string' ? asset.replace(/_otc$/i, ' OTC').replace(/_/g, '/') : String(asset);
+      const expiryLabel = duration === 60 ? '1M' : `${duration}s`;
+      const message = `Trade submitted [${direction.toUpperCase()}]: ${assetLabel} | Expiry: ${expiryLabel}`;
+
+      useToastStore.getState().addToast({ type: 'info', message });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       set({ tradeError: message });

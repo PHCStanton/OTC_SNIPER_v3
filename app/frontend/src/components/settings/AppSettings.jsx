@@ -106,7 +106,6 @@ export default function AppSettings() {
     oteoLevel3Enabled,
     oteoWarmupBars,
     oteoCooldownBars,
-    ghostTradingEnabled,
     ghostAmount,
     autoGhostEnabled,
     autoGhostExpirationSeconds,
@@ -124,7 +123,6 @@ export default function AppSettings() {
     setOteoLevel3Enabled,
     setOteoWarmupBars,
     setOteoCooldownBars,
-    setGhostTradingEnabled,
     setGhostAmount,
     setAutoGhostEnabled,
     setAutoGhostExpirationSeconds,
@@ -225,12 +223,7 @@ export default function AppSettings() {
       </SectionCard>
 
       <SectionCard title="Ghost trading" subtitle="Simulation mode for previewing execution without a live trade." icon={Ghost}>
-        <ToggleRow
-          label="Enable ghost trading"
-          description="Use the ghost execution path for dry runs and visual validation."
-          checked={ghostTradingEnabled}
-          onChange={setGhostTradingEnabled}
-        />
+
         <ToggleRow
           label="Enable Auto-Ghost trader"
           description="Automatically open ghost trades on actionable signals for currently streamed assets while keeping live capital untouched."
@@ -238,8 +231,8 @@ export default function AppSettings() {
           onChange={setAutoGhostEnabled}
         />
         <NumberField
-          label="Ghost trade amount"
-          description="Simulated amount used for both manual ghost trades and Auto-Ghost entries."
+          label="Auto-Ghost simulated amount"
+          description="Simulated amount used for Auto-Ghost entries."
           value={ghostAmount}
           onChange={setGhostAmount}
           min={0}

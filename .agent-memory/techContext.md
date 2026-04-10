@@ -31,6 +31,7 @@
 - Defensive & explicit error handling: never swallow errors.
 - Blocking broker SDK calls must not run directly on the async request path.
 - Trade execution uses REST, while sparklines and live trade results depend on Socket.IO connectivity.
+- **Execution Boundary:** Manual user trades are strictly mapped to the active SSID environment (Live/Demo). Automated simulation is strictly handled by the background Auto-Ghost module.
 - Sparkline and live result paths should be revalidated after the latest Socket.IO client change.
 
 ## Coding Standards

@@ -30,7 +30,7 @@ const INDEX_PATTERN = /\b(INDEX|INDICE|S&P|SP500|US500|US100|NASDAQ|DOW|DJI|DJ30
 const CRYPTO_NAME_PATTERN = /\b(BITCOIN|ETHEREUM|LITECOIN|RIPPLE|DOGECOIN|CARDANO|SOLANA|POLKADOT|CHAINLINK|AVALANCHE|SHIBA|TRON|STELLAR|TONCOIN|NEAR)\b/i;
 
 export default function LeftSidebar() {
-  const { sidebarOpen, setSidebarOpen } = useLayoutStore();
+  const { sidebarOpen, toggleSidebar } = useLayoutStore();
   const {
     selectedAsset,
     availableAssets,
@@ -114,7 +114,7 @@ export default function LeftSidebar() {
     `}>
       {/* Toggle button */}
       <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
+        onClick={toggleSidebar}
         className="flex items-center justify-center h-10 w-full border-b border-white/5 text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-colors shrink-0"
         title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
       >
@@ -135,7 +135,7 @@ export default function LeftSidebar() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search Assets..."
-                  className="w-full bg-white/5 border border-white/10 rounded-md py-1.5 pl-7 pr-2 text-[11px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-[#f5df19]/30 focus:bg-white/10 transition-all"
+                  className="w-full bg-white/5 border border-white/10 rounded-md py-1.5 pl-7 pr-2 text-[13px] text-gray-200 placeholder:text-gray-600 focus:outline-none focus:border-[#f5df19]/30 focus:bg-white/10 transition-all"
                 />
               </div>
               <button 
@@ -157,12 +157,12 @@ export default function LeftSidebar() {
                 aria-expanded={filtersOpen}
                 aria-label="Toggle asset filters"
               >
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+                <div className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.18em] text-gray-500">
                   <Filter size={11} />
                   Filters
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full border border-[#f5df19]/20 bg-[#f5df19]/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-[#f5df19]">
+                  <span className="rounded-full border border-[#f5df19]/20 bg-[#f5df19]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-[#f5df19]">
                     {payoutThreshold}%+
                   </span>
                   <ChevronDown size={12} className={`text-gray-500 transition-transform ${filtersOpen ? 'rotate-180' : 'rotate-0'}`} />
@@ -184,8 +184,8 @@ export default function LeftSidebar() {
 
                   <div className="mt-2 flex items-center justify-between rounded-md border border-white/5 bg-[#0f1419] px-2 py-1.5">
                     <div className="min-w-0">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-500">OTC Only</p>
-                      <p className="text-[10px] text-gray-600">{otcOnly ? 'Showing OTC assets only' : 'Showing all live assets'}</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">OTC Only</p>
+                      <p className="text-[12px] text-gray-600">{otcOnly ? 'Showing OTC assets only' : 'Showing all live assets'}</p>
                     </div>
                     <ToggleSwitch checked={otcOnly} onChange={() => setOtcOnly((value) => !value)} />
                   </div>
@@ -210,7 +210,7 @@ export default function LeftSidebar() {
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5 bg-white/[0.02]">
                   <Star size={10} className="text-[#f5df19] fill-[#f5df19]" />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#f5df19]">Quick Select</span>
+                  <span className="text-[12px] font-semibold uppercase tracking-wider text-[#f5df19]">Quick Select</span>
                 </div>
                 <ul className="py-1">
                   {starredList.map((asset) => (
@@ -231,7 +231,7 @@ export default function LeftSidebar() {
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/5">
                 <BarChart2 size={12} className="text-gray-500" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                <span className="text-[12px] font-semibold uppercase tracking-wider text-gray-500">
                   {hasActiveSearch ? `Search Results (${unstarredList.length})` : `All Assets (${unstarredList.length})`}
                 </span>
               </div>
@@ -250,7 +250,7 @@ export default function LeftSidebar() {
               </ul>
               {(availableAssets.length > 0 || hasActiveSearch || hasCustomFilter) && filteredAssets.length === 0 && (
                 <div className="px-3 py-8 text-center">
-                  <p className="text-[10px] text-gray-600 italic">
+                  <p className="text-[12px] text-gray-600 italic">
                     {hasActiveSearch || hasCustomFilter
                       ? 'No assets match the current filters.'
                       : 'No assets available.'}
@@ -260,7 +260,7 @@ export default function LeftSidebar() {
               {availableAssets.length === 0 && !hasActiveSearch && (
                 <div className="px-3 py-10 text-center flex flex-col items-center gap-2">
                   <BarChart2 size={20} className="text-gray-700" />
-                  <p className="text-[10px] text-gray-600 leading-relaxed">
+                  <p className="text-[12px] text-gray-600 leading-relaxed">
                     Connect your SSID to<br />load live assets &amp; payouts
                   </p>
                 </div>
@@ -282,7 +282,7 @@ function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar
     <li className="group/row">
       <div
         className={`
-          flex items-center justify-between px-3 py-1 text-xs transition-colors
+          flex items-center justify-between px-3 py-1 text-sm transition-colors
           ${isSelected
             ? 'bg-[#f5df19]/15 text-[#f5df19]'
             : 'text-gray-400 hover:bg-white/5'}
@@ -294,12 +294,12 @@ function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar
         >
           <span className={`truncate ${isSelected ? 'font-bold' : ''}`}>
             {displayName}
-            {isOTC && <span className="ml-1 text-[8px] text-gray-500 font-normal">OTC</span>}
+            {isOTC && <span className="ml-1 text-[10px] text-[#f5df19] font-bold tracking-wider opacity-90">OTC</span>}
           </span>
           {payoutLabel && (
             <span
               className={`
-                text-[9px] font-bold px-1 rounded
+                text-[11px] font-bold px-1 rounded
                 ${isSelected
                   ? 'text-[#f5df19]'
                   : 'text-emerald-500'}
@@ -336,7 +336,7 @@ function FilterChip({ label, active, onClick }) {
       type="button"
       onClick={onClick}
       className={`
-        rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] transition-colors
+        rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors
         ${active
           ? 'border-[#f5df19]/30 bg-[#f5df19]/12 text-[#f5df19]'
           : 'border-white/5 bg-[#0f1419] text-gray-500 hover:border-white/10 hover:text-[#e3e6e7]'}

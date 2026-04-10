@@ -14,7 +14,8 @@
 - Phase 6: Risk Management — SessionRiskPanel, VerticalRiskChart, SessionControls, TradeRunHistory, riskMath.js
 - Phase 7: Settings System — SettingsView, AccountSettings, AppSettings, RiskSettings, useUserStore, settings validation
 - Phase 8: AI Service Integration — xAI Grok provider, image understanding, RightSidebar AI tab, provider-agnostic service layer
-- Phase 9: Polish and Hardening — Error boundaries, toast notifications, loading skeletons, ghost trading banner, ops toast integration
+- Phase 9: Polish and Hardening — Error boundaries, toast notifications, loading skeletons, and automated simulation feedback
+- Project Cleanup: Manual Ghost Mode Deprecation — Removed all manual ghost mode overlaps to refocus UI strictly on live/demo execution and Auto-Ghost simulation.
 - Level 2 OTEO Foundation — Context-aware filter layer, Support/Resistance proximity, ADX/DI trend regime integration
 - Auto-Ghost Mode — Automated simulated trading execution with concurrent capacity management and manipulation blocking
 - Frontend Signal Explainability — Main OTEO gauge enriched with manipulation detail, confluence badges, and neutral-state visual language
@@ -39,8 +40,9 @@
 - Multi-chart cards now support modular visibility settings, double-click focus, star/favorite behavior, larger hover gauges, and blue neutral-state styling.
 - Per-asset session trade stats now flow from `trade_result` events into the mini-chart cards.
 - The main OTEO gauge now displays active manipulation labels plus confluence badges sourced from OTEO and Level 2 `market_context` fields.
-- A runtime selector mismatch in `MultiChartView.jsx` was fixed by hardening store access against missing branches, eliminating a render crash.
-- `Sparkline.jsx` and `chartUtils.js` were audited and optimized to resolve a critical crash relating to missing `direction` fields, an undefined profit `NaN` visual glitch, and removing unconstrained spread operators `Math.min/max(...series)` susceptible to `RangeError` stack overflows.
+- Manual Ghost Mode was fully deprecated and removed from the stores and UI to eliminate user confusion and functional overlap with Demo accounts.
+- Auto-Ghost notifications were enhanced to include Asset and Expiration details, improving background execution visibility.
+- `GhostTradingBanner.jsx` was deleted and `MainLayout` was simplified.
 
 ## Latest Review / Documentation Update
 - A 401-trade Auto-Ghost session was analyzed to identify leaks in the manipulation detector and flaws in the original Level 2 policy weights.
@@ -48,18 +50,8 @@
 - A full report on the 401-trade session and subsequent logic tightening was generated in `@reports/401Trades_Level2_Ghost_Trade_report_26-04-06.md`.
 
 ## Phase 9 Deliverables (Complete)
-| File | Status |
-|------|--------|
-| `app/frontend/src/stores/useToastStore.js` | ✅ Self-expiring toast queue (success/error/warning/info) |
-| `app/frontend/src/components/shared/ToastContainer.jsx` | ✅ Global toast renderer with aria-live and dismiss |
-| `app/frontend/src/components/shared/ErrorBoundary.jsx` | ✅ React class error boundary with recovery UI |
-| `app/frontend/src/components/shared/LoadingSkeleton.jsx` | ✅ Shimmer skeleton + CardSkeleton + TableRowSkeleton |
-| `app/frontend/src/components/shared/GhostTradingBanner.jsx` | ✅ Persistent ghost mode banner with one-click exit |
-| `app/frontend/src/stores/useTradingStore.js` | ✅ Toast on WIN/LOSS/VOID/trade-error |
-| `app/frontend/src/stores/useAuthStore.js` | ✅ Toast on connect/disconnect success and failure |
-| `app/frontend/src/components/layout/TopBar.jsx` | ✅ Toast on Chrome start/stop/error |
-| `app/frontend/src/components/layout/MainLayout.jsx` | ✅ ErrorBoundary on all zones + ToastContainer + GhostTradingBanner |
-| `app/frontend/src/App.jsx` | ✅ Top-level ErrorBoundary |
+| `app/frontend/src/App.jsx` | ✅ Top-level ErrorBoundary & Auto-Ghost VX Interceptor |
+| UI Cleanup | ✅ Manual Ghost Mode Deprecation (Stores, Components, Layout) |
 
 ## Verification Status
 - `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build` → ✅ passed after the latest frontend updates

@@ -7,13 +7,13 @@
 
 ## Intended Users
 - Professional, discretionary, or algorithmic traders who need fast OTC execution
-- Users who depend on realtime session feedback, safer operational controls, and ghost trading support
+- Users who depend on realtime session feedback, safer operational controls, and Auto-Ghost simulation support for strategy refinement.
 
 ## Core Functionality
 - Submit trades through the Pocket Option backend integration
 - Stream realtime data through the broker callback and Socket.IO pipeline
 - Track session performance, trade history, win rate, and P/L
-- Support ghost trading for safer strategy validation
+- Support Auto-Ghost simulations for background strategy validation and data-driven OTEO improvement without risking live capital.
 - Provide AI-assisted journaling and decision support without autonomous execution
 - Surface failures clearly so trade rejection, connectivity issues, and runtime errors are visible to the operator
 

@@ -5,7 +5,7 @@
 import React from 'react';
 import { Plus, X, Layers3, Star, AlertTriangle } from 'lucide-react';
 import { useAssetStore } from '../../stores/useAssetStore.js';
-import { useStreamStore } from '../../stores/useStreamStore.js';
+import { useStreamStore, EMPTY_TICKS } from '../../stores/useStreamStore.js';
 import { SETTINGS_DEFAULTS, useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { 
@@ -17,8 +17,6 @@ import {
   getSignalConfidence
 } from './chartUtils.js';
 import MiniSparkline from './MiniSparkline.jsx';
-
-const EMPTY_TICKS = [];
 
 function getMiniGaugeTone(direction) {
   if (direction === 'call') {
@@ -41,7 +39,7 @@ function getMiniGaugeTone(direction) {
   };
 }
 
-function MultiChartCard({ asset, isSelected, onRemove }) {
+const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, onRemove }) {
   const setSelectedAsset = useAssetStore((s) => s.setSelectedAsset);
   const starredAssets = useAssetStore((s) => s.starredAssets);
   const toggleStar = useAssetStore((s) => s.toggleStarredAsset);
@@ -49,20 +47,24 @@ function MultiChartCard({ asset, isSelected, onRemove }) {
 
   const ticks = useStreamStore((s) => s.ticks?.[asset] ?? EMPTY_TICKS);
   const signal = useStreamStore((s) => s.signals?.[asset] ?? null);
-  const context = useStreamStore((s) => s.contexts?.[asset] ?? s.context?.[asset] ?? null);
-  const manipulation = useStreamStore((s) => s.manipulation?.[asset] ?? s.manipulations?.[asset] ?? null);
+  const manipulation = useStreamStore((s) => s.manipulation?.[asset] ?? null);
   
   const assetStats = useRiskStore((s) => s.assetStats?.[asset] ?? null);
   const config = useSettingsStore((s) => s.miniChartConfig ?? SETTINGS_DEFAULTS.miniChartConfig);
 
-  const series = extractNumericSeries(ticks);
-  const latest = series.length > 0 ? series[series.length - 1] : null;
-  const trend = getTrendPercent(series);
-  const positive = trend >= 0;
-
-  const direction = getSignalDirection(signal);
-  const confidence = getSignalConfidence(signal);
-  const regime = context?.regime ?? signal?.regime ?? null;
+  const series = React.useMemo(() => extractNumericSeries(ticks), [ticks]);
+  const { latest, trend, positive, direction, confidence } = React.useMemo(() => {
+    const t = getTrendPercent(series);
+    return {
+      latest: series.length > 0 ? series[series.length - 1] : null,
+      trend: t,
+      positive: t >= 0,
+      direction: getSignalDirection(signal),
+      confidence: getSignalConfidence(signal),
+    };
+  }, [series, signal]);
+  
+  const regime = signal?.regime ?? null;
   const manipulationFlags = manipulation?.flags ?? manipulation;
   const gaugeTone = getMiniGaugeTone(direction);
   const isManipulated = Boolean(
@@ -187,7 +189,7 @@ function MultiChartCard({ asset, isSelected, onRemove }) {
       </div>
     </article>
   );
-}
+});
 
 export default function MultiChartView() {
   const selectedAsset = useAssetStore((state) => state.selectedAsset);

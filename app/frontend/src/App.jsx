@@ -60,6 +60,17 @@ export default function App() {
         outcome: null,
         profit: null,
       });
+
+      if (data.trigger_mode === 'auto_ghost' || data.trigger_mode === 'auto') {
+        const assetLabel = typeof data.asset === 'string' ? data.asset.replace(/_otc$/i, ' OTC').replace(/_/g, '/') : String(data.asset);
+        const expiryLabel = data.expiration_seconds === 60 ? '1M' : `${data.expiration_seconds}s`;
+        const prefix = data.kind === 'ghost' ? 'Auto-Ghost trade' : 'Auto trade';
+        
+        useToastStore.getState().addToast({ 
+          type: 'info', 
+          message: `${prefix} [${data.direction.toUpperCase()}] executed: ${assetLabel} | Expiry: ${expiryLabel}` 
+        });
+      }
     });
 
     socket.on('trade_result', (data) => {

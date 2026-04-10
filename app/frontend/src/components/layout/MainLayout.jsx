@@ -14,7 +14,6 @@ import TradingPlaceholder from '../shared/TradingPlaceholder.jsx';
 import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
 import ErrorBoundary from '../shared/ErrorBoundary.jsx';
 import ToastContainer from '../shared/ToastContainer.jsx';
-import GhostTradingBanner from '../shared/GhostTradingBanner.jsx';
 import GhostTradingWidget from '../shared/GhostTradingWidget.jsx';
 
 export default function MainLayout() {
@@ -35,11 +34,6 @@ export default function MainLayout() {
 
         {/* Main content */}
         <main className="flex flex-col flex-1 overflow-auto relative">
-          {/* Ghost trading banner — shown at top of workspace when active */}
-          <div className="px-4 pt-3 empty:hidden">
-            <GhostTradingBanner />
-          </div>
-
           <ErrorBoundary label="Main View">
             <ActiveView view={activeView} mode={dashboardMode} />
           </ErrorBoundary>

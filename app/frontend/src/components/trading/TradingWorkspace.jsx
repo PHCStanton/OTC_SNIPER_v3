@@ -4,14 +4,12 @@
  */
 import { Activity } from 'lucide-react';
 import { useAssetStore } from '../../stores/useAssetStore.js';
-import { useStreamStore } from '../../stores/useStreamStore.js';
+import { useStreamStore, EMPTY_TICKS } from '../../stores/useStreamStore.js';
 import Sparkline from './Sparkline.jsx';
 import OTEORing from './OTEORing.jsx';
 import TradePanel from './TradePanel.jsx';
 import TradeHistory from './TradeHistory.jsx';
 import MultiChartView from './MultiChartView.jsx';
-
-const EMPTY_TICKS = [];
 
 function MetricCard({ label, value, note, icon: Icon, tone = 'neutral', children }) {
   const toneClasses = {

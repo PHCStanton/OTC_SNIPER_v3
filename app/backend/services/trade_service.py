@@ -91,6 +91,7 @@ class TradeService:
                 "entry_time": trade.entry_time,
                 "expiration_seconds": trade.expiration_seconds,
                 "session_id": trade.session_id,
+                "trigger_mode": getattr(trade, "trigger_mode", None),
             },
         )
 
