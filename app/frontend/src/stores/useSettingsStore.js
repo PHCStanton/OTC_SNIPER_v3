@@ -14,7 +14,7 @@ export const SETTINGS_DEFAULTS = {
   oteoCooldownBars: 3,
 
   // Ghost trading
-  ghostAmount: 1,
+  ghostAmount: 20,
   autoGhostEnabled: false,
   autoGhostExpirationSeconds: 60,
   autoGhostMaxConcurrentTrades: 3,
@@ -36,7 +36,7 @@ export const SETTINGS_DEFAULTS = {
   drawdownPercent: 10,
   riskRewardRatio: 2,
   useFixedAmount: false,
-  fixedRiskAmount: 10,
+  fixedRiskAmount: 20,
   tradesPerRun: 4,
   maxRuns: 3,
 
@@ -62,6 +62,8 @@ export const SETTINGS_DEFAULTS = {
     showRegime: true,
     showManipulation: true,
   },
+  uiSoundsEnabled: true,
+  tradingSoundsEnabled: true,
 };
 
 function toBoolean(value, fallback = false) {
@@ -145,6 +147,8 @@ export function validateSettings(input = {}) {
       showRegime: toBoolean(input.miniChartConfig?.showRegime, SETTINGS_DEFAULTS.miniChartConfig.showRegime),
       showManipulation: toBoolean(input.miniChartConfig?.showManipulation, SETTINGS_DEFAULTS.miniChartConfig.showManipulation),
     },
+    uiSoundsEnabled: toBoolean(input.uiSoundsEnabled, SETTINGS_DEFAULTS.uiSoundsEnabled),
+    tradingSoundsEnabled: toBoolean(input.tradingSoundsEnabled, SETTINGS_DEFAULTS.tradingSoundsEnabled),
   };
 }
 
@@ -215,6 +219,8 @@ export const useSettingsStore = create()(
       setMiniChartConfig: (patch) => set((state) => ({
         miniChartConfig: { ...state.miniChartConfig, ...patch }
       })),
+      setUiSoundsEnabled: (val) => commitSettingsPatch(set, { uiSoundsEnabled: val }),
+      setTradingSoundsEnabled: (val) => commitSettingsPatch(set, { tradingSoundsEnabled: val }),
     }),
     {
       name: 'otc-sniper-settings-storage',

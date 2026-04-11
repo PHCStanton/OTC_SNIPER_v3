@@ -2,9 +2,10 @@
  * Sparkline — live tick chart panel used in the Phase 5 trading workspace.
  */
 import { useMemo, useCallback } from 'react';
-import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Layers3, Ghost, User } from 'lucide-react';
+import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Layers3, Ghost, User, Eraser } from 'lucide-react';
 import { useStreamStore } from '../../stores/useStreamStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { soundManager } from '../../utils/soundUtils.js';
 import {
   buildChartPoints,
   extractNumericSeries,
@@ -43,6 +44,10 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
     useSettingsStore.getState().setShowGhostEntryMarkers(!useSettingsStore.getState().showGhostEntryMarkers), []);
   const handleToggleLiveMarkers = useCallback(() =>
     useSettingsStore.getState().setShowLiveEntryMarkers(!useSettingsStore.getState().showLiveEntryMarkers), []);
+  const handleClearMarkers = useCallback(() => {
+    useStreamStore.getState().clearMarkers(asset);
+    soundManager.playClick();
+  }, [asset]);
   const allMarkers = useStreamStore((s) => s.tradeMarkers[asset] ?? EMPTY_MARKERS);
 
   const activeMarkers = useMemo(() => {
@@ -96,6 +101,15 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
             aria-pressed={showLiveMarkers}
             className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showLiveMarkers ? 'border-sky-400/30 bg-sky-400/10 text-sky-400' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
             <User size={11} /> Markers
+          </button>
+          
+          <div className="h-4 w-px bg-white/10 mx-1" />
+
+          <button 
+            onClick={handleClearMarkers}
+            title="Clear all markers for this asset"
+            className="flex items-center gap-1 rounded-full border border-white/5 bg-[#1a1717] px-2 py-1 text-gray-500 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400">
+            <Eraser size={11} /> Clear
           </button>
         </div>
       </div>

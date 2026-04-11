@@ -103,6 +103,10 @@ export const useStreamStore = create((set) => ({
     };
   }),
 
+  clearMarkers: (asset) => set((state) => ({
+    tradeMarkers: { ...state.tradeMarkers, [asset]: [] },
+  })),
+
   clearAsset: (asset) =>
     set((state) => {
       const ticks = { ...state.ticks };

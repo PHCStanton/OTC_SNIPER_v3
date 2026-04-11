@@ -143,6 +143,15 @@ export default function TopBar() {
           </div>
 
           <div className="flex items-center gap-2 border-l border-white/10 pl-4">
+            <TopBarIconButton
+              onClick={() => setActiveView('settings')}
+              title="Settings"
+              ariaLabel="Open settings"
+              active={isSettings}
+            >
+              <Settings size={28} strokeWidth={1.8} />
+            </TopBarIconButton>
+
             <button
               type="button"
               className="flex h-12 w-12 items-center justify-center rounded-full border border-[#f5df19]/35 bg-[#1b2428] p-1 transition-colors hover:border-[#f5df19]/60 hover:bg-[#202b31]"
@@ -168,15 +177,6 @@ export default function TopBar() {
               ariaLabel="Notifications placeholder"
             >
               <Bell size={26} strokeWidth={1.8} />
-            </TopBarIconButton>
-
-            <TopBarIconButton
-              onClick={() => setActiveView('settings')}
-              title="Settings"
-              ariaLabel="Open settings"
-              active={isSettings}
-            >
-              <Settings size={28} strokeWidth={1.8} />
             </TopBarIconButton>
           </div>
         </div>

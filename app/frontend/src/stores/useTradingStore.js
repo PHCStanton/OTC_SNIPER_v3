@@ -10,7 +10,7 @@ import { useSettingsStore } from './useSettingsStore.js';
 
 export const useTradingStore = create((set, get) => ({
   // Form state
-  amount: 1,
+  amount: 20,
   direction: 'call', // 'call' | 'put'
   duration: 60,      // seconds
 

@@ -9,6 +9,7 @@ import { useSettingsStore } from './stores/useSettingsStore.js';
 import { useToastStore } from './stores/useToastStore.js';
 import { useTradingStore } from './stores/useTradingStore.js';
 import { useStreamStore } from './stores/useStreamStore.js';
+import { soundManager } from './utils/soundUtils.js';
 import MainLayout from './components/layout/MainLayout.jsx';
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
 import ComponentsPage from './components/dev/ComponentsPage.jsx';
@@ -33,6 +34,16 @@ export default function App() {
 
   // Connect Socket.IO on mount and start status polling
   useEffect(() => {
+    // Global UI Click Listener
+    const handleGlobalClick = (e) => {
+      // Trigger sound for buttons, select, and links
+      const isInteractive = e.target.closest('button, a, select, input[type="checkbox"], input[type="radio"]');
+      if (isInteractive) {
+        soundManager.playClick();
+      }
+    };
+    window.addEventListener('click', handleGlobalClick, { capture: true });
+
     const socket = initSocket();
 
     socket.on('status_update', (data) => {
@@ -70,6 +81,10 @@ export default function App() {
           type: 'info', 
           message: `${prefix} [${data.direction.toUpperCase()}] executed: ${assetLabel} | Expiry: ${expiryLabel}` 
         });
+
+        if (data.kind === 'ghost') {
+          soundManager.playGhostExecute();
+        }
       }
     });
 
@@ -118,8 +133,10 @@ export default function App() {
       const prefix = tradeKind === 'ghost' ? 'GHOST ' : '';
       if (outcome === 'win') {
         useToastStore.getState().addToast({ type: 'success', message: `${prefix}WIN — ${pnlLabel}` });
+        if (tradeKind === 'ghost') soundManager.playGhostWin();
       } else if (outcome === 'loss') {
         useToastStore.getState().addToast({ type: 'error', message: `${prefix}LOSS — ${pnlLabel}` });
+        if (tradeKind === 'ghost') soundManager.playGhostLoss();
       } else {
         useToastStore.getState().addToast({ type: 'warning', message: `${prefix}trade recorded as VOID.` });
       }
@@ -131,6 +148,7 @@ export default function App() {
     const interval = setInterval(poll, 5000);
 
     return () => {
+      window.removeEventListener('click', handleGlobalClick, { capture: true });
       clearInterval(interval);
       socket.off('status_update');
       socket.off('trade_entry');

@@ -2,7 +2,7 @@
  * AppSettings — OTEO, ghost trading, trading controls, and UI preferences.
  */
 import { useState } from 'react';
-import { Circle, Eye, Gauge, Ghost, LayoutGrid, MessageSquareWarning, SlidersHorizontal, Target, Bot, ChevronDown } from 'lucide-react';
+import { Circle, Eye, Gauge, Ghost, LayoutGrid, MessageSquareWarning, SlidersHorizontal, Target, Bot, ChevronDown, Volume2 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
@@ -138,6 +138,10 @@ export default function AppSettings() {
     setAutoFocusOnSignal,
     miniChartConfig,
     setMiniChartConfig,
+    uiSoundsEnabled,
+    setUiSoundsEnabled,
+    tradingSoundsEnabled,
+    setTradingSoundsEnabled,
   } = useSettingsStore();
 
   const [isGhostSelectorOpen, setIsGhostSelectorOpen] = useState(false);
@@ -369,6 +373,21 @@ export default function AppSettings() {
           min={0}
           step={1}
           suffix="streak"
+        />
+      </SectionCard>
+
+      <SectionCard title="Sound effects" subtitle="Toggle audible feedback for UI and trading events." icon={Volume2}>
+        <ToggleRow
+          label="Interface sounds"
+          description="Enable clean, modern click effects when interacting with the dashboard UI."
+          checked={uiSoundsEnabled}
+          onChange={setUiSoundsEnabled}
+        />
+        <ToggleRow
+          label="Trading events"
+          description="Audible alerts for Ghost Trade executions, Wins, and Losses."
+          checked={tradingSoundsEnabled}
+          onChange={setTradingSoundsEnabled}
         />
       </SectionCard>
 
