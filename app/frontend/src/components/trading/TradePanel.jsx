@@ -35,17 +35,26 @@ export default function TradePanel() {
     return Number.isFinite(value) ? value : 0;
   }, [amount]);
 
+  const calculatedStake = useMemo(() => {
+    if (amountType === '$') return parsedAmount;
+    if (amountType === '%') {
+      const bal = Number(balance) || 0;
+      return Number((bal * (parsedAmount / 100)).toFixed(2));
+    }
+    return 0;
+  }, [amountType, parsedAmount, balance]);
+
   const parsedDuration = useMemo(() => {
     const value = Number(duration);
     return Number.isFinite(value) ? value : 0;
   }, [duration]);
 
-  const canTrade = sessionConnected && !isExecuting && parsedAmount > 0 && parsedDuration > 0;
+  const canTrade = sessionConnected && !isExecuting && calculatedStake > 0 && parsedDuration > 0;
 
   async function handleExecute(direction) {
-    if (!sessionConnected || isExecuting || parsedAmount <= 0 || parsedDuration <= 0) return;
+    if (!sessionConnected || isExecuting || calculatedStake <= 0 || parsedDuration <= 0) return;
     setDirection(direction);
-    await executeTrade(broker, selectedAsset);
+    await executeTrade(broker, selectedAsset, calculatedStake);
   }
 
   return (
@@ -83,13 +92,18 @@ export default function TradePanel() {
           <div className="relative">
             <input
               type="number"
-              min="1"
+              min="0.1"
               step="0.1"
               value={amount}
               onChange={(event) => setAmount(Number(event.target.value))}
-              className="w-full rounded-xl border border-white/10 bg-white px-4 py-3 pr-20 text-lg font-black text-black outline-none transition focus:border-[#f5df19] focus:bg-white"
+              className="w-full rounded-xl border border-white/10 bg-white px-4 py-3 pr-24 text-lg font-black text-black outline-none transition focus:border-[#f5df19] focus:bg-white"
             />
-            <div className="absolute inset-y-0 right-3 flex items-center text-gray-500">
+            <div className="absolute inset-y-0 right-3 flex items-center gap-2 text-gray-500">
+              {amountType === '%' && (
+                <span className="text-[10px] font-black text-[#6b7280] bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                  = ${calculatedStake.toFixed(2)}
+                </span>
+              )}
               <Wallet size={16} />
             </div>
           </div>

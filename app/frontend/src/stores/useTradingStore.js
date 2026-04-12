@@ -3,6 +3,7 @@
  */
 import { create } from 'zustand';
 import { executeTrade, getTrades } from '../api/tradingApi.js';
+import { getRuntimeStrategyConfig } from '../api/strategyApi.js';
 import { useOpsStore } from './useOpsStore.js';
 import { useRiskStore } from './useRiskStore.js';
 import { useToastStore } from './useToastStore.js';
@@ -22,21 +23,27 @@ export const useTradingStore = create((set, get) => ({
   // History
   trades: [],
   isLoadingTrades: false,
+  tradeHistoryMode: 'live', // 'live' | 'ghost'
 
   setAmount: (amount) => set({ amount }),
   setDirection: (direction) => set({ direction }),
   setDuration: (duration) => set({ duration }),
   setLastTradeResult: (value) => set({ lastTradeResult: value }),
   setTradeError: (value) => set({ tradeError: value }),
+  setTradeHistoryMode: (mode) => {
+    set({ tradeHistoryMode: mode });
+    get().loadTrades('pocket_option');
+  },
 
-  executeTrade: async (broker, asset) => {
+  executeTrade: async (broker, asset, overrideAmount = null) => {
     const { amount, direction, duration } = get();
+    const finalAmount = overrideAmount !== null ? overrideAmount : amount;
     
     set({ isExecuting: true, tradeError: null, lastTradeResult: null });
     try {
       const result = await executeTrade(broker, {
         asset_id: asset,
-        amount,
+        amount: finalAmount,
         direction,
         expiration: duration,
         account_key: 'primary',
@@ -70,19 +77,32 @@ export const useTradingStore = create((set, get) => ({
   },
 
   loadTrades: async (broker) => {
-    set({ isLoadingTrades: true });
+    set({ isLoadingTrades: true, trades: [] }); 
+    // Artificial delay to ensure UI loading pulse is perceptible because local file reads are too fast
+    await new Promise(r => setTimeout(r, 400));
     try {
-      const sessionId = useOpsStore.getState().sessionId;
-      if (!sessionId) {
-        throw new Error('No active session ID available. Connect before loading trade history.');
+      const mode = get().tradeHistoryMode;
+      let targetSessionId = null;
+
+      if (mode === 'live') {
+        targetSessionId = useOpsStore.getState().sessionId;
+        if (!targetSessionId) {
+          throw new Error('No active session ID available.');
+        }
+      } else if (mode === 'ghost') {
+        const config = await getRuntimeStrategyConfig();
+        targetSessionId = config?.auto_ghost_session_id;
+        if (!targetSessionId) {
+          throw new Error('No ghost session active.');
+        }
       }
 
-      const data = await getTrades(broker, sessionId);
+      const data = await getTrades(broker, targetSessionId);
       const trades = Array.isArray(data) ? data : Array.isArray(data?.trades) ? data.trades : [];
       set({ trades, tradeError: null });
     } catch (err) {
-      set({ tradeError: err.message });
-      useToastStore.getState().addToast({ type: 'error', message: `Failed to load trades: ${err.message}` });
+      set({ tradeError: err.message, trades: [] });
+      useToastStore.getState().addToast({ type: 'error', message: `Failed to load ${get().tradeHistoryMode} trades: ${err.message}` });
     } finally {
       set({ isLoadingTrades: false });
     }
