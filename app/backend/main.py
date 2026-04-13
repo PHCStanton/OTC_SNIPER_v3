@@ -64,12 +64,13 @@ async def focus_asset(sid, data):
         return
 
     session = await sio.get_session(sid)
-    for room in session.get("rooms", []):
-        await sio.leave_room(sid, room)
-
+    current_rooms = set(session.get("rooms", []))
     room = f"market_data:{asset}"
-    await sio.enter_room(sid, room)
-    await sio.save_session(sid, {"rooms": [room]})
+    if room not in current_rooms:
+        await sio.enter_room(sid, room)
+        current_rooms.add(room)
+
+    await sio.save_session(sid, {"rooms": list(current_rooms)})
     streaming_service.clear_detector_buffers(asset)
     await sio.emit("status", {"status": "focused", "asset": asset}, to=sid)
 
@@ -89,26 +90,44 @@ async def watch_assets(sid, data):
         return
 
     session = await sio.get_session(sid)
-    for room in session.get("rooms", []):
+    current_rooms = set(session.get("rooms", []))
+    target_rooms = {f"market_data:{asset}" for asset in assets[:9] if asset}
+
+    for room in current_rooms - target_rooms:
         await sio.leave_room(sid, room)
 
-    new_rooms = []
-    for asset in assets[:9]:
-        room = f"market_data:{asset}"
+    for room in target_rooms - current_rooms:
         await sio.enter_room(sid, room)
-        new_rooms.append(room)
-        streaming_service.clear_detector_buffers(asset)
+
+    for asset in assets[:9]:
+        if not asset:
+            continue
+        if f"market_data:{asset}" in target_rooms:
+            streaming_service.clear_detector_buffers(asset)
 
     try:
         adapter = BrokerRegistry.get_adapter(BrokerType.POCKET_OPTION)
         if adapter.get_connection_status() == "connected":
-            for asset in assets[:9]:
+            new_assets = [
+                asset for asset in assets[:9]
+                if asset and f"market_data:{asset}" not in current_rooms
+            ]
+            for asset in new_assets:
                 await adapter.subscribe_ticks(asset)
     except Exception as sub_err:
         logger = logging.getLogger("otc_sniper.streaming")
         logger.warning("subscribe_ticks (multi) failed: %s", sub_err)
 
-    await sio.save_session(sid, {"rooms": new_rooms})
+    await sio.save_session(sid, {"rooms": list(target_rooms)})
+
+
+@sio.event
+async def update_allowed_assets(sid, data):
+    assets = data.get("assets", [])
+    if not isinstance(assets, list):
+        return
+    streaming_service.update_allowed_assets(assets)
+    await sio.emit("status", {"status": "allowed_assets_updated", "count": len(assets[:9])}, to=sid)
 
 
 @sio.event

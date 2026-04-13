@@ -14,7 +14,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -142,7 +142,7 @@ def _resolve_ssid(ssid: str, demo: bool) -> str:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/connect")
-async def connect_session(body: SessionConnectRequest) -> JSONResponse:
+async def connect_session(body: SessionConnectRequest, request: Request) -> JSONResponse:
     """
     Connect to Pocket Option using the provided SSID.
 
@@ -200,6 +200,13 @@ async def connect_session(body: SessionConnectRequest) -> JSONResponse:
             },
         )
 
+    try:
+        streaming_service = request.app.state.streaming_service
+        PocketOptionSession.set_tick_callback(streaming_service.process_tick)
+        streaming_service.start()
+    except Exception as stream_exc:
+        logger.warning("Stream start after connect failed (non-fatal): %s", stream_exc)
+
     # Persist SSID to .env only after a confirmed successful connection
     try:
         _persist_ssid_to_env(effective_ssid, state.is_demo)
@@ -221,9 +228,15 @@ async def connect_session(body: SessionConnectRequest) -> JSONResponse:
 
 
 @router.post("/disconnect")
-async def disconnect_session() -> JSONResponse:
+async def disconnect_session(request: Request) -> JSONResponse:
     """Disconnect the active Pocket Option session."""
     sm = get_session_manager()
+    try:
+        streaming_service = request.app.state.streaming_service
+        streaming_service.stop()
+        PocketOptionSession.clear_tick_callback()
+    except Exception as stream_exc:
+        logger.warning("Stream stop during disconnect failed (non-fatal): %s", stream_exc)
     state = sm.disconnect()
     return JSONResponse(
         content={

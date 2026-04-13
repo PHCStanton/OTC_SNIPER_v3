@@ -18,6 +18,14 @@ export const useStreamStore = create((set) => ({
   isStreaming: false,
 
   setIsStreaming: (val) => set({ isStreaming: val }),
+  resetAll: () => set({
+    ticks: {},
+    signals: {},
+    manipulation: {},
+    warmup: {},
+    tradeMarkers: {},
+    isStreaming: false,
+  }),
 
   updateTicks: (asset, ticks) =>
     set((state) => ({

@@ -20,6 +20,7 @@ class AutoGhostConfig:
     expiration_seconds: int = 60
     max_concurrent_trades: int = 3
     per_asset_cooldown_seconds: int = 30
+    minimum_payout_pct: float = 88.0
     block_on_manipulation: bool = True
     max_session_trades: int = 100
     max_drawdown_amount: float = 0.0
@@ -48,6 +49,7 @@ class AutoGhostService:
         expiration_seconds: int | None = None,
         max_concurrent_trades: int | None = None,
         per_asset_cooldown_seconds: int | None = None,
+        minimum_payout_pct: float | None = None,
         max_session_trades: int | None = None,
         max_drawdown_amount: float | None = None,
         drawdown_cooldown_seconds: int | None = None,
@@ -62,6 +64,11 @@ class AutoGhostService:
                 self.config.per_asset_cooldown_seconds
                 if per_asset_cooldown_seconds is None
                 else max(0, int(per_asset_cooldown_seconds))
+            ),
+            minimum_payout_pct=(
+                self.config.minimum_payout_pct
+                if minimum_payout_pct is None
+                else max(0.0, min(100.0, float(minimum_payout_pct)))
             ),
             block_on_manipulation=self.config.block_on_manipulation,
             max_session_trades=self.config.max_session_trades if max_session_trades is None else max(1, int(max_session_trades)),
@@ -86,6 +93,7 @@ class AutoGhostService:
             "auto_ghost_expiration_seconds": self.config.expiration_seconds,
             "auto_ghost_max_concurrent_trades": self.config.max_concurrent_trades,
             "auto_ghost_per_asset_cooldown_seconds": self.config.per_asset_cooldown_seconds,
+            "auto_ghost_minimum_payout_pct": self.config.minimum_payout_pct,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -117,6 +125,7 @@ class AutoGhostService:
         timestamp: float,
         oteo_result: dict[str, Any],
         manipulation: dict[str, Any],
+        payout_pct: float = 100.0,
     ) -> dict[str, Any] | None:
         # Clean up any stale active assets whose cooldown has already expired
         now = unix_time()
@@ -137,6 +146,14 @@ class AutoGhostService:
         if oteo_result.get("recommended") not in {"CALL", "PUT"}:
             return None
         if not oteo_result.get("actionable"):
+            return None
+        if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
+            logger.debug(
+                "Auto-Ghost skipped %s: payout %.1f%% < minimum %.1f%%",
+                asset,
+                payout_pct,
+                self.config.minimum_payout_pct,
+            )
             return None
         if self.config.block_on_manipulation and manipulation:
             return None
@@ -166,6 +183,7 @@ class AutoGhostService:
             "level2_suppressed_reason": oteo_result.get("level2_suppressed_reason"),
             "market_context": oteo_result.get("market_context"),
             "manipulation": manipulation,
+            "payout_pct": payout_pct,
         }
 
         request = TradeExecutionRequest(

@@ -111,6 +111,7 @@ export default function AppSettings() {
     autoGhostExpirationSeconds,
     autoGhostMaxConcurrentTrades,
     autoGhostPerAssetCooldownSeconds,
+    autoGhostMinimumPayout,
     ghostIcon,
     maxDailyLoss,
     maxTradesPerSession,
@@ -128,6 +129,7 @@ export default function AppSettings() {
     setAutoGhostExpirationSeconds,
     setAutoGhostMaxConcurrentTrades,
     setAutoGhostPerAssetCooldownSeconds,
+    setAutoGhostMinimumPayout,
     setGhostIcon,
     setMaxDailyLoss,
     setMaxTradesPerSession,
@@ -272,6 +274,15 @@ export default function AppSettings() {
             suffix="seconds"
           />
         </div>
+        <NumberField
+          label="Minimum payout"
+          description="Auto-Ghost skips entries when the live payout falls below this threshold."
+          value={autoGhostMinimumPayout}
+          onChange={setAutoGhostMinimumPayout}
+          min={0}
+          step={1}
+          suffix="%"
+        />
         <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
           <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
             <Ghost size={14} className="text-[#f5df19]" />

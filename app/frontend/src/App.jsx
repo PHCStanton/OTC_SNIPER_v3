@@ -29,6 +29,7 @@ export default function App() {
   const autoGhostMaxSessionTrades = useSettingsStore((s) => s.autoGhostMaxSessionTrades);
   const autoGhostMaxDrawdownAmount = useSettingsStore((s) => s.autoGhostMaxDrawdownAmount);
   const autoGhostDrawdownCooldownSeconds = useSettingsStore((s) => s.autoGhostDrawdownCooldownSeconds);
+  const autoGhostMinimumPayout = useSettingsStore((s) => s.autoGhostMinimumPayout);
 
   useStreamConnection();
 
@@ -172,6 +173,7 @@ export default function App() {
           auto_ghost_max_session_trades: autoGhostMaxSessionTrades,
           auto_ghost_max_drawdown_amount: autoGhostMaxDrawdownAmount,
           auto_ghost_drawdown_cooldown_seconds: autoGhostDrawdownCooldownSeconds,
+          auto_ghost_minimum_payout: autoGhostMinimumPayout / 100,
         });
       } catch (err) {
         if (isMounted) {
@@ -199,6 +201,7 @@ export default function App() {
     autoGhostMaxSessionTrades,
     autoGhostMaxDrawdownAmount,
     autoGhostDrawdownCooldownSeconds,
+    autoGhostMinimumPayout,
   ]);
 
   return (

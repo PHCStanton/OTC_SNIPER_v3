@@ -30,6 +30,12 @@ class PocketOptionSession:
         cls._apply_hooks()
 
     @classmethod
+    def clear_tick_callback(cls):
+        """Remove the global tick callback."""
+        cls._tick_callback = None
+        logging.getLogger("PocketOptionSession").info("Tick callback cleared.")
+
+    @classmethod
     def set_main_loop(cls, loop: asyncio.AbstractEventLoop):
         """Set the main asyncio loop for thread-safe tick dispatch."""
         cls._main_loop = loop
@@ -61,9 +67,14 @@ class PocketOptionSession:
                                     )
                                     return res
 
-                                asyncio.run_coroutine_threadsafe(
+                                future = asyncio.run_coroutine_threadsafe(
                                     cls._tick_callback(asset, price, ts),
                                     loop,
+                                )
+                                future.add_done_callback(
+                                    lambda f, asset_key=key: logging.getLogger("PocketOptionSession").error(
+                                        "Tick dispatch error for %s: %s", asset_key, f.exception()
+                                    ) if not f.cancelled() and f.exception() else None
                                 )
                             except Exception as hook_err:
                                 # Fix #7: log instead of silently swallowing

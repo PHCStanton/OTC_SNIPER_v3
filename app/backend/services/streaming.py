@@ -12,6 +12,8 @@ from .manipulation import ManipulationDetector
 from .trade_service import TradeService
 from .tick_logger import TickLogger
 from .signal_logger import SignalLogger
+from ..brokers.base import BrokerType
+from ..brokers.registry import BrokerRegistry
 from ..config import get_settings
 from ..dependencies import get_data_repository
 
@@ -39,6 +41,8 @@ class StreamingService:
         self._market_context_engines: Dict[str, MarketContextEngine] = {}
         self._manip_engines: Dict[str, ManipulationDetector] = {}
         self._tick_counts: Dict[str, int] = {}
+        self._allowed_assets: set[str] = set()
+        self._streaming_active: bool = False
 
     def update_runtime_settings(
         self,
@@ -50,6 +54,10 @@ class StreamingService:
         auto_ghost_expiration_seconds: int | None = None,
         auto_ghost_max_concurrent_trades: int | None = None,
         auto_ghost_per_asset_cooldown_seconds: int | None = None,
+        auto_ghost_max_session_trades: int | None = None,
+        auto_ghost_max_drawdown_amount: float | None = None,
+        auto_ghost_drawdown_cooldown_seconds: int | None = None,
+        auto_ghost_minimum_payout_pct: float | None = None,
     ) -> dict[str, Any]:
         if level2_enabled is not None:
             self.level2_enabled = bool(level2_enabled)
@@ -61,12 +69,44 @@ class StreamingService:
             expiration_seconds=auto_ghost_expiration_seconds,
             max_concurrent_trades=auto_ghost_max_concurrent_trades,
             per_asset_cooldown_seconds=auto_ghost_per_asset_cooldown_seconds,
+            minimum_payout_pct=auto_ghost_minimum_payout_pct,
+            max_session_trades=auto_ghost_max_session_trades,
+            max_drawdown_amount=auto_ghost_max_drawdown_amount,
+            drawdown_cooldown_seconds=auto_ghost_drawdown_cooldown_seconds,
         )
         return {
             "oteo_level2_enabled": self.level2_enabled,
             "oteo_level3_enabled": self.level3_enabled,
             **auto_ghost_status,
         }
+
+    def update_allowed_assets(self, assets: list[str]) -> None:
+        cleaned = [a.strip() for a in (assets or []) if isinstance(a, str) and a.strip()]
+        new_set = set(cleaned)
+        removed = self._allowed_assets - new_set
+
+        for asset in removed:
+            self._oteo_engines.pop(asset, None)
+            self._market_context_engines.pop(asset, None)
+            self._manip_engines.pop(asset, None)
+            self._tick_counts.pop(asset, None)
+            logger.info("Cleaned up engines for removed asset: %s", asset)
+
+        self._allowed_assets = new_set
+        logger.info("Allowed assets updated (%d): %s", len(new_set), sorted(new_set))
+
+    def start(self) -> None:
+        self._streaming_active = True
+        logger.info("StreamingService started — tick processing enabled")
+
+    def stop(self) -> None:
+        self._streaming_active = False
+        self._allowed_assets.clear()
+        self._oteo_engines.clear()
+        self._market_context_engines.clear()
+        self._manip_engines.clear()
+        self._tick_counts.clear()
+        logger.info("StreamingService stopped — all engines cleared")
 
     def _get_or_create_engines(self, asset: str) -> tuple[OTEO, MarketContextEngine, ManipulationDetector]:
         if asset not in self._oteo_engines:
@@ -88,6 +128,14 @@ class StreamingService:
             
         return self._oteo_engines[asset], self._market_context_engines[asset], self._manip_engines[asset]
 
+    def _resolve_asset_payout_pct(self, asset: str) -> float:
+        try:
+            adapter = BrokerRegistry.get_adapter(BrokerType.POCKET_OPTION, account_key="primary")
+            return float(self.trade_service._resolve_payout_pct(adapter, asset))
+        except Exception as exc:
+            logger.debug("Failed to resolve payout for %s: %s", asset, exc)
+            return 0.0
+
     async def process_tick(self, asset: str, price: float, timestamp: float, source: str = "pocket_option") -> None:
         """
         Main entry point for incoming ticks from the broker.
@@ -101,6 +149,11 @@ class StreamingService:
             logger.error("process_tick error for %s @ %.5f: %s", asset, price, e)
 
     async def _process_tick_inner(self, asset: str, price: float, timestamp: float, source: str) -> None:
+        if not self._streaming_active:
+            return
+        if asset not in self._allowed_assets:
+            return
+
         oteo, market_context_engine, manip_detector = self._get_or_create_engines(asset)
         
         oteo_result = oteo.update_tick(price, timestamp=timestamp)
@@ -174,12 +227,14 @@ class StreamingService:
                 "manip": bool(manipulation),
                 "broker": source
             })
+            payout_pct = self._resolve_asset_payout_pct(asset)
             await self.auto_ghost.consider_signal(
                 asset=asset,
                 price=price,
                 timestamp=timestamp,
                 oteo_result=oteo_result,
                 manipulation=manipulation,
+                payout_pct=payout_pct,
             )
 
         if self.sio:

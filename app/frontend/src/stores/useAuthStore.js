@@ -7,6 +7,7 @@ import { getBrokerAssets } from '../api/tradingApi.js';
 import { sessionConnect, sessionDisconnect, sessionSavedSsid } from '../api/opsApi.js';
 import { useAssetStore } from './useAssetStore.js';
 import { useOpsStore } from './useOpsStore.js';
+import { useStreamStore } from './useStreamStore.js';
 import { useToastStore } from './useToastStore.js';
 
 export const useAuthStore = create((set, get) => ({
@@ -100,6 +101,7 @@ export const useAuthStore = create((set, get) => ({
       ops.setSessionId(null);
       ops.setBalance(0);
       ops.setAccountType(null);
+      useStreamStore.getState().resetAll();
       await get().hydrateSavedSsid();
       useToastStore.getState().addToast({ type: 'info', message: 'Session disconnected.' });
     } catch (err) {

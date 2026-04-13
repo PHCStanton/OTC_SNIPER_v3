@@ -3,7 +3,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { initSocket } from '../api/socketClient.js';
-import { focusAsset, watchAssets } from '../api/streamApi.js';
+import { updateAllowedAssets, watchAssets } from '../api/streamApi.js';
 import { useAssetStore } from '../stores/useAssetStore.js';
 import { useStreamStore } from '../stores/useStreamStore.js';
 
@@ -44,7 +44,6 @@ export function useStreamConnection() {
   const tickBufferRef = useRef({});
   const pendingUpdatesRef = useRef({});
   const rafIdRef = useRef(null);
-  const previousSelectedAssetRef = useRef(null);
 
   useEffect(() => {
     const socket = initSocket();
@@ -161,25 +160,24 @@ export function useStreamConnection() {
   useEffect(() => {
     if (!selectedAsset) return;
 
-    const previousAsset = previousSelectedAssetRef.current;
-    if (previousAsset && previousAsset !== selectedAsset) {
-      const multiAssets = useAssetStore.getState().multiChartAssets;
-      if (!multiAssets.includes(previousAsset)) {
-        clearAsset(previousAsset);
-        delete tickBufferRef.current[previousAsset];
+    const dedupedAssets = [
+      selectedAsset,
+      ...((Array.isArray(multiChartAssets) ? multiChartAssets : []).filter((asset) => asset && asset !== selectedAsset)),
+    ].slice(0, 9);
+
+    const allowedAssets = new Set(dedupedAssets);
+    const bufferMap = tickBufferRef.current;
+
+    for (const asset of Object.keys(bufferMap)) {
+      if (!allowedAssets.has(asset)) {
+        delete bufferMap[asset];
+        clearAsset(asset);
       }
     }
 
-    previousSelectedAssetRef.current = selectedAsset;
     initSocket();
     setWarmup(selectedAsset, true);
-    focusAsset(selectedAsset);
-  }, [clearAsset, selectedAsset, setWarmup]);
-
-  useEffect(() => {
-    if (!Array.isArray(multiChartAssets) || multiChartAssets.length === 0) return;
-
-    initSocket();
-    watchAssets(multiChartAssets.slice(0, 9));
-  }, [multiChartAssets]);
+    watchAssets(dedupedAssets);
+    updateAllowedAssets(dedupedAssets);
+  }, [clearAsset, multiChartAssets, selectedAsset, setWarmup]);
 }

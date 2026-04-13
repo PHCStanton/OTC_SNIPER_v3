@@ -20,6 +20,10 @@ export function watchAssets(assets) {
   getSocket().emit('watch_assets', { assets });
 }
 
+export function updateAllowedAssets(assets) {
+  getSocket().emit('update_allowed_assets', { assets });
+}
+
 /**
  * Register a handler for incoming tick/signal data.
  * @param {function} handler - called with { asset, ticks, signal, manipulation }

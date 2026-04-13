@@ -22,6 +22,7 @@ export const SETTINGS_DEFAULTS = {
   autoGhostMaxSessionTrades: 100,
   autoGhostMaxDrawdownAmount: 100,
   autoGhostDrawdownCooldownSeconds: 300,
+  autoGhostMinimumPayout: 88,
   ghostWidgetPosition: { x: 0, y: 0 },
   ghostIcon: 'drift.gif',
 
@@ -109,6 +110,7 @@ export function validateSettings(input = {}) {
     autoGhostMaxSessionTrades: toNumber(input.autoGhostMaxSessionTrades, SETTINGS_DEFAULTS.autoGhostMaxSessionTrades, { min: 1, max: 10000, integer: true }),
     autoGhostMaxDrawdownAmount: toNumber(input.autoGhostMaxDrawdownAmount, SETTINGS_DEFAULTS.autoGhostMaxDrawdownAmount, { min: 0, max: 100000, integer: false }),
     autoGhostDrawdownCooldownSeconds: toNumber(input.autoGhostDrawdownCooldownSeconds, SETTINGS_DEFAULTS.autoGhostDrawdownCooldownSeconds, { min: 0, max: 36000, integer: true }),
+    autoGhostMinimumPayout: toNumber(input.autoGhostMinimumPayout, SETTINGS_DEFAULTS.autoGhostMinimumPayout, { min: 0, max: 100, integer: false }),
     ghostWidgetPosition: toPosition(input.ghostWidgetPosition, SETTINGS_DEFAULTS.ghostWidgetPosition),
     ghostIcon: typeof input.ghostIcon === 'string' && input.ghostIcon.trim()
       ? input.ghostIcon.trim()
@@ -196,6 +198,7 @@ export const useSettingsStore = create()(
       setAutoGhostMaxSessionTrades: (val) => commitSettingsPatch(set, { autoGhostMaxSessionTrades: val }),
       setAutoGhostMaxDrawdownAmount: (val) => commitSettingsPatch(set, { autoGhostMaxDrawdownAmount: val }),
       setAutoGhostDrawdownCooldownSeconds: (val) => commitSettingsPatch(set, { autoGhostDrawdownCooldownSeconds: val }),
+      setAutoGhostMinimumPayout: (val) => commitSettingsPatch(set, { autoGhostMinimumPayout: val }),
       setGhostWidgetPosition: (val) => commitSettingsPatch(set, { ghostWidgetPosition: val }),
       setGhostIcon: (val) => commitSettingsPatch(set, { ghostIcon: val }),
       setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),
