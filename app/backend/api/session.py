@@ -290,7 +290,7 @@ async def session_status() -> JSONResponse:
 
 
 @router.post("/auto-connect")
-async def auto_connect_session(demo: bool = False) -> JSONResponse:
+async def auto_connect_session(request: Request, demo: bool = False) -> JSONResponse:
     """
     Auto-connect to Pocket Option by extracting the live SSID from Chrome via CDP.
 
@@ -388,6 +388,13 @@ async def auto_connect_session(demo: bool = False) -> JSONResponse:
         _persist_ssid_to_env(ssid_frame, state.is_demo)
     except Exception as persist_exc:
         logger.warning("SSID persistence failed (non-fatal): %s", persist_exc)
+
+    try:
+        streaming_service = request.app.state.streaming_service
+        PocketOptionSession.set_tick_callback(streaming_service.process_tick)
+        streaming_service.start()
+    except Exception as stream_exc:
+        logger.warning("Stream start after auto-connect failed (non-fatal): %s", stream_exc)
 
     return JSONResponse(
         content={

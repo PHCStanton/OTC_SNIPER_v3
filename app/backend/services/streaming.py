@@ -3,6 +3,7 @@ Streaming Service — OTC SNIPER v3
 Orchestrates live market data enrichment and real-time emissions.
 """
 import logging
+import time
 from typing import Dict, Any
 
 from .auto_ghost import AutoGhostService
@@ -24,6 +25,8 @@ class StreamingService:
     Manages per-asset analysis engines and routes data to Socket.IO.
     """
 
+    PAYOUT_CACHE_TTL_SECONDS = 60.0
+
     def __init__(self, sio_server=None):
         self.sio = sio_server
         settings = get_settings()
@@ -43,6 +46,7 @@ class StreamingService:
         self._tick_counts: Dict[str, int] = {}
         self._allowed_assets: set[str] = set()
         self._streaming_active: bool = False
+        self._payout_cache: Dict[str, tuple[float, float]] = {}
 
     def update_runtime_settings(
         self,
@@ -90,6 +94,7 @@ class StreamingService:
             self._market_context_engines.pop(asset, None)
             self._manip_engines.pop(asset, None)
             self._tick_counts.pop(asset, None)
+            self._payout_cache.pop(asset, None)
             logger.info("Cleaned up engines for removed asset: %s", asset)
 
         self._allowed_assets = new_set
@@ -106,6 +111,7 @@ class StreamingService:
         self._market_context_engines.clear()
         self._manip_engines.clear()
         self._tick_counts.clear()
+        self._payout_cache.clear()
         logger.info("StreamingService stopped — all engines cleared")
 
     def _get_or_create_engines(self, asset: str) -> tuple[OTEO, MarketContextEngine, ManipulationDetector]:
@@ -129,9 +135,16 @@ class StreamingService:
         return self._oteo_engines[asset], self._market_context_engines[asset], self._manip_engines[asset]
 
     def _resolve_asset_payout_pct(self, asset: str) -> float:
+        now = time.time()
+        cached = self._payout_cache.get(asset)
+        if cached and (now - cached[1]) < self.PAYOUT_CACHE_TTL_SECONDS:
+            return cached[0]
+
         try:
             adapter = BrokerRegistry.get_adapter(BrokerType.POCKET_OPTION, account_key="primary")
-            return float(self.trade_service._resolve_payout_pct(adapter, asset))
+            payout_pct = float(self.trade_service._resolve_payout_pct(adapter, asset))
+            self._payout_cache[asset] = (payout_pct, now)
+            return payout_pct
         except Exception as exc:
             logger.debug("Failed to resolve payout for %s: %s", asset, exc)
             return 0.0

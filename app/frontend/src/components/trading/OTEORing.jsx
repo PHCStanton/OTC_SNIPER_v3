@@ -34,8 +34,8 @@ function getManipulationLabels(manipulation) {
 function getConfluenceItems(signal, direction) {
   if (!signal || typeof signal !== 'object') return [];
 
-  const marketContext = signal.marketContext && typeof signal.marketContext === 'object'
-    ? signal.marketContext
+  const marketContext = signal.market_context && typeof signal.market_context === 'object'
+    ? signal.market_context
     : {};
 
   const items = [];

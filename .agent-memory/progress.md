@@ -26,8 +26,12 @@
 - Trade execution stabilization — blocking Pocket Option buy call moved off the async event loop
 - Frontend trade rejection handling — failed broker responses now surface correctly in UI state and toast feedback
 - Local realtime connectivity stabilization — Socket.IO development client updated to connect directly to backend
+- **TRAE Session Fixes (2026-04-27, CLOSED)** — 8 issues remediated across 6 files: `session.py` auto-connect runtime fix, `requests.py` confidence validator, `useStreamConnection.js` signal cleanup + JSDoc, `httpClient.js` 422 error parsing, `useTradingStore.js` demo flag, `streaming.py` payout TTL cache. Verified via Phase Review Protocol.
 
 ## Recent Delivery Snapshot
+- **TRAE Sprint (2026-04-27):** Resolved the manual live trade execution blocker (HTTP 422 caused by numeric `confidence` sent to a `str`-only backend field). Pydantic validator now normalises all confidence forms. Auto-connect NameError fixed. httpClient 422 parsing improved. Demo flag corrected. Payout hot-path cached.
+- Full plan documented in `Dev_Docs/TRAE_Fixes_Implementation_Plan_26-04-27.md` (CLOSED 2026-04-28).
+- Expert review report: `@reports/exuctive_report_TRAE_modifications_26-04-27.md`.
 - Level 2 OTEO context foundation (Support/Resistance proximity, ADX trend classification) successfully integrated into the backend signal stream.
 - Auto-Ghost mode successfully integrated to process paper trades on actionable signals without risking live capital.
 - Ghost trade file path correctly resolves to `app/data/ghost_trades/sessions`.
@@ -45,6 +49,7 @@
 - `GhostTradingBanner.jsx` was deleted and `MainLayout` was simplified.
 
 ## Latest Review / Documentation Update
+- **2026-04-28:** TRAE Fixes Implementation Plan reviewed via Phase Review Protocol. All 4 phases confirmed implemented and closed. Plan signed off.
 - A 401-trade Auto-Ghost session was analyzed to identify leaks in the manipulation detector and flaws in the original Level 2 policy weights.
 - The Level 2 implementation plan's Phase A (Critical Fixes) and Phase B (Tuning) have been executed and validated against smoke tests.
 - A full report on the 401-trade session and subsequent logic tightening was generated in `@reports/401Trades_Level2_Ghost_Trade_report_26-04-06.md`.
@@ -74,8 +79,8 @@
 - (Near-term validation) Confirm frontend sparkline subscription and live trade result wiring behave correctly in runtime
 
 ## Known Issues
-- No active blocker preventing manual trade execution
 - Level 2 Macro S/R fallback uses absolute min/max instead of percentiles (ISSUE-11 - LOW severity).
 - Sparkline and live result flow should be revalidated in the next live test cycle after the Socket.IO client change.
 - Confluence badges currently reflect only the signal and `market_context` data already emitted in the streaming payload.
 - Pre-existing `api.py` cleanup items remain noted in the implementation report for future low-risk polish.
+- `raw_confidence` (categorical string) is not propagated into the frontend signal object — optional add (TRAE B.3) if a future UI gauge needs it.

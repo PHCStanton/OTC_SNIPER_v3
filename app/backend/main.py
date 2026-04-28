@@ -163,6 +163,7 @@ async def check_status(sid, _data=None):
             "session_id": snap.session_id,
             "balance": snap.balance,
         },
+        "auto_ghost": streaming_service.auto_ghost.status,
         "observed_at": datetime.now(timezone.utc).isoformat(),
     }
     await sio.emit("status_update", payload, to=sid)

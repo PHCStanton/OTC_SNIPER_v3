@@ -42,6 +42,107 @@ class TradeService:
             logger.warning("Failed to resolve latest logged price for %s: %s", asset, exc)
             return None
 
+    def _latest_logged_tick(self, asset: str) -> Dict[str, Any] | None:
+        try:
+            recent_ticks = self.tick_logger.load_recent(asset, max_ticks=1)
+            if not recent_ticks:
+                return None
+            return recent_ticks[-1]
+        except Exception as exc:
+            logger.warning("Failed to resolve latest logged tick for %s: %s", asset, exc)
+            return None
+
+    def _resolve_ghost_entry_timestamp(
+        self,
+        request: TradeExecutionRequest,
+        latest_tick: Dict[str, Any] | None,
+    ) -> float:
+        entry_context = request.entry_context or {}
+        context_timestamp = entry_context.get("timestamp")
+        if context_timestamp is not None:
+            try:
+                return float(context_timestamp)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Invalid ghost entry_context timestamp for %s: %r",
+                    request.asset_id,
+                    context_timestamp,
+                )
+
+        if latest_tick and latest_tick.get("t") is not None:
+            try:
+                return float(latest_tick["t"])
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Invalid latest logged tick timestamp for %s: %r",
+                    request.asset_id,
+                    latest_tick.get("t"),
+                )
+
+        return unix_time()
+
+    def _resolve_ghost_entry_price(
+        self,
+        request: TradeExecutionRequest,
+        latest_tick: Dict[str, Any] | None,
+    ) -> float | None:
+        entry_context = request.entry_context or {}
+        context_price = entry_context.get("price")
+        if context_price is not None:
+            try:
+                return float(context_price)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Invalid ghost entry_context price for %s: %r",
+                    request.asset_id,
+                    context_price,
+                )
+
+        if latest_tick and latest_tick.get("p") is not None:
+            try:
+                return float(latest_tick["p"])
+            except (TypeError, ValueError):
+                logger.warning(
+                    "Invalid latest logged tick price for %s: %r",
+                    request.asset_id,
+                    latest_tick.get("p"),
+                )
+
+        return None
+
+    def _sanitize_ghost_exit_tick(
+        self,
+        trade: TradeRecord,
+        latest_tick: Dict[str, Any] | None,
+    ) -> Dict[str, Any] | None:
+        if not latest_tick:
+            return None
+
+        tick_timestamp = latest_tick.get("t")
+        if tick_timestamp is None or trade.entry_time is None:
+            return latest_tick
+
+        try:
+            resolved_tick_timestamp = float(tick_timestamp)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid latest ghost exit tick timestamp for %s: %r",
+                trade.asset,
+                tick_timestamp,
+            )
+            return None
+
+        if resolved_tick_timestamp + 1 < float(trade.entry_time):
+            logger.warning(
+                "Ignoring stale ghost exit tick for %s: tick=%s entry=%s",
+                trade.asset,
+                resolved_tick_timestamp,
+                trade.entry_time,
+            )
+            return None
+
+        return latest_tick
+
     def _resolve_payout_pct(self, adapter, asset_id: str) -> float:
         session = adapter.session_manager.current_session
         if session and session.is_connected:
@@ -59,6 +160,9 @@ class TradeService:
     async def _emit_trade_result(self, trade: TradeRecord) -> None:
         if not self.sio or trade.outcome not in {"win", "loss", "void"}:
             return
+            
+        entry_context = trade.entry_context or {}
+        
         await self.sio.emit(
             "trade_result",
             {
@@ -73,12 +177,17 @@ class TradeService:
                 "payout_pct": trade.payout_pct,
                 "kind": trade.kind.value,
                 "simulated_profit": trade.simulated_profit,
+                "z_score": entry_context.get("z_score"),
+                "manipulation": entry_context.get("manipulation"),
             },
         )
 
     async def _emit_trade_entry(self, trade: TradeRecord) -> None:
         if not self.sio:
             return
+            
+        entry_context = trade.entry_context or {}
+        
         await self.sio.emit(
             "trade_entry",
             {
@@ -92,6 +201,8 @@ class TradeService:
                 "expiration_seconds": trade.expiration_seconds,
                 "session_id": trade.session_id,
                 "trigger_mode": getattr(trade, "trigger_mode", None),
+                "z_score": entry_context.get("z_score"),
+                "manipulation": entry_context.get("manipulation"),
             },
         )
 
@@ -102,7 +213,9 @@ class TradeService:
         session = adapter.session_manager.snapshot()
 
         if trade_kind == TradeKind.GHOST:
-            entry_price = self._latest_logged_price(request.asset_id)
+            latest_tick = self._latest_logged_tick(request.asset_id)
+            entry_price = self._resolve_ghost_entry_price(request, latest_tick)
+            entry_timestamp = self._resolve_ghost_entry_timestamp(request, latest_tick)
             payout_pct = self._resolve_payout_pct(adapter, request.asset_id)
             trade_record = TradeRecord(
                 session_id=request.session_id or session.session_id or "ghost-session",
@@ -115,8 +228,9 @@ class TradeService:
                 success=True,
                 message="Ghost trade submitted successfully.",
                 trade_id=f"ghost-{uuid4().hex[:12]}",
+                timestamp=entry_timestamp,
                 entry_price=entry_price,
-                entry_time=unix_time(),
+                entry_time=entry_timestamp,
                 payout_pct=payout_pct,
                 confidence=request.confidence,
                 oteo_score=request.oteo_score,
@@ -210,8 +324,15 @@ class TradeService:
         await asyncio.sleep(expiration + 1)
 
         try:
-            trade.exit_time = unix_time()
-            trade.exit_price = self._latest_logged_price(trade.asset)
+            latest_tick = self._sanitize_ghost_exit_tick(
+                trade,
+                self._latest_logged_tick(trade.asset),
+            )
+            if latest_tick and latest_tick.get("t") is not None:
+                trade.exit_time = float(latest_tick["t"])
+            else:
+                trade.exit_time = unix_time()
+            trade.exit_price = float(latest_tick["p"]) if latest_tick and latest_tick.get("p") is not None else None
 
             if trade.entry_price is None or trade.exit_price is None:
                 trade.outcome = "void"

@@ -95,6 +95,9 @@ export function getSignalLabel(signal) {
   if (direction === 'call') return 'STRONG BUY';
   if (direction === 'put') return 'STRONG SELL';
 
+  if (typeof signal.recommended === 'string' && signal.recommended.length > 0) {
+    return signal.recommended.toUpperCase();
+  }
   if (typeof signal.label === 'string' && signal.label.length > 0) return signal.label.toUpperCase();
   if (typeof signal.status === 'string' && signal.status.length > 0) return signal.status.toUpperCase();
   return 'NEUTRAL';
@@ -103,7 +106,7 @@ export function getSignalLabel(signal) {
 export function getSignalConfidence(signal) {
   if (!signal || typeof signal !== 'object') return 0;
 
-  const candidates = [signal.confidence, signal.score, signal.strength, signal.ratio, signal.probability];
+  const candidates = [signal.confidence, signal.oteo_score, signal.score, signal.strength, signal.ratio, signal.probability];
   for (const candidate of candidates) {
     const numeric = Number(candidate);
     if (Number.isFinite(numeric)) {

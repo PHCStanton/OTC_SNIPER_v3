@@ -7,8 +7,23 @@
 - The Level 2 policy has been converted into a formalized `Level2PolicyConfig` dataclass and tightened based on data-driven analysis
 - The frontend trading workspace has been refined for maximum focus on live/demo execution, while the Auto-Ghost trader operates in the background to provide a low-risk data stream for OTEO Strategy improvement and market behavior analysis.
 - The UI now features modular mini-chart cards, per-asset session stats, and a high-fidelity OTEO gauge with manipulation and confluence detail.
+- **TRAE session fixes (2026-04-27) are fully implemented and closed.** All 8 issues from the executive report and expert review have been remediated across 6 files.
 
 ## Latest Changes
+
+### Applied on 2026-04-27 — TRAE Session Fixes (CLOSED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| A.1 | Critical Runtime Fix | `app/backend/api/session.py` | Added `request: Request` param to `auto_connect_session` — resolved `NameError` that silently broke streaming reconnect on the auto-connect path. |
+| B.1 | Confidence Contract | `app/backend/models/requests.py` | Added Pydantic `field_validator` to `TradeExecutionRequest.confidence`: accepts `str`, numeric, or `None`; normalizes numerics to `HIGH`/`MEDIUM`/`LOW`; includes `bool` guard. Resolves the 422 rejection blocking manual live trade execution. |
+| B.3 | Signal Transport | `app/frontend/src/hooks/useStreamConnection.js` | Cleaned signal object (no duplicate `score`/`label`/`marketContext` aliases); added JSDoc to `normalizeConfidence`. |
+| C.1 | Error Handling | `app/frontend/src/api/httpClient.js` | FastAPI 422 `detail` array is now parsed into human-readable field-level messages instead of `[object Object]`. |
+| C.2 | Demo Flag | `app/frontend/src/stores/useTradingStore.js` | `demo` flag in trade payload now reads from `useOpsStore.accountType` instead of being hardcoded `false`. |
+| D.3 | Performance | `app/backend/services/streaming.py` | `_resolve_asset_payout_pct` now uses a 60s TTL cache (`_payout_cache`) to eliminate repeated broker IO on the hot tick path. |
+
+**Source:** `Dev_Docs/TRAE_Fixes_Implementation_Plan_26-04-27.md` — Plan closed 2026-04-28. All 4 phases (A→D) verified via Phase Review Protocol.
+
 ### Applied on 2026-04-06
 
 | Area | File(s) | Outcome |
@@ -66,8 +81,10 @@
 - The tighter Level 2 policy and stricter manipulation detector will likely reduce total trade frequency. The next live test cycle needs to verify if the win-rate improvement justifies the volume reduction.
 - Macro S/R fallback still uses absolute min/max (ISSUE-11 - LOW severity), which is non-critical but noted for future polish.
 - Confluence badges are currently limited to the signal and `market_context` fields already emitted in the live payload. Any deeper explainability will require additional backend signal metadata.
+- `raw_confidence` (categorical string from backend) is not yet forwarded into the frontend signal object. Currently the backend validator (B.1) handles normalization server-side, which is sufficient — but if a future UI element needs the raw label, this remains an optional add (B.3 from TRAE plan).
 
 ## Next Steps
+- **Run a live manual trade session** to confirm the full confidence contract fix (B.1) works end-to-end: numeric confidence → backend validator → `HIGH`/`MEDIUM`/`LOW` stored in journal.
 - Run a new Auto-Ghost session to benchmark the new `Level2PolicyConfig` and hardened Manipulation Detector.
 - Begin outlining Level 3 Regime Classification logic now that the Level 2 foundation is stable and performant.
 - Validate the new confluence badges and larger mini-chart gauges during a live session to confirm readability under real streaming load.

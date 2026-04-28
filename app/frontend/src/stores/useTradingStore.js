@@ -8,6 +8,50 @@ import { useOpsStore } from './useOpsStore.js';
 import { useRiskStore } from './useRiskStore.js';
 import { useToastStore } from './useToastStore.js';
 import { useSettingsStore } from './useSettingsStore.js';
+import { useAssetStore } from './useAssetStore.js';
+
+function normalizeSignalSnapshot(signal = {}) {
+  const oteoScore = Number(signal.oteo_score ?? signal.score ?? 0);
+
+  return {
+    price: signal.price ?? null,
+    z_score: Number(signal.z_score ?? 0),
+    oteo_score: Number.isFinite(oteoScore) ? oteoScore : 0,
+    base_oteo_score: Number(signal.base_oteo_score ?? oteoScore ?? 0),
+    confidence: Number(signal.confidence ?? 0),
+    recommended: signal.recommended ?? signal.direction ?? signal.label ?? null,
+    pressure_pct: Number(signal.pressure_pct ?? 0),
+    velocity: Number(signal.velocity ?? 0),
+    slow_velocity: Number(signal.slow_velocity ?? 0),
+    stretch_alignment: Number(signal.stretch_alignment ?? 0),
+    level2_enabled: Boolean(signal.level2_enabled),
+    level2_score_adjustment: Number(signal.level2_score_adjustment ?? 0),
+    level2_suppressed_reason: signal.level2_suppressed_reason ?? null,
+    market_context: signal.market_context ?? signal.marketContext ?? null,
+  };
+}
+
+function validateTradeRequest(asset, amount, duration) {
+  const normalizedAsset = typeof asset === 'string' ? asset.trim() : '';
+  if (!normalizedAsset) {
+    return 'Select an asset before placing a trade.';
+  }
+
+  const { availableAssets } = useAssetStore.getState();
+  if (Array.isArray(availableAssets) && availableAssets.length > 0 && !availableAssets.includes(normalizedAsset)) {
+    return `Selected asset is not available for trading: ${normalizedAsset}`;
+  }
+
+  if (!(Number(amount) > 0)) {
+    return 'Trade amount must be greater than zero.';
+  }
+
+  if (!(Number(duration) > 0)) {
+    return 'Trade expiration must be greater than zero.';
+  }
+
+  return null;
+}
 
 export const useTradingStore = create((set, get) => ({
   // Form state
@@ -38,6 +82,25 @@ export const useTradingStore = create((set, get) => ({
   executeTrade: async (broker, asset, overrideAmount = null) => {
     const { amount, direction, duration } = get();
     const finalAmount = overrideAmount !== null ? overrideAmount : amount;
+    const validationError = validateTradeRequest(asset, finalAmount, duration);
+
+    if (validationError) {
+      set({ tradeError: validationError, lastTradeResult: null });
+      useToastStore.getState().addToast({ type: 'error', message: validationError });
+      return;
+    }
+    
+    // Capture live streaming data (confluences, z-scores, manipulation)
+    const { useStreamStore } = await import('./useStreamStore.js');
+    const streamState = useStreamStore.getState();
+    const signal = streamState.signals[asset] || {};
+    const manip = streamState.manipulation[asset] || {};
+    const normalizedSignal = normalizeSignalSnapshot(signal);
+    
+    const entry_context = {
+      ...normalizedSignal,
+      manipulation: manip.detected ? manip.type : null,
+    };
     
     set({ isExecuting: true, tradeError: null, lastTradeResult: null });
     try {
@@ -48,7 +111,14 @@ export const useTradingStore = create((set, get) => ({
         expiration: duration,
         account_key: 'primary',
         trade_mode: 'live',
-        demo: false,
+        demo: useOpsStore.getState().accountType === 'demo',
+        oteo_score: normalizedSignal.oteo_score,
+        base_oteo_score: normalizedSignal.base_oteo_score,
+        confidence: normalizedSignal.confidence,
+        level2_score_adjustment: normalizedSignal.level2_score_adjustment,
+        manipulation_at_entry: manip.detected ? { type: manip.type } : null,
+        entry_context,
+        trigger_mode: 'manual',
       });
 
       if (!result?.success) {

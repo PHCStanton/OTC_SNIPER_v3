@@ -235,6 +235,13 @@ export const useRiskStore = create((set, get) => ({
   // Per-asset session stats
   assetStats: {}, // { [asset]: { w: number, l: number } }
 
+  // Auto Ghost Live Metrics
+  autoGhostMetrics: null,
+
+  setAutoGhostMetrics: (metrics) => {
+    set({ autoGhostMetrics: metrics });
+  },
+
   setRecordingMode: (mode) => {
     if (!['auto', 'manual'].includes(mode)) {
       throw new Error(`Invalid recording mode: ${mode}`);

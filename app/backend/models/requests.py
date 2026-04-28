@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ConnectBrokerRequest(BaseModel):
@@ -26,3 +26,27 @@ class TradeExecutionRequest(BaseModel):
     manipulation_at_entry: dict | None = None
     entry_context: dict | None = None
     trigger_mode: str | None = None
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def normalize_confidence(cls, value):
+        if value is None:
+            return None
+
+        if isinstance(value, str):
+            normalized = value.strip().upper()
+            return normalized or None
+
+        if isinstance(value, bool):
+            raise ValueError("confidence must be a string, number, or null")
+
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("confidence must be a string, number, or null") from exc
+
+        if numeric > 75:
+            return "HIGH"
+        if numeric > 55:
+            return "MEDIUM"
+        return "LOW"

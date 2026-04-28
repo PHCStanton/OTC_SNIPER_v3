@@ -5,11 +5,14 @@ Asynchronous JSONL logging for live ticks.
 import aiofiles
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Set
 
 logger = logging.getLogger(__name__)
+
+_DATED_TICK_FILE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\.jsonl$")
 
 
 class TickLogger:
@@ -51,7 +54,14 @@ class TickLogger:
         if not asset_dir.exists():
             return []
 
-        files = sorted(list(asset_dir.glob("*.jsonl")), reverse=True)
+        files = sorted(
+            [
+                path
+                for path in asset_dir.glob("*.jsonl")
+                if _DATED_TICK_FILE_RE.match(path.name)
+            ],
+            reverse=True,
+        )
         if not files:
             return []
 

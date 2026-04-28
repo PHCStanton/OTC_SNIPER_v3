@@ -40,6 +40,13 @@ class AutoGhostService:
         self._session_losses: int = 0
         self._drawdown_cooldown_until: float = 0.0
         self._session_halted: bool = False
+        self._current_streak_type: str | None = None
+        self._current_streak_count: int = 0
+        self._max_win_streak: int = 0
+        self._max_loss_streak: int = 0
+        self._last_streak_start_time: float = 0.0
+        self._avg_recovery_time: float = 0.0
+        self._total_recovery_sessions: int = 0
 
     def update_config(
         self,
@@ -82,6 +89,13 @@ class AutoGhostService:
             self._session_wins = 0
             self._session_losses = 0
             self._session_halted = False
+            self._current_streak_type = None
+            self._current_streak_count = 0
+            self._max_win_streak = 0
+            self._max_loss_streak = 0
+            self._last_streak_start_time = unix_time()
+            self._avg_recovery_time = 0.0
+            self._total_recovery_sessions = 0
             logger.info("Started Auto-Ghost session %s", self._session_id)
         return self.status
 
@@ -100,6 +114,11 @@ class AutoGhostService:
             "auto_ghost_session_trades": self._session_trade_count,
             "auto_ghost_session_wins": self._session_wins,
             "auto_ghost_session_losses": self._session_losses,
+            "auto_ghost_current_streak_type": self._current_streak_type,
+            "auto_ghost_current_streak_count": self._current_streak_count,
+            "auto_ghost_max_win_streak": self._max_win_streak,
+            "auto_ghost_max_loss_streak": self._max_loss_streak,
+            "auto_ghost_avg_recovery_time_mins": round(self._avg_recovery_time / 60, 2),
             "auto_ghost_drawdown_cooldown_active": unix_time() < self._drawdown_cooldown_until,
             "auto_ghost_session_halted": self._session_halted,
         }
@@ -107,10 +126,37 @@ class AutoGhostService:
     def report_outcome(self, trade_id: str, outcome: str, profit: float) -> None:
         self._session_trade_count += 1
         self._session_pnl += profit
+        now = unix_time()
+
         if outcome == "win":
             self._session_wins += 1
         elif outcome == "loss":
             self._session_losses += 1
+
+        # Streak Tracking
+        if outcome in {"win", "loss"}:
+            if outcome == self._current_streak_type:
+                self._current_streak_count += 1
+            else:
+                # Previous streak ended - handle recovery time if it was a loss streak
+                if self._current_streak_type == "loss":
+                    duration = now - self._last_streak_start_time
+                    self._total_recovery_sessions += 1
+                    # Simple moving average for recovery time
+                    self._avg_recovery_time = (
+                        (self._avg_recovery_time * (self._total_recovery_sessions - 1) + duration)
+                        / self._total_recovery_sessions
+                    )
+
+                self._current_streak_type = outcome
+                self._current_streak_count = 1
+                self._last_streak_start_time = now
+
+            # Update records
+            if outcome == "win":
+                self._max_win_streak = max(self._max_win_streak, self._current_streak_count)
+            else:
+                self._max_loss_streak = max(self._max_loss_streak, self._current_streak_count)
 
         if self.config.max_drawdown_amount > 0 and self._session_pnl <= -abs(self.config.max_drawdown_amount):
             self._drawdown_cooldown_until = unix_time() + self.config.drawdown_cooldown_seconds

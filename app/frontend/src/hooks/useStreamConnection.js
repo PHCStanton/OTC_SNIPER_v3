@@ -14,6 +14,14 @@ const CONFIDENCE_BY_LEVEL = {
   LOW: 40,
 };
 
+/**
+ * Normalize confidence to a 0-100 numeric value for UI gauges.
+ *
+ * Accepts:
+ * - Numeric values in the 0-1 or 0-100 range
+ * - Categorical strings such as HIGH, MEDIUM, or LOW
+ * - Falls back to the OTEO score when confidence is unavailable
+ */
 function normalizeConfidence(payloadConfidence, score) {
   const numericConfidence = Number(payloadConfidence);
   if (Number.isFinite(numericConfidence)) {
@@ -91,8 +99,9 @@ export function useStreamConnection() {
       const signal = {
         direction: normalizedDirection,
         confidence,
-        score: Number.isFinite(score) ? score : confidence,
-        label: typeof payload.recommended === 'string' ? payload.recommended : null,
+        price,
+        oteo_score: Number.isFinite(score) ? score : confidence,
+        recommended: normalizedDirection,
         velocity: Number(payload.velocity ?? 0),
         pressure_pct: Number(payload.pressure_pct ?? 0),
         z_score: Number(payload.z_score ?? 0),
@@ -107,7 +116,7 @@ export function useStreamConnection() {
         level2_enabled: Boolean(payload.level2_enabled),
         level2_score_adjustment: Number(payload.level2_score_adjustment ?? 0),
         level2_suppressed_reason: payload.level2_suppressed_reason ?? null,
-        marketContext: payload.market_context ?? null,
+        market_context: payload.market_context ?? null,
         regime: payload.market_context?.adx_regime ?? null,
       };
 

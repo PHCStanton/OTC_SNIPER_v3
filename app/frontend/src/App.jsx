@@ -57,6 +57,9 @@ export default function App() {
         if (data.session.balance != null) setBalance(data.session.balance);
         if (data.session.account_type != null) setAccountType(data.session.account_type);
       }
+      if (data.auto_ghost) {
+        useRiskStore.getState().setAutoGhostMetrics(data.auto_ghost);
+      }
     });
 
     socket.on('trade_entry', (data) => {

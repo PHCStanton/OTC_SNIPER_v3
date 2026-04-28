@@ -1,8 +1,12 @@
 /**
- * AppSettings — OTEO, ghost trading, trading controls, and UI preferences.
+ * AppSettings — Global System Settings following the Stitch Design Reference.
  */
 import { useState } from 'react';
-import { Circle, Eye, Gauge, Ghost, LayoutGrid, MessageSquareWarning, SlidersHorizontal, Target, Bot, ChevronDown, Volume2 } from 'lucide-react';
+import {
+  Target, Bot, Ghost, Gauge, Volume2, LayoutGrid,
+  ChevronDown, Info, ShieldAlert, Activity, Zap,
+  BarChart3, Settings2, RefreshCcw, Save
+} from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
@@ -41,62 +45,107 @@ const GHOST_OPTIONS = [
   { id: 'wobble.gif', name: 'Wobble', src: wobble },
 ];
 
-function SectionCard({ title, subtitle, icon: Icon, children }) {
+function SectionCard({ title, subtitle, icon: Icon, children, badge, toggle, onToggle }) {
   return (
-    <section className="rounded-3xl border border-white/5 bg-[#151a22]/95 p-5 shadow-[0_15px_40px_rgba(0,0,0,0.28)]">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold tracking-tight text-[#e3e6e7]">{title}</h3>
-          <p className="mt-1 text-xs text-gray-500">{subtitle}</p>
-        </div>
-        {Icon && (
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0f1419] text-[#f5df19]">
-            <Icon size={18} />
+    <section className="relative overflow-hidden rounded-[20px] bg-[#1a1c22] p-6 shadow-xl border border-white/5">
+      <div className="mb-6 flex items-start justify-between">
+        <div className="flex gap-4">
+          {Icon && (
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#25282f] text-[#ffb800]">
+              <Icon size={24} />
+            </div>
+          )}
+          <div>
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-black uppercase tracking-wider text-white">{title}</h3>
+              {badge && (
+                <span className="rounded-md bg-[#ffb800]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#ffb800] border border-[#ffb800]/20">
+                  {badge}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-gray-500 font-medium">{subtitle}</p>
           </div>
+        </div>
+        {toggle !== undefined && (
+          <button
+            type="button"
+            onClick={() => onToggle(!toggle)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+              toggle ? 'bg-[#ffb800]' : 'bg-[#2d3139]'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                toggle ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
         )}
       </div>
-      <div className="space-y-3">{children}</div>
+      <div className="space-y-6">{children}</div>
     </section>
   );
 }
 
-function ToggleRow({ label, description, checked, onChange }) {
+function InputGroup({ label, description, children, layout = 'vertical' }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-left transition-colors hover:bg-white/5"
-    >
-      <div>
-        <p className="text-sm font-bold text-[#e3e6e7]">{label}</p>
-        <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
+    <div className={`flex ${layout === 'horizontal' ? 'flex-row items-center justify-between' : 'flex-col space-y-2'}`}>
+      <div className={layout === 'horizontal' ? 'flex-1' : ''}>
+        <p className="text-[11px] font-black uppercase tracking-[0.15em] text-gray-400">{label}</p>
+        {description && <p className="mt-1 text-[11px] font-medium text-gray-600 leading-relaxed uppercase">{description}</p>}
       </div>
-      <span className={`relative inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-[#f5df19]' : 'bg-white/10'}`}>
-        <span className={`h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-      </span>
-    </button>
+      <div className={layout === 'horizontal' ? 'ml-4' : 'mt-2'}>
+        {children}
+      </div>
+    </div>
   );
 }
 
-function NumberField({ label, description, value, onChange, min, step = 1, suffix }) {
+function NumberInput({ value, onChange, min, suffix, icon: Icon }) {
   return (
-    <label className="block rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-[#e3e6e7]">{label}</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
-        </div>
-        {suffix && <span className="rounded-full border border-white/5 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">{suffix}</span>}
+    <div className="flex h-14 w-full items-center overflow-hidden rounded-lg bg-white shadow-inner">
+      <div className="flex h-full w-12 items-center justify-center bg-gray-50 text-gray-400">
+        {Icon ? <Icon size={18} /> : <span className="text-lg font-bold">#</span>}
       </div>
       <input
         type="number"
         min={min}
-        step={step}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-3 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-bold text-black outline-none transition focus:border-[#f5df19] focus:bg-white"
+        onChange={(e) => onChange(e.target.value)}
+        className="h-full flex-1 px-4 text-xl font-black text-black outline-none"
       />
-    </label>
+      <div className="flex h-full items-center bg-gray-100 px-4 text-[10px] font-black uppercase tracking-widest text-gray-500 border-l border-gray-200">
+        {suffix}
+      </div>
+    </div>
+  );
+}
+
+function MiniModule({ label, active, onClick, icon: Icon }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`group relative flex flex-col items-center justify-center gap-3 rounded-xl border p-4 transition-all duration-300 ${
+        active
+          ? 'border-[#ffb800]/30 bg-[#ffb800]/5 shadow-[0_0_20px_rgba(255,184,0,0.1)]'
+          : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.05]'
+      }`}
+    >
+      <div className={`flex h-12 w-12 items-center justify-center rounded-lg transition-colors ${
+        active ? 'bg-[#ffb800] text-black' : 'bg-[#25282f] text-gray-500 group-hover:text-gray-300'
+      }`}>
+        {Icon && <Icon size={20} />}
+      </div>
+      <div className="text-center">
+        <p className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-[#ffb800]' : 'text-gray-500 group-hover:text-gray-400'}`}>
+          {label}
+        </p>
+        <p className={`mt-1 text-[8px] font-bold uppercase tracking-widest ${active ? 'text-[#ffb800]/60' : 'text-gray-600'}`}>
+          {active ? 'Active' : 'Inactive'}
+        </p>
+      </div>
+    </button>
   );
 }
 
@@ -149,330 +198,340 @@ export default function AppSettings() {
   const [isGhostSelectorOpen, setIsGhostSelectorOpen] = useState(false);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      <SectionCard title="OTEO" subtitle="Signal warmup and cooldown stay in the app layer, not the session layer." icon={Target}>
-        <div className="rounded-2xl border border-[#f5df19]/20 bg-[#f5df19]/10 px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-[#e3e6e7]">Level 1 baseline</p>
-              <p className="mt-1 text-xs leading-5 text-gray-400">
-                Core OTEO stays active as the baseline engine. Level 2 and Level 3 are additive filters layered on top.
-              </p>
-            </div>
-            <span className="rounded-full border border-[#f5df19]/30 bg-[#f5df19]/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-[#f5df19]">
-              Always on
-            </span>
-          </div>
+    <div className="max-w-[1400px] mx-auto p-8 space-y-10">
+      {/* Header Section */}
+      <div className="flex items-end justify-between border-b border-white/5 pb-8">
+        <div>
+          <h1 className="text-4xl font-black uppercase tracking-tighter text-white">Global System Settings</h1>
+          <p className="mt-2 text-sm font-medium text-gray-500">Configure core algorithmic layers and execution protocols.</p>
         </div>
-        <ToggleRow
-          label="Level 2 context filter"
-          description="Enable market-context filtering so Support/Resistance and ADX can refine baseline OTEO entries when Level 2 is implemented."
-          checked={oteoLevel2Enabled}
-          onChange={setOteoLevel2Enabled}
-        />
-        <ToggleRow
-          label="Level 3 regime + AI layer"
-          description="Enable the advanced regime and AI ranking layer when available. Level 3 depends on Level 2 and will automatically keep Level 2 on."
-          checked={oteoLevel3Enabled}
-          onChange={setOteoLevel3Enabled}
-        />
-        {oteoLevel3Enabled && (
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs leading-5 text-amber-200">
-            Level 3 depends on Level 2 context. When Level 3 is enabled, Level 2 stays enabled automatically.
-          </div>
-        )}
-        <div className="grid gap-3 md:grid-cols-2">
-          <NumberField
-            label="Warmup bars"
-            description="Bars required before the signal can be trusted."
-            value={oteoWarmupBars}
-            onChange={setOteoWarmupBars}
-            min={0}
-            step={1}
-            suffix="bars"
-          />
-          <NumberField
-            label="Cooldown bars"
-            description="Bars to wait before the signal can fire again."
-            value={oteoCooldownBars}
-            onChange={setOteoCooldownBars}
-            min={0}
-            step={1}
-            suffix="bars"
-          />
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
-          <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
-            <Circle size={10} className="fill-emerald-400 text-emerald-400" />
-            Rollout map
-          </div>
-          <p className="mt-2">
-            Level 1 is the core baseline. Level 2 and Level 3 are user-togglable overlays so traders can test progressively stronger filtering without branching into separate OTEO engines.
-          </p>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="AI integration" subtitle="Choose the default model used by the advisory assistant." icon={Bot}>
-        <label className="block rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-          <p className="text-sm font-bold text-[#e3e6e7]">Default AI model</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500">Used by the AI tab when no model override is supplied.</p>
-          <select
-            value={aiModel}
-            onChange={(event) => setAiModel(event.target.value)}
-            className="mt-3 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-bold text-black outline-none transition focus:border-[#f5df19]"
-          >
-            <option value="grok-4-1-fast-non-reasoning">grok-4-1-fast-non-reasoning</option>
-            <option value="grok-4-1-fast-reasoning">grok-4-1-fast-reasoning</option>
-            <option value="grok-4">grok-4</option>
-          </select>
-        </label>
-      </SectionCard>
-
-      <SectionCard title="Ghost trading" subtitle="Simulation mode for previewing execution without a live trade." icon={Ghost}>
-
-        <ToggleRow
-          label="Enable Auto-Ghost trader"
-          description="Automatically open ghost trades on actionable signals for currently streamed assets while keeping live capital untouched."
-          checked={autoGhostEnabled}
-          onChange={setAutoGhostEnabled}
-        />
-        <NumberField
-          label="Auto-Ghost simulated amount"
-          description="Simulated amount used for Auto-Ghost entries."
-          value={ghostAmount}
-          onChange={setGhostAmount}
-          min={0}
-          step={0.1}
-          suffix="amount"
-        />
-        <div className="grid gap-3 md:grid-cols-3">
-          <NumberField
-            label="Auto-Ghost expiry"
-            description="Expiry used by automatic ghost entries."
-            value={autoGhostExpirationSeconds}
-            onChange={setAutoGhostExpirationSeconds}
-            min={5}
-            step={1}
-            suffix="seconds"
-          />
-          <NumberField
-            label="Max concurrent"
-            description="Maximum number of simultaneous Auto-Ghost trades."
-            value={autoGhostMaxConcurrentTrades}
-            onChange={setAutoGhostMaxConcurrentTrades}
-            min={1}
-            step={1}
-            suffix="trades"
-          />
-          <NumberField
-            label="Per-asset cooldown"
-            description="Extra wait time after expiry before Auto-Ghost can reuse the same asset."
-            value={autoGhostPerAssetCooldownSeconds}
-            onChange={setAutoGhostPerAssetCooldownSeconds}
-            min={0}
-            step={1}
-            suffix="seconds"
-          />
-        </div>
-        <NumberField
-          label="Minimum payout"
-          description="Auto-Ghost skips entries when the live payout falls below this threshold."
-          value={autoGhostMinimumPayout}
-          onChange={setAutoGhostMinimumPayout}
-          min={0}
-          step={1}
-          suffix="%"
-        />
-        <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
-          <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
-            <Ghost size={14} className="text-[#f5df19]" />
-            Auto-Ghost scope
-          </div>
-          <p className="mt-2">
-            Auto-Ghost only evaluates assets that are currently being streamed by the workspace, which means the focused asset and any active multi-chart watchlist assets.
-          </p>
-        </div>
-
-        <div className="block rounded-2xl border border-white/5 bg-[#0f1419] overflow-hidden transition-all duration-300">
-          <button 
-            type="button"
-            onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
-            className="w-full flex items-center justify-between px-4 py-4 text-left hover:bg-white/5 transition-colors"
-          >
-            <div>
-              <p className="text-sm font-bold text-[#e3e6e7]">Choose your Ghost</p>
-              <p className="mt-1 text-xs leading-5 text-gray-500">Select the appearance of your ghost trading companion.</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {/* Show the currently selected ghost or static if closed */}
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-[#151a22]">
-                <img 
-                  src={isGhostSelectorOpen ? (GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic) : ghostStatic} 
-                  alt="Current Ghost" 
-                  className={`h-6 w-6 object-contain mix-blend-screen`}
-                />
-              </div>
-              <ChevronDown size={16} className={`text-gray-500 transition-transform duration-300 ${isGhostSelectorOpen ? 'rotate-180' : ''}`} />
-            </div>
+        <div className="flex gap-4">
+          <button className="flex items-center gap-2 rounded-lg bg-[#25282f] px-6 py-3 text-xs font-black uppercase tracking-widest text-gray-400 transition hover:bg-[#2d3139] hover:text-white border border-white/5">
+            <RefreshCcw size={14} />
+            Revert Changes
           </button>
+          <button className="flex items-center gap-2 rounded-lg bg-[#ffb800] px-8 py-3 text-xs font-black uppercase tracking-widest text-black transition hover:bg-[#ffc833] shadow-[0_4px_20px_rgba(255,184,0,0.3)]">
+            <Save size={14} />
+            Commit Protocol
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-12 gap-6">
+        {/* Left Column - OTEO & Auto-Ghost */}
+        <div className="col-span-12 lg:col-span-7 space-y-6">
           
-          <div 
-            className={`grid transition-all duration-300 ease-in-out ${
-              isGhostSelectorOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-            }`}
+          {/* OTEO SIGNAL LAYER */}
+          <SectionCard 
+            title="OTEO Signal Layer" 
+            subtitle="Primary signal detection engine with multi-layered verification."
+            icon={Target}
+            toggle={oteoLevel2Enabled}
+            onToggle={setOteoLevel2Enabled}
           >
-            <div className="overflow-hidden">
-              <div className="grid grid-cols-4 gap-3 sm:grid-cols-6 lg:grid-cols-8 p-4 pt-0 border-t border-white/5">
+            <div className="space-y-6">
+              <InputGroup label="Confidence Levels">
+                <div className="flex gap-3">
+                  {['Level 1', 'Level 2', 'Level 3 (AI)'].map((level, idx) => {
+                    const isActive = idx === 0 || (idx === 1 && oteoLevel2Enabled) || (idx === 2 && oteoLevel3Enabled);
+                    const isSelectable = idx > 0;
+                    return (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          if (idx === 1) setOteoLevel2Enabled(!oteoLevel2Enabled);
+                          if (idx === 2) setOteoLevel3Enabled(!oteoLevel3Enabled);
+                        }}
+                        disabled={!isSelectable}
+                        className={`flex-1 rounded-lg border py-4 text-[10px] font-black uppercase tracking-widest transition-all ${
+                          isActive 
+                            ? 'border-[#ffb800] bg-[#ffb800]/10 text-[#ffb800] shadow-[0_0_15px_rgba(255,184,0,0.1)]' 
+                            : 'border-white/5 bg-white/[0.02] text-gray-600 hover:border-white/10 hover:text-gray-400'
+                        }`}
+                      >
+                        {level}
+                      </button>
+                    );
+                  })}
+                </div>
+              </InputGroup>
+
+              <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-600">Active_Nodes</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">409 / 512</p>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* AUTO-GHOST TRADER */}
+          <SectionCard 
+            title="Auto-Ghost Trader" 
+            subtitle="Automated simulation layer for background data harvesting."
+            icon={Ghost}
+            toggle={autoGhostEnabled}
+            onToggle={setAutoGhostEnabled}
+          >
+            <div className="grid grid-cols-2 gap-6">
+              <InputGroup label="Simulated Amount" description="Primary execution unit.">
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-[#ffb800]">$</span>
+                  <input
+                    type="number"
+                    value={ghostAmount}
+                    onChange={(e) => setGhostAmount(e.target.value)}
+                    className="h-14 w-full rounded-lg bg-white pl-10 pr-4 text-xl font-black text-black outline-none shadow-inner"
+                  />
+                </div>
+              </InputGroup>
+
+              <InputGroup label="Expiry Times" description="Fixed duration per entry.">
+                <div className="relative">
+                  <select
+                    value={autoGhostExpirationSeconds}
+                    onChange={(e) => setAutoGhostExpirationSeconds(Number(e.target.value))}
+                    className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-sm font-black uppercase tracking-widest text-white outline-none border border-white/5"
+                  >
+                    <option value={60}>M1 (60 Seconds)</option>
+                    <option value={120}>M2 (120 Seconds)</option>
+                    <option value={300}>M5 (300 Seconds)</option>
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                </div>
+              </InputGroup>
+            </div>
+
+            <div className="space-y-4">
+              <InputGroup label="Max Concurrent Trades" layout="horizontal" description="Simultaneous active ghost positions.">
+                <span className="text-xl font-black text-white">{String(autoGhostMaxConcurrentTrades).padStart(2, '0')}</span>
+              </InputGroup>
+              <InputGroup label="Cooldown Per Asset" layout="horizontal" description="Rest period for individual asset identifiers.">
+                <span className="text-xl font-black text-white">{autoGhostPerAssetCooldownSeconds}s</span>
+              </InputGroup>
+            </div>
+
+            <button
+              onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
+              className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-6 border border-white/5 transition hover:bg-[#25282f]"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1c22] border border-white/10 group-hover:border-[#ffb800]/30 transition-colors">
+                  <img src={GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic} alt="Ghost" className="h-8 w-8 object-contain mix-blend-screen" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[11px] font-black uppercase tracking-widest text-white">Copy Ghost Signals Executions</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Double click triggered master sync</p>
+                </div>
+              </div>
+              <div className={`h-6 w-6 rounded-full border-2 transition-all ${isGhostSelectorOpen ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/10'}`} />
+            </button>
+
+            {isGhostSelectorOpen && (
+              <div className="grid grid-cols-8 gap-3 p-4 bg-[#1a1c22] rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
                 {GHOST_OPTIONS.map((option) => (
                   <button
                     key={option.id}
-                    type="button"
-                    onClick={() => {
-                      setGhostIcon(option.id);
-                      // Optional: close after selection
-                      // setIsGhostSelectorOpen(false);
-                    }}
-                    className={`group relative flex aspect-square items-center justify-center rounded-xl border transition-all ${
-                      ghostIcon === option.id 
-                        ? 'border-[#f5df19] bg-[#f5df19]/10' 
-                        : 'border-white/5 bg-white/5 hover:border-white/20 hover:bg-white/10'
+                    onClick={() => setGhostIcon(option.id)}
+                    className={`aspect-square rounded-lg border flex items-center justify-center transition-all ${
+                      ghostIcon === option.id ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/5 bg-white/5 hover:bg-white/10'
                     }`}
-                    title={option.name}
                   >
-                    <img 
-                      src={option.src} 
-                      alt={option.name} 
-                      className={`h-8 w-8 object-contain transition-transform ${ghostIcon === option.id ? 'scale-110 drop-shadow-[0_0_8px_rgba(245,223,25,0.4)]' : 'group-hover:scale-110'} ${option.id === 'Ghost_Icon.png' ? 'mix-blend-screen' : ''}`}
-                    />
-                    {ghostIcon === option.id && (
-                      <div className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-[#f5df19] text-black shadow-sm">
-                        <div className="h-1.5 w-1.5 rounded-full bg-black" />
-                      </div>
-                    )}
+                    <img src={option.src} alt={option.name} className="h-6 w-6 object-contain mix-blend-screen" />
                   </button>
                 ))}
               </div>
+            )}
+          </SectionCard>
+        </div>
+
+        {/* Right Column - Risk & UI Config */}
+        <div className="col-span-12 lg:col-span-5 space-y-6">
+          
+          {/* RISK CONTROLS */}
+          <SectionCard 
+            title="Risk Controls" 
+            subtitle="Guardrail protocols for automated execution cycles."
+            icon={ShieldAlert}
+            toggle={true} // Visual only for now as per design
+            onToggle={() => {}}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <InputGroup label="Warmup Bars" description="Bars required before signal confirmation.">
+                <NumberInput 
+                  value={oteoWarmupBars} 
+                  onChange={setOteoWarmupBars} 
+                  min={0} 
+                  suffix="Units" 
+                  icon={Activity}
+                />
+              </InputGroup>
+              <InputGroup label="Cooldown Bars" description="Bars mandatory between consecutive trades.">
+                <NumberInput 
+                  value={oteoCooldownBars} 
+                  onChange={setOteoCooldownBars} 
+                  min={0} 
+                  suffix="Units" 
+                  icon={RefreshCcw}
+                />
+              </InputGroup>
+            </div>
+          </SectionCard>
+
+          {/* CONFIDENCE & ALERTS */}
+          <SectionCard 
+            title="Confidence & Alerts" 
+            subtitle="Real-time telemetry and validation parameters."
+            icon={Zap}
+          >
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ShieldAlert size={16} className="text-[#ffb800]" />
+                  <p className="text-[11px] font-black uppercase tracking-widest text-white">Manipulation Alerts</p>
+                </div>
+                <button
+                  onClick={() => setShowManipulationAlerts(!showManipulationAlerts)}
+                  className={`h-5 w-10 rounded-full transition-colors ${showManipulationAlerts ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                >
+                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${showManipulationAlerts ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              <InputGroup label="Confidence Threshold">
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" 
+                    min="50" 
+                    max="100" 
+                    className="flex-1 accent-[#ffb800]"
+                  />
+                  <span className="text-2xl font-black text-white">85%</span>
+                </div>
+                <div className="mt-2 flex justify-between text-[8px] font-black uppercase tracking-widest text-gray-600">
+                  <span>Low_Risk</span>
+                  <span>Aggressive</span>
+                </div>
+              </InputGroup>
+
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-black uppercase tracking-widest text-white">Auto-Focus on Signal</p>
+                <button
+                  onClick={() => setAutoFocusOnSignal(!autoFocusOnSignal)}
+                  className={`h-5 w-10 rounded-full transition-colors ${autoFocusOnSignal ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                >
+                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${autoFocusOnSignal ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              <div className="rounded-xl bg-white/[0.02] p-6 text-center border border-white/5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Signal Integrity</p>
+                <h4 className="mt-2 text-2xl font-black uppercase tracking-tighter text-[#ffb800]">Optimal</h4>
+                <div className="mt-4 flex justify-center gap-1">
+                  {[...Array(8)].map((_, i) => (
+                    <div 
+                      key={i} 
+                      className="w-1.5 rounded-full bg-[#ffb800]" 
+                      style={{ height: `${[12, 24, 18, 32, 28, 20, 14, 10][i]}px` }} 
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* Bottom - MINI-CHART DISPLAY CONFIG */}
+        <div className="col-span-12">
+          <SectionCard 
+            title="Mini-Chart Display Config" 
+            subtitle="Configure telemetry overlays for active terminal views."
+            icon={LayoutGrid}
+          >
+            <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center gap-3">
+                <Info size={14} className="text-gray-500" />
+                <p className="text-xs font-medium text-gray-500">Enable or disable visual modules across the multi-chart dashboard.</p>
+              </div>
+              <div className="flex items-center gap-3 bg-[#25282f] px-4 py-2 rounded-lg border border-white/5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Global Visibility</p>
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">On</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <MiniModule 
+                label="Mini-Sparklines" 
+                active={miniChartConfig.showSparkline} 
+                onClick={() => setMiniChartConfig({ showSparkline: !miniChartConfig.showSparkline })}
+                icon={Activity}
+              />
+              <MiniModule 
+                label="Gauges" 
+                active={miniChartConfig.showGauge} 
+                onClick={() => setMiniChartConfig({ showGauge: !miniChartConfig.showGauge })}
+                icon={BarChart3}
+              />
+              <MiniModule 
+                label="Live Stats (W/L)" 
+                active={miniChartConfig.showStats} 
+                onClick={() => setMiniChartConfig({ showStats: !miniChartConfig.showStats })}
+                icon={BarChart3}
+              />
+              <MiniModule 
+                label="Ghost Stats (W/L)" 
+                active={true} // Placeholder
+                onClick={() => {}}
+                icon={Ghost}
+              />
+              <MiniModule 
+                label="Regime" 
+                active={miniChartConfig.showRegime} 
+                onClick={() => setMiniChartConfig({ showRegime: !miniChartConfig.showRegime })}
+                icon={Settings2}
+              />
+              <MiniModule 
+                label="Pulse" 
+                active={miniChartConfig.showManipulation} 
+                onClick={() => setMiniChartConfig({ showManipulation: !miniChartConfig.showManipulation })}
+                icon={Activity}
+              />
+            </div>
+          </SectionCard>
+        </div>
+      </div>
+
+      {/* Footer / Sounds Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-10 border-t border-white/5">
+        <div className="rounded-xl bg-[#25282f]/30 p-6 flex items-center justify-between border border-white/5">
+          <div className="flex items-center gap-4">
+            <Volume2 className="text-gray-500" size={20} />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-white">Interface Sounds</p>
+              <p className="text-[10px] font-medium text-gray-600 uppercase">Modern click effects for dashboard UI</p>
             </div>
           </div>
+          <button
+            onClick={() => setUiSoundsEnabled(!uiSoundsEnabled)}
+            className={`h-5 w-10 rounded-full transition-colors ${uiSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+          >
+            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${uiSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
         </div>
-      </SectionCard>
-
-      <SectionCard title="Trading controls" subtitle="Session-level guardrails that shape how long the workspace can keep trading." icon={Gauge}>
-        <NumberField
-          label="Max daily loss"
-          description="Soft stop when the session reaches this total loss amount."
-          value={maxDailyLoss}
-          onChange={setMaxDailyLoss}
-          min={0}
-          step={0.1}
-          suffix="loss cap"
-        />
-        <NumberField
-          label="Max trades per session"
-          description="Hard cap on the number of trades that can be executed in one session."
-          value={maxTradesPerSession}
-          onChange={setMaxTradesPerSession}
-          min={1}
-          step={1}
-          suffix="trades"
-        />
-        <NumberField
-          label="Stop on loss streak"
-          description="Stop trading after this many consecutive losses."
-          value={stopOnLossStreak}
-          onChange={setStopOnLossStreak}
-          min={0}
-          step={1}
-          suffix="streak"
-        />
-      </SectionCard>
-
-      <SectionCard title="Sound effects" subtitle="Toggle audible feedback for UI and trading events." icon={Volume2}>
-        <ToggleRow
-          label="Interface sounds"
-          description="Enable clean, modern click effects when interacting with the dashboard UI."
-          checked={uiSoundsEnabled}
-          onChange={setUiSoundsEnabled}
-        />
-        <ToggleRow
-          label="Trading events"
-          description="Audible alerts for Ghost Trade executions, Wins, and Losses."
-          checked={tradingSoundsEnabled}
-          onChange={setTradingSoundsEnabled}
-        />
-      </SectionCard>
-
-      <SectionCard title="UI preferences" subtitle="Visual and attention settings stay separate from execution logic." icon={LayoutGrid}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <ToggleRow
-            label="Manipulation alerts"
-            checked={showManipulationAlerts}
-            onChange={setShowManipulationAlerts}
-          />
-          <ToggleRow
-            label="Signal confidence"
-            checked={showSignalConfidence}
-            onChange={setShowSignalConfidence}
-          />
-        </div>
-        <ToggleRow
-          label="Auto-focus on signal"
-          description="Move attention to the active signal area when a new setup appears."
-          checked={autoFocusOnSignal}
-          onChange={setAutoFocusOnSignal}
-        />
-
-        <div className="mt-4 border-t border-white/5 pt-4">
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-gray-500 mb-3">Mini-Chart Modules</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setMiniChartConfig({ showSparkline: !miniChartConfig.showSparkline })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showSparkline ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showSparkline ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
-              Sparkline
-            </button>
-            <button
-              onClick={() => setMiniChartConfig({ showGauge: !miniChartConfig.showGauge })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showGauge ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showGauge ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
-              Gauges
-            </button>
-            <button
-              onClick={() => setMiniChartConfig({ showStats: !miniChartConfig.showStats })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showStats ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showStats ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
-              Stats (W/L)
-            </button>
-            <button
-              onClick={() => setMiniChartConfig({ showRegime: !miniChartConfig.showRegime })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showRegime ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showRegime ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
-              Regime
-            </button>
-            <button
-              onClick={() => setMiniChartConfig({ showManipulation: !miniChartConfig.showManipulation })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-widest transition-all ${miniChartConfig.showManipulation ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-white/5 text-gray-500'}`}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${miniChartConfig.showManipulation ? 'bg-[#f5df19]' : 'bg-gray-700'}`} />
-              Pulse
-            </button>
+        <div className="rounded-xl bg-[#25282f]/30 p-6 flex items-center justify-between border border-white/5">
+          <div className="flex items-center gap-4">
+            <Bot className="text-gray-500" size={20} />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-white">Trading Events</p>
+              <p className="text-[10px] font-medium text-gray-600 uppercase">Audible alerts for wins and losses</p>
+            </div>
           </div>
+          <button
+            onClick={() => setTradingSoundsEnabled(!tradingSoundsEnabled)}
+            className={`h-5 w-10 rounded-full transition-colors ${tradingSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+          >
+            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${tradingSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
         </div>
-
-        <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
-          <div className="flex items-center gap-2 font-semibold text-[#e3e6e7]">
-            <MessageSquareWarning size={14} className="text-[#f5df19]" />
-            Validation note
-          </div>
-          <p className="mt-2">
-            All setters in useSettingsStore clamp values before persistence so the UI cannot save invalid ranges.
-          </p>
-        </div>
-      </SectionCard>
+      </div>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import RightSidebar from './RightSidebar.jsx';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import AiSessionPanel from '../ai/AiSessionPanel.jsx';
 import SettingsView from '../settings/SettingsView.jsx';
+import JournalView from '../journal/JournalView.jsx';
 import TradingPlaceholder from '../shared/TradingPlaceholder.jsx';
 import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
 import ErrorBoundary from '../shared/ErrorBoundary.jsx';
@@ -56,19 +57,8 @@ export default function MainLayout() {
 function ActiveView({ view, mode }) {
   if (view === 'ai') return <AiSessionPanel />;
   if (view === 'settings') return <SettingsView />;
-  if (view === 'journal') return <JournalPlaceholder />;
+  if (view === 'journal') return <JournalView />;
 
   if (mode === 'risk') return <RiskPlaceholder />;
   return <TradingPlaceholder />;
-}
-
-function JournalPlaceholder() {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <div className="text-center text-gray-500">
-        <p className="text-lg font-semibold">Journal</p>
-        <p className="text-sm mt-1">Coming soon</p>
-      </div>
-    </div>
-  );
 }
