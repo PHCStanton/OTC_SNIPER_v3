@@ -1,5 +1,8 @@
 # SSID integration package
-ssid_integration_package/
+ssid_integration_package/**/__pycache__/
+ssid_integration_package/**/*.pyc
+ssid_integration_package/**/*.pyo
+ssid_integration_package/**/.env
 
 # DATA
 app/data/

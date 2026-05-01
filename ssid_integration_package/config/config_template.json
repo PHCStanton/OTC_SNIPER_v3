@@ -1,0 +1,13 @@
+{
+  "ssid": "42[\"auth\",{\"session\":\"YOUR_SSID_HERE - Replace with real SSID from Pocket Option browser developer tools\",\"isDemo\":0,\"uid\":12345,\"platform\":2,\"isFastHistory\":true,\"isOptimized\":true}]",
+  "demo": false,
+  "default_asset": "EURUSD_otc",
+  "default_amount": 10.0,
+  "default_expiration": 300,
+  "trading": {
+    "expiration_presets": [3, 15, 30, 60, 180, 300, 1800, 3600, 14400],
+    "min_amount": 1.0,
+    "max_amount": 1000.0
+  },
+  "notes": "1. Get SSID from Pocket Option browser: F12 > Network > WS tab > Filtered by 'ws' > Copy 'session' value\n2. For demo trading, set 'demo': true\n3. Always test connection with examples/basic_connection.py before trading\n4. Use small amounts for first trades"
+}
