@@ -50,6 +50,24 @@ class Level2Config:
     distant_structure_atr: float = 1.35
 
 
+@dataclass(frozen=True)
+class Level3PolicyConfig:
+    """Tunable weights for Level 3 regime-based policy adjustments."""
+
+    range_bound_boost: float = 6.0
+    trend_reversal_boost: float = 5.0
+    trend_pullback_aligned_boost: float = 3.0
+    trend_pullback_counter_penalty: float = -8.0
+    strong_momentum_penalty: float = -12.0
+    breakout_penalty: float = -10.0
+    choppy_penalty: float = -15.0
+    min_regime_confidence_for_boost: float = 50.0
+    suppress_in_choppy: bool = True
+    suppress_counter_strong_momentum: bool = True
+    suppress_in_breakout: bool = True
+    unstable_regime_penalty: float = -3.0
+
+
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
 
@@ -193,7 +211,7 @@ class MarketContextEngine:
         candle_closed = False
         if self._current_candle is None:
             self._current_candle = Candle(candle_start, price, price, price, price)
-            candle_closed = True
+            candle_closed = False
         elif candle_start == self._current_candle.start_ts:
             self._current_candle.high = max(self._current_candle.high, price)
             self._current_candle.low = min(self._current_candle.low, price)
@@ -227,9 +245,11 @@ class MarketContextEngine:
             macro_resistance = _last_confirmed_pivot(closed_candles, self.config.macro_pivot_span, self.config.macro_lookback, "high")
 
             if macro_support is None and closed_candles:
-                macro_support = min(candle.low for candle in closed_candles[-self.config.macro_lookback:])
+                lows = sorted(candle.low for candle in closed_candles[-self.config.macro_lookback:])
+                macro_support = lows[max(0, len(lows) // 10)]
             if macro_resistance is None and closed_candles:
-                macro_resistance = max(candle.high for candle in closed_candles[-self.config.macro_lookback:])
+                highs = sorted(candle.high for candle in closed_candles[-self.config.macro_lookback:])
+                macro_resistance = highs[min(len(highs) - 1, (len(highs) * 9) // 10)]
 
             if adx is None:
                 adx_regime = "unavailable"
@@ -276,6 +296,7 @@ class MarketContextEngine:
                 "macro_resistance": macro_resistance,
                 "adx_falling": bool(adx_slope is not None and adx_slope < 0),
                 "reversal_friendly": adx is not None and (adx < 28 or (adx_slope is not None and adx_slope < -0.5)),
+                "distant_structure_atr_threshold": self.config.distant_structure_atr,
             }
 
         c = self._cached_context
@@ -298,6 +319,7 @@ class MarketContextEngine:
         return {
             "ready": c["ready"],
             "candle_count": c["candle_count"],
+            "candle_closed": candle_closed,
             "atr": round(float(c["atr"]), 6) if c["atr"] is not None else None,
             "adx": round(float(c["adx"]), 2) if c["adx"] is not None else None,
             "plus_di": round(float(c["plus_di"]), 2) if c["plus_di"] is not None else None,
@@ -319,6 +341,7 @@ class MarketContextEngine:
             "resistance_alignment": resistance_alignment,
             "adx_falling": c["adx_falling"],
             "reversal_friendly": c["reversal_friendly"],
+            "distant_structure_atr_threshold": c["distant_structure_atr_threshold"],
         }
 
 
@@ -406,7 +429,8 @@ def apply_level2_policy(oteo_result: dict[str, Any], market_context: dict[str, A
     elif adx_regime == "weak" and not (support_alignment or resistance_alignment):
         score_adjustment += policy.weak_adx_unaligned_penalty
 
-    if nearest_structure_atr is not None and nearest_structure_atr > 1.35:
+    distant_structure_threshold = market_context.get("distant_structure_atr_threshold", 1.35)
+    if nearest_structure_atr is not None and nearest_structure_atr > float(distant_structure_threshold):
         score_adjustment += policy.distant_structure_penalty
 
     if isinstance(cci, (int, float)) and abs(cci) < policy.neutral_cci_band:
@@ -443,4 +467,119 @@ def apply_level2_policy(oteo_result: dict[str, Any], market_context: dict[str, A
     result["actionable"] = adjusted_actionable and adjusted_confidence in {"MEDIUM", "HIGH"}
     result["level2_score_adjustment"] = round(score_adjustment, 1)
     result["level2_suppressed_reason"] = suppress_reason
+    return result
+
+
+def apply_level3_policy(
+    oteo_result: dict[str, Any],
+    market_context: dict[str, Any],
+    regime: dict[str, Any],
+    config: Level3PolicyConfig | None = None,
+) -> dict[str, Any]:
+    """
+    Apply Level 3 regime-aware policy adjustments after Level 2 has run.
+
+    Expected contracts:
+      - oteo_result["recommended"] -> "CALL" | "PUT" | "NEUTRAL"
+      - market_context["trend_direction"] -> "up" | "down" | "flat"
+    """
+
+    policy = config or Level3PolicyConfig()
+    result = dict(oteo_result)
+    regime_label = str(regime.get("regime_label") or "INSUFFICIENT_DATA")
+    regime_confidence = float(regime.get("regime_confidence") or 0.0)
+    regime_stable = bool(regime.get("regime_stable", False))
+    score = float(oteo_result.get("oteo_score", 50.0))
+    actionable_floor = Level2PolicyConfig().min_actionable_score
+
+    result["level3_score_adjustment"] = 0.0
+    result["level3_suppressed_reason"] = None
+    result["regime_label"] = regime_label
+    result["regime_confidence"] = round(regime_confidence, 1)
+    result["regime_stable"] = regime_stable
+
+    if regime_label == "INSUFFICIENT_DATA":
+        return result
+
+    direction = str(oteo_result.get("recommended") or "").upper()
+    if direction not in {"CALL", "PUT", "NEUTRAL"}:
+        raise ValueError(f"apply_level3_policy: unexpected direction value {direction!r}")
+
+    trend_raw = str(market_context.get("trend_direction") or "").lower()
+    if trend_raw not in {"up", "down", "flat", ""}:
+        raise ValueError(f"apply_level3_policy: unexpected trend_direction value {trend_raw!r}")
+
+    trend_direction = {"up": "bullish", "down": "bearish"}.get(trend_raw, "flat")
+    if direction == "NEUTRAL" or not bool(oteo_result.get("actionable")):
+        return result
+
+    confidence_scale = (
+        min(1.0, regime_confidence / 100.0)
+        if regime_confidence >= policy.min_regime_confidence_for_boost
+        else 0.5
+    )
+    level3_adjustment = 0.0
+    suppress_reason = None
+
+    if regime_label == "RANGE_BOUND":
+        level3_adjustment += policy.range_bound_boost * confidence_scale
+    elif regime_label == "TREND_REVERSAL":
+        level3_adjustment += policy.trend_reversal_boost * confidence_scale
+    elif regime_label == "TREND_PULLBACK":
+        trend_aligned = (
+            (direction == "CALL" and trend_direction == "bullish")
+            or (direction == "PUT" and trend_direction == "bearish")
+        )
+        if trend_aligned:
+            level3_adjustment += policy.trend_pullback_aligned_boost * confidence_scale
+        else:
+            level3_adjustment += policy.trend_pullback_counter_penalty * confidence_scale
+            if policy.suppress_counter_strong_momentum:
+                suppress_reason = "L3: counter-trend in pullback regime"
+    elif regime_label == "STRONG_MOMENTUM":
+        level3_adjustment += policy.strong_momentum_penalty * confidence_scale
+        counter_trend = (
+            (direction == "PUT" and trend_direction == "bullish")
+            or (direction == "CALL" and trend_direction == "bearish")
+        )
+        if counter_trend and policy.suppress_counter_strong_momentum:
+            suppress_reason = "L3: reversal suppressed in strong momentum"
+    elif regime_label == "BREAKOUT":
+        level3_adjustment += policy.breakout_penalty * confidence_scale
+        if policy.suppress_in_breakout:
+            suppress_reason = "L3: signal suppressed during breakout"
+    elif regime_label == "CHOPPY":
+        level3_adjustment += policy.choppy_penalty * confidence_scale
+        if policy.suppress_in_choppy:
+            suppress_reason = "L3: signal suppressed in choppy regime"
+
+    if not regime_stable:
+        level3_adjustment += policy.unstable_regime_penalty
+
+    adjusted_score = round(_clamp(score + level3_adjustment, 0.0, 100.0), 1)
+    adjusted_confidence = str(result.get("confidence") or "LOW").upper()
+    if adjusted_confidence not in {"LOW", "MEDIUM", "HIGH"}:
+        adjusted_confidence = "LOW"
+
+    if level3_adjustment >= 8.0 and adjusted_score >= 75.0:
+        adjusted_confidence = _confidence_from_rank(_confidence_rank(adjusted_confidence) + 1)
+    elif level3_adjustment <= -8.0:
+        adjusted_confidence = _confidence_from_rank(_confidence_rank(adjusted_confidence) - 1)
+
+    if adjusted_score <= actionable_floor:
+        adjusted_confidence = "LOW"
+        result["actionable"] = False
+    else:
+        result["actionable"] = bool(result.get("actionable")) and adjusted_confidence in {"MEDIUM", "HIGH"}
+
+    if suppress_reason:
+        result["actionable"] = False
+        adjusted_confidence = "LOW"
+        if result.get("level2_suppressed_reason"):
+            suppress_reason = f"{result['level2_suppressed_reason']} + {suppress_reason}"
+
+    result["oteo_score"] = adjusted_score
+    result["confidence"] = adjusted_confidence
+    result["level3_score_adjustment"] = round(level3_adjustment, 1)
+    result["level3_suppressed_reason"] = suppress_reason
     return result

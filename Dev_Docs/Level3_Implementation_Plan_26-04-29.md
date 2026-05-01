@@ -1,7 +1,7 @@
 # OTC SNIPER v3 — Level 3 Implementation Plan: Regime-Aware Trading
 
 **File date:** 2026-04-29  
-**Status:** Plan — Awaiting explicit approval before implementation  
+**Status:** In Progress — Phases 0, 1, and 2 complete and signed off; pre-Phase-3 hardening complete; Phase 3 not started  
 **Compiled by:** @Investigator (full-stack forensic analysis), @Reviewer (quality assessment), @Architect (regime design)  
 **Scope:** Implement Level 3 regime-aware trading: deterministic regime classifier, win-rate optimization features, AI advisory review loop, volatility-adaptive expiry, and frontend visualization  
 **Reference documents:**
@@ -24,15 +24,15 @@ The implementation is organized into **7 phases** executed in strict dependency 
 
 | Phase | Name | Priority | New Files | Modified Files |
 |-------|------|----------|-----------|----------------|
-| **Phase 0** | Pre-Implementation Bug Fixes | CRITICAL | 0 | 5 |
+| **Phase 0** | Pre-Implementation Bug Fixes | CRITICAL | 0 | 3 |
 | **Phase 1** | Regime Classifier | HIGHEST | 1 | 2 |
-| **Phase 2** | Level 3 Signal Policy | HIGH | 0 | 2 |
-| **Phase 3** | Win-Rate Optimization Features | HIGH | 0 | 3 |
-| **Phase 4** | AI Advisory Review Loop | MEDIUM | 1 | 3 |
+| **Phase 2** | Level 3 Signal Policy | HIGH | 0 | 3 |
+| **Phase 3** | Win-Rate Optimization Features | HIGH | 0 | 2 |
+| **Phase 4** | AI Advisory Review Loop | MEDIUM | 1 | 4 |
 | **Phase 5** | Frontend L3 Visualization | MEDIUM | 0 | 3 |
-| **Phase 6** | Volatility-Adaptive Expiry | MEDIUM | 0 | 3 |
+| **Phase 6** | Volatility-Adaptive Expiry | MEDIUM | 0 | 7 |
 
-**Total: 2 new files, ~14 files modified, ~500 lines of new/changed code**
+**Total: 2 new files, ~12 files modified, ~575 lines of new/changed code**
 
 ### Design Philosophy
 
@@ -453,28 +453,74 @@ class RegimeClassifier:
         self._peak_adx = 0.0
 ```
 
-#### 1.2 — Integrate RegimeClassifier into StreamingService
+#### 1.2 — Expose candle-close state from `MarketContextEngine`
+
+**Files:** `app/backend/services/market_context.py`, `app/backend/services/streaming.py`
+
+The current `StreamingService` only receives the context dict. To run the regime
+classifier only on candle close without widening that interface, extend the
+`MarketContextEngine.update_tick()` contract so the returned `market_context`
+dict also includes a `candle_closed` boolean:
+
+```python
+# market_context.py
+def update_tick(self, price: float, timestamp: float) -> dict[str, Any]:
+    # ... existing candle update logic ...
+    context = {
+        # ... existing fields ...
+        "candle_closed": candle_closed,
+    }
+    return context
+```
+
+Then consume the flag from the dict in `StreamingService`:
+
+```python
+# streaming.py
+market_context = market_context_engine.update_tick(price, timestamp=timestamp)
+candle_closed = market_context.get("candle_closed", False)
+```
+
+#### 1.3 — Integrate `RegimeClassifier` into `StreamingService`
 
 **File:** `app/backend/services/streaming.py`
 
 Add regime classifier alongside existing engines:
 
 ```python
-from .regime_classifier import RegimeClassifier, RegimeConfig
+from .regime_classifier import RegimeClassifier
+
+# In StreamingService.__init__():
+self._regime_classifiers: dict[str, RegimeClassifier] = {}
+self._last_regime: dict[str, dict] = {}   # ← persisted regime per asset
 
 # In _get_or_create_engines():
 if asset not in self._regime_classifiers:
     self._regime_classifiers[asset] = RegimeClassifier()
 
 # In _process_tick_inner(), after market context update:
-if self.level3_enabled and market_context and candle_closed:
-    regime = self._regime_classifiers[asset].classify(market_context)
-    oteo_result["regime"] = regime
+if self.level3_enabled:
+    candle_closed = market_context.get("candle_closed", False)
+    if candle_closed and market_context.get("ready"):
+        regime = self._regime_classifiers[asset].classify(market_context)
+        self._last_regime[asset] = regime          # persist on close
+    last = self._last_regime.get(asset)
+    if last is not None:
+        oteo_result["regime"] = last               # reuse on every tick
 ```
 
-**Key design:** The regime classifier runs **only on candle close**, not per-tick, matching the caching strategy of MarketContextEngine.
+**Key design:** The regime classifier runs **only on candle close** to avoid per-tick recomputation, but the **last classified regime is persisted in `_last_regime`** and reused on every subsequent tick until the next candle close. This ensures regime-aware policy, payload fields, and adaptive expiry are active on **every tick**, not just the rare candle-close tick.
 
-#### 1.3 — Add regime data to streaming payload
+**Invalidation rules (must be implemented):**
+- Remove `_last_regime[asset]` when an asset is removed from `_allowed_assets`.
+- Clear `_last_regime` on broker disconnect or streaming reset (alongside clearing `_regime_classifiers`).
+- On `level3_enabled: true -> false`, clear `_last_regime` immediately so no stale
+  regime can remain eligible for emission.
+- On `level3_enabled: false -> true`, clear both `_last_regime` and
+  `_regime_classifiers`, then suppress regime emission until a fresh
+  `candle_closed and ready` classification occurs.
+
+#### 1.4 — Add regime data to streaming payload
 
 **File:** `app/backend/services/streaming.py`
 
@@ -486,6 +532,18 @@ if self.level3_enabled and "regime" in oteo_result:
     payload["regime_confidence"] = oteo_result["regime"]["regime_confidence"]
     payload["regime_stable"] = oteo_result["regime"]["regime_stable"]
     payload["regime_detail"] = oteo_result["regime"]["regime_detail"]
+```
+
+**Frontend defaults:** These payload fields are backend-only in Phase 1. The React
+store must tolerate ticks where they are absent (e.g. before the first candle
+close), and the UI wiring/defaults are implemented in **Phase 5** via the
+frontend signal normalizer:
+
+```js
+regime_label: signal.regime_label ?? "INSUFFICIENT_DATA",
+regime_confidence: signal.regime_confidence ?? 0,
+regime_stable: signal.regime_stable ?? false,
+regime_detail: signal.regime_detail ?? {},
 ```
 
 ---
@@ -535,6 +593,10 @@ def apply_level3_policy(
     
     This function runs AFTER apply_level2_policy() and further refines
     the signal based on the detected market regime.
+    
+    IMPORTANT — enum contracts (fail-fast validated below):
+      - oteo_result["recommended"] → "CALL" | "PUT" | "NEUTRAL"  (uppercase, from oteo.py)
+      - market_context["trend_direction"] → "up" | "down" | "flat"  (from market_context.py)
     """
     cfg = config or Level3PolicyConfig()
     
@@ -546,9 +608,25 @@ def apply_level3_policy(
         return oteo_result
     
     score = oteo_result.get("oteo_score", 50.0)
-    direction = oteo_result.get("recommended", "")
-    trend_direction = market_context.get("trend_direction")
     actionable = oteo_result.get("actionable", False)
+
+    # --- Fail-fast enum normalization (Core Principle #9) ---
+    # oteo.py emits CALL/PUT/NEUTRAL (uppercase). Normalize defensively.
+    direction = (oteo_result.get("recommended") or "").upper()
+    if direction not in {"CALL", "PUT", "NEUTRAL"}:
+        raise ValueError(f"apply_level3_policy: unexpected direction value {direction!r}")
+
+    # market_context.py emits up/down/flat. Map to bullish/bearish/flat for
+    # readable policy comparisons.
+    trend_raw = (market_context.get("trend_direction") or "").lower()
+    if trend_raw not in {"up", "down", "flat", ""}:
+        raise ValueError(f"apply_level3_policy: unexpected trend_direction value {trend_raw!r}")
+    trend_direction = {"up": "bullish", "down": "bearish"}.get(trend_raw, "flat")
+
+    # Guard: no boost/penalty on non-actionable or NEUTRAL signals
+    if direction == "NEUTRAL" or not actionable:
+        return oteo_result
+    # --------------------------------------------------------
     
     l3_adjustment = 0.0
     l3_suppressed_reason = None
@@ -564,8 +642,8 @@ def apply_level3_policy(
     elif regime_label == "TREND_PULLBACK":
         # Only allow trend-aligned entries
         trend_aligned = (
-            (direction == "call" and trend_direction == "bullish") or
-            (direction == "put" and trend_direction == "bearish")
+            (direction == "CALL" and trend_direction == "bullish") or
+            (direction == "PUT" and trend_direction == "bearish")
         )
         if trend_aligned:
             l3_adjustment += cfg.trend_pullback_aligned_boost * confidence_scale
@@ -579,8 +657,8 @@ def apply_level3_policy(
         if cfg.suppress_counter_strong_momentum and actionable:
             # Check if signal is counter-trend
             counter_trend = (
-                (direction == "put" and trend_direction == "bullish") or
-                (direction == "call" and trend_direction == "bearish")
+                (direction == "PUT" and trend_direction == "bullish") or
+                (direction == "CALL" and trend_direction == "bearish")
             )
             if counter_trend:
                 l3_suppressed_reason = "L3: reversal suppressed in strong momentum"
@@ -872,7 +950,7 @@ if cci_divergence:
 
 **Priority:** MEDIUM — Validates regime classifier, provides advisory insight  
 **New file:** `app/backend/services/ai_review.py`  
-**Estimated complexity:** ~120 lines
+**Estimated complexity:** ~140 lines across 4 files
 
 #### 4.1 — Create `AIReviewService`
 
@@ -890,7 +968,8 @@ trigger trades or override the deterministic policy.
 import asyncio
 import logging
 import time
-from typing import Any
+
+from ..models.ai_models import AIChatRequest, AIContext, AIMessage
 
 logger = logging.getLogger(__name__)
 
@@ -941,7 +1020,7 @@ class AIReviewService:
     async def review_snapshot(self, snapshot: dict) -> dict | None:
         """
         Send a market state snapshot to AI for regime validation.
-        
+
         Args:
             snapshot: {
                 asset, regime_label, regime_confidence, regime_detail,
@@ -955,28 +1034,33 @@ class AIReviewService:
         """
         if not self.ai_service:
             return None
-        
+
         prompt = self._build_review_prompt(snapshot)
-        
+
         try:
-            response = await self.ai_service.chat(
-                messages=[{"role": "user", "content": prompt}],
-                context=None,
+            request = AIChatRequest(
+                messages=[AIMessage(role="user", content=prompt)],
+                context=AIContext(
+                    asset=snapshot.get("asset"),
+                    winRate=snapshot.get("recent_win_rate"),
+                    totalTrades=snapshot.get("recent_trade_count"),
+                ),
             )
-            
+            result = await self.ai_service.chat(request)
+
             self._last_review = {
                 "timestamp": time.time(),
                 "asset": snapshot.get("asset"),
                 "regime_label": snapshot.get("regime_label"),
-                "ai_response": response.get("response", ""),
-                "model": response.get("model"),
+                "ai_response": result.text,
+                "model": result.model,
             }
             self._last_review_time = time.time()
-            
+
             logger.info("AI review completed for %s (regime: %s)", 
                         snapshot.get("asset"), snapshot.get("regime_label"))
             return self._last_review
-            
+
         except Exception as exc:
             logger.warning("AI review failed (non-fatal): %s", exc)
             return None
@@ -1006,12 +1090,13 @@ Respond concisely (max 150 words). Focus on actionable insight."""
         return self._last_review
 ```
 
-#### 4.2 — Wire AI review into StreamingService
+#### 4.2 — Wire AI review into `StreamingService` and app startup
 
-**File:** `app/backend/services/streaming.py`
+**Files:** `app/backend/services/streaming.py`, `app/backend/main.py`
 
 ```python
 from .ai_review import AIReviewService
+from .ai_service import get_ai_service
 
 # In __init__:
 self.ai_review: AIReviewService | None = None
@@ -1027,6 +1112,11 @@ if self.level3_enabled and self.ai_review:
 # On stop():
 if self.ai_review:
     self.ai_review.stop()
+
+# In main.py lifespan startup:
+ai_service = get_ai_service()
+if ai_service.status().enabled:
+    streaming_service.attach_ai_review(ai_service, interval=300)
 ```
 
 #### 4.3 — Add AI review endpoint
@@ -1074,11 +1164,11 @@ const signal = {
 };
 ```
 
-#### 5.2 — Add regime badge to OTEORing
+#### 5.2 — Add dedicated regime badge to `OTEORing`
 
 **File:** `app/frontend/src/components/trading/OTEORing.jsx`
 
-Replace the current ADX-based regime chip with a real regime label:
+Add a dedicated Level 3 regime badge alongside the existing confluence chips:
 
 ```jsx
 // Regime badge with color coding
@@ -1102,11 +1192,12 @@ const REGIME_COLORS = {
 )}
 ```
 
-#### 5.3 — Add regime chip to MultiChartView mini-cards
+#### 5.3 — Add regime chip to `MultiChartView` mini-cards
 
 **File:** `app/frontend/src/components/trading/MultiChartView.jsx`
 
-Add regime label to the mini-chart card overlay, replacing the current `adx_regime` chip:
+Add regime label to the mini-chart card overlay, replacing the legacy `signal.regime`
+alias that is currently populated from `market_context.adx_regime`:
 
 ```jsx
 {signal?.regime_label && (
@@ -1121,83 +1212,112 @@ Add regime label to the mini-chart card overlay, replacing the current `adx_regi
 ### Phase 6: Volatility-Adaptive Expiry (MEDIUM)
 
 **Priority:** MEDIUM — Optimizes trade duration for current conditions  
-**Estimated complexity:** ~50 lines across 3 files
+**Estimated complexity:** ~90 lines across 7 files
 
-#### 6.1 — Add expiry suggestion to MarketContextEngine
+#### 6.1 — Add ATR percentile support to `MarketContextEngine`
 
 **File:** `app/backend/services/market_context.py`
 
+`MarketContextEngine` cannot calculate `suggested_expiry` directly because the
+regime label does not exist until after Level 3 classification in `StreamingService`.
+Instead, expose an ATR percentile that the post-classification stage can consume:
+
 ```python
-def _suggest_expiry(self, atr: float, regime_label: str) -> int:
-    """
-    Suggest optimal expiry in seconds based on current volatility and regime.
-    
-    High ATR → longer expiry (reversal needs time to develop)
-    Low ATR → shorter expiry (small moves consumed quickly)
-    """
-    if atr is None:
-        return 60  # default
-    
-    # Compute ATR percentile from history
-    if not self._atr_history:
-        return 60
-    
+def __init__(self, config=None):
+    # ... existing init ...
+    self._atr_history: deque[float] = deque(maxlen=120)
+
+def _compute_atr_percentile(self, atr: float | None) -> float | None:
+    if atr is None or not self._atr_history:
+        return None
     sorted_atrs = sorted(self._atr_history)
-    percentile = sorted_atrs.index(min(sorted_atrs, key=lambda x: abs(x - atr))) / len(sorted_atrs)
-    
-    # Base expiry from ATR percentile
-    if percentile > 0.75:
-        base_expiry = 120  # High volatility — give more time
-    elif percentile > 0.5:
-        base_expiry = 60   # Normal volatility
-    elif percentile > 0.25:
-        base_expiry = 60   # Low-normal
+    below = sum(1 for value in sorted_atrs if value <= atr)
+    return below / len(sorted_atrs)
+
+# On candle close only, append ATR history
+if candle_closed and atr is not None:
+    self._atr_history.append(float(atr))
+
+context["atr_percentile"] = self._compute_atr_percentile(c["atr"])
+```
+
+Also add a pure helper in the same module:
+
+```python
+def suggest_expiry(atr_percentile: float | None, regime_label: str | None) -> int:
+    if atr_percentile is None:
+        base_expiry = 60
+    elif atr_percentile > 0.75:
+        base_expiry = 120
+    elif atr_percentile > 0.25:
+        base_expiry = 60
     else:
-        base_expiry = 30   # Very low volatility — quick resolution
-    
-    # Regime adjustment
+        base_expiry = 30
+
     if regime_label in ("RANGE_BOUND", "TREND_REVERSAL"):
-        return base_expiry  # Standard — reversal expected
-    elif regime_label == "TREND_PULLBACK":
-        return min(180, base_expiry + 30)  # Extra time for pullback to complete
-    elif regime_label in ("STRONG_MOMENTUM", "BREAKOUT"):
-        return max(30, base_expiry - 30)  # Shorter — less time in danger
-    
+        return base_expiry
+    if regime_label == "TREND_PULLBACK":
+        return min(180, base_expiry + 30)
+    if regime_label in ("STRONG_MOMENTUM", "BREAKOUT"):
+        return max(30, base_expiry - 30)
     return base_expiry
 ```
 
-Include in context:
+#### 6.2 — Compute suggested expiry post-classification and wire backend runtime config
+
+**Files:** `app/backend/services/streaming.py`, `app/backend/services/auto_ghost.py`, `app/backend/api/strategy.py`
+
+Compute the expiry using the **persisted regime** (set by Phase 1.3 `_last_regime`). Because the regime is now persisted across ticks, `"regime" in oteo_result` is `True` on every tick after the first candle close — not just on the rare candle-close tick. No additional gating is needed beyond the existing check:
 
 ```python
-context["suggested_expiry"] = self._suggest_expiry(atr, regime_label)
+# streaming.py
+from .market_context import suggest_expiry
+
+if self.level3_enabled and "regime" in oteo_result:
+    suggested_expiry = suggest_expiry(
+        market_context.get("atr_percentile"),
+        oteo_result["regime"]["regime_label"],
+    )
+    oteo_result["suggested_expiry"] = suggested_expiry
+    payload["suggested_expiry"] = suggested_expiry
 ```
 
-#### 6.2 — Use suggested expiry in Auto-Ghost
+> **Note:** This works correctly because Phase 1.3 persists the last classified regime in `self._last_regime[asset]` and injects it into `oteo_result["regime"]` on every tick. Before the first candle close, `"regime"` is absent and `suggest_expiry` is simply not called — the default `expiration_seconds` from `AutoGhostConfig` is used instead.
 
-**File:** `app/backend/services/auto_ghost.py`
-
-In `consider_signal()`, use the suggested expiry if available:
+Add backend runtime plumbing for the opt-in flag:
 
 ```python
-# Use suggested expiry from Level 3 if available, otherwise config default
-suggested_expiry = oteo_result.get("market_context", {}).get("suggested_expiry")
-expiry = suggested_expiry if suggested_expiry and self.config.use_adaptive_expiry else self.config.expiration_seconds
-```
-
-Add config field:
-
-```python
+# auto_ghost.py
 @dataclass(frozen=True)
 class AutoGhostConfig:
     # ... existing fields ...
-    use_adaptive_expiry: bool = False  # Opt-in — must be explicitly enabled
+    use_adaptive_expiry: bool = False
+
+# strategy.py request model
+auto_ghost_use_adaptive_expiry: bool = Field(default=False)
+
+# streaming.py update_runtime_settings(...)
+auto_ghost_use_adaptive_expiry: bool | None = None
 ```
 
-#### 6.3 — Add adaptive expiry toggle to frontend settings
+In `AutoGhostService.consider_signal()`:
 
-**File:** `app/frontend/src/stores/useSettingsStore.js`
+```python
+suggested_expiry = oteo_result.get("suggested_expiry")
+expiry = (
+    int(suggested_expiry)
+    if self.config.use_adaptive_expiry and suggested_expiry
+    else self.config.expiration_seconds
+)
+```
 
-Add `autoGhostAdaptiveExpiry: false` to `SETTINGS_DEFAULTS` and wire through the settings sync.
+#### 6.3 — Add adaptive expiry toggle to frontend settings and sync
+
+**Files:** `app/frontend/src/stores/useSettingsStore.js`, `app/frontend/src/App.jsx`, `app/frontend/src/components/settings/AppSettings.jsx`
+
+Add `autoGhostUseAdaptiveExpiry: false` to `SETTINGS_DEFAULTS`, expose a setter,
+sync it through `App.jsx` runtime-config POSTs, and surface the toggle in the
+existing Auto-Ghost settings panel.
 
 ---
 
@@ -1205,19 +1325,22 @@ Add `autoGhostAdaptiveExpiry: false` to `SETTINGS_DEFAULTS` and wire through the
 
 | File | Action | Phase(s) | Change |
 |------|--------|----------|--------|
-| `app/backend/services/streaming.py` | MODIFIED | 0, 1, 2, 4 | Inject level flags, add regime classifier engines, wire L3 policy, attach AI review |
-| `app/backend/services/market_context.py` | MODIFIED | 0, 2, 3, 6 | Fix M3/M4/M5, add L3PolicyConfig + apply_level3_policy, tick frequency, CCI divergence, suggested expiry |
+| `app/backend/services/streaming.py` | MODIFIED | 0, 1, 2, 4, 6 | Inject level flags, consume candle-close state, add regime classifier engines, wire L3 policy, attach AI review, compute suggested expiry |
+| `app/backend/services/market_context.py` | MODIFIED | 0, 1, 2, 3, 6 | Fix M3/M4/M5, expose candle-close state, add L3PolicyConfig + apply_level3_policy, tick frequency, CCI divergence, ATR percentile + expiry helper |
 | `app/backend/services/trade_service.py` | MODIFIED | 0 | Add exception callback (M2) |
-| `app/backend/services/auto_ghost.py` | MODIFIED | 3 | Entry confirmation, adaptive cooldown, per-condition stats, adaptive expiry |
+| `app/backend/services/auto_ghost.py` | MODIFIED | 2, 3, 6 | Preserve L3 audit metadata in trade entry context, add entry confirmation, adaptive cooldown, per-condition stats, adaptive expiry |
 | `app/backend/services/regime_classifier.py` | **NEW** | 1 | RegimeClassifier with config, persistence, confidence scoring |
 | `app/backend/services/ai_review.py` | **NEW** | 4 | AIReviewService with periodic snapshots and prompt building |
-| `app/backend/api/strategy.py` | MODIFIED | 4 | Add `/ai-review` endpoint |
-| `app/frontend/src/hooks/useStreamConnection.js` | MODIFIED | 5 | Add L3 signal fields |
-| `app/frontend/src/components/trading/OTEORing.jsx` | MODIFIED | 5 | Real regime badge with color coding |
+| `app/backend/api/strategy.py` | MODIFIED | 4, 6 | Add `/ai-review` endpoint and adaptive-expiry runtime config field |
+| `app/backend/main.py` | MODIFIED | 4 | Attach AI review service during app startup when AI is enabled |
+| `app/frontend/src/hooks/useStreamConnection.js` | MODIFIED | 5 | Add L3 signal fields and replace legacy `signal.regime` alias with Level 3 regime data |
+| `app/frontend/src/components/trading/OTEORing.jsx` | MODIFIED | 5 | Dedicated regime badge with color coding |
 | `app/frontend/src/components/trading/MultiChartView.jsx` | MODIFIED | 5 | Regime chip on mini-cards |
 | `app/frontend/src/stores/useSettingsStore.js` | MODIFIED | 6 | Add adaptive expiry toggle |
+| `app/frontend/src/App.jsx` | MODIFIED | 6 | Sync adaptive-expiry runtime config to backend |
+| `app/frontend/src/components/settings/AppSettings.jsx` | MODIFIED | 6 | Expose adaptive-expiry toggle in Auto-Ghost settings |
 
-**Total: 2 new files, 9 files modified**
+**Total: 2 new files, 12 files modified**
 
 ---
 
@@ -1247,8 +1370,9 @@ Phase 0 (Pre-Implementation Bug Fixes) — MUST COMPLETE FIRST
        ↓
 Phase 1 (Regime Classifier)
   ├── 1.1: Create regime_classifier.py
-  ├── 1.2: Integrate into StreamingService
-  └── 1.3: Add regime to streaming payload
+  ├── 1.2: Expose candle-close state from MarketContextEngine
+  ├── 1.3: Integrate into StreamingService
+  └── 1.4: Add regime to streaming payload
        ↓
 Phase 2 (Level 3 Signal Policy)
   ├── 2.1: Create apply_level3_policy()
@@ -1263,7 +1387,7 @@ Phase 3 (Win-Rate Optimizations)
        ↓
 Phase 4 (AI Advisory Review Loop) — can run in parallel with Phase 5
   ├── 4.1: Create ai_review.py
-  ├── 4.2: Wire into StreamingService
+  ├── 4.2: Wire into StreamingService + main.py startup
   └── 4.3: Add API endpoint
        ↓
 Phase 5 (Frontend L3 Visualization) — can run in parallel with Phase 4
@@ -1272,9 +1396,9 @@ Phase 5 (Frontend L3 Visualization) — can run in parallel with Phase 4
   └── 5.3: MultiChartView regime chip
        ↓
 Phase 6 (Volatility-Adaptive Expiry)
-  ├── 6.1: Expiry suggestion in MarketContextEngine
-  ├── 6.2: Wire into Auto-Ghost
-  └── 6.3: Frontend settings toggle
+  ├── 6.1: ATR percentile + expiry helper in MarketContextEngine
+  ├── 6.2: Post-classification expiry + backend runtime plumbing
+  └── 6.3: Frontend settings toggle + runtime sync
 ```
 
 ---
@@ -1282,30 +1406,33 @@ Phase 6 (Volatility-Adaptive Expiry)
 ## 8. Verification Checklist
 
 ### Phase 0 Verification
-- [ ] `strategy_level` correctly tags as `"level3"` when L3 is enabled (check ghost trade JSONL)
-- [ ] Live trade tracking tasks have exception callbacks (check for log entries on failure)
-- [ ] First tick does NOT trigger full indicator recompute (verify via backend logs)
-- [ ] Macro S/R fallback uses percentile values (verify by inspecting context dict)
-- [ ] Changing `distant_structure_atr` in config affects actual policy behavior
+- [x] `strategy_level` correctly tags as `"level3"` when L3 is enabled (flag injection added in `streaming.py`)
+- [x] Live trade tracking tasks have exception callbacks (done-callback added for `_track_trade_outcome()`)
+- [x] First tick does NOT trigger full indicator recompute (`candle_closed = False` on first candle creation)
+- [x] Macro S/R fallback uses percentile values (fallback changed from absolute min/max to ~10th/90th percentile)
+- [x] Changing `distant_structure_atr` in config affects actual policy behavior (threshold now flows through `market_context`)
 
 ### Phase 1 Verification
-- [ ] `RegimeClassifier` produces one of 7 valid labels for each candle close
-- [ ] Regime label changes when market conditions change (test with different ADX values)
-- [ ] Regime persistence prevents flapping (regime holds for N candle closes)
-- [ ] Regime data appears in streaming payload when L3 is enabled
-- [ ] Regime data does NOT appear when L3 is disabled
-- [ ] `regime_classifier.py` has zero external dependencies beyond stdlib
+- [x] `MarketContextEngine.update_tick()` includes `candle_closed` in the returned `market_context` dict without breaking warmup behavior
+- [x] `RegimeClassifier` produces one of 7 valid labels for each candle close
+- [x] Regime label changes when market conditions change (covered by focused transition test: `CHOPPY → TREND_PULLBACK → STRONG_MOMENTUM`)
+- [x] Regime persistence prevents flapping (regime holds for N candle closes)
+- [x] Regime data appears in streaming payload when L3 is enabled
+- [x] Regime data does NOT appear when L3 is disabled
+- [x] Toggling L3 off clears persisted regime emission state immediately
+- [x] Toggling L3 back on requires a fresh `candle_closed and ready` classification before regime data can reappear
+- [x] `regime_classifier.py` has zero external dependencies beyond stdlib
 
 ### Phase 2 Verification
-- [ ] `RANGE_BOUND` regime boosts OTEO reversal signals
-- [ ] `STRONG_MOMENTUM` regime suppresses counter-trend signals
-- [ ] `CHOPPY` regime suppresses all signals
-- [ ] `BREAKOUT` regime suppresses signals
-- [ ] `TREND_PULLBACK` allows only trend-aligned entries
-- [ ] `TREND_REVERSAL` boosts reversal signals
-- [ ] Unstable regimes receive penalty
-- [ ] L3 adjustments appear in trade records (`level3_score_adjustment`)
-- [ ] L3 suppression reasons appear in payload (`level3_suppressed_reason`)
+- [x] `RANGE_BOUND` regime boosts OTEO reversal signals
+- [x] `STRONG_MOMENTUM` regime suppresses counter-trend signals
+- [x] `CHOPPY` regime suppresses all signals
+- [x] `BREAKOUT` regime suppresses signals
+- [x] `TREND_PULLBACK` allows only trend-aligned entries
+- [x] `TREND_REVERSAL` boosts reversal signals
+- [x] Unstable regimes receive penalty
+- [x] L3 adjustments and regime confidence/stability are preserved in signal logs; L3 adjustments and regime metadata are preserved in ghost trade `entry_context` audit data
+- [x] L3 suppression reasons appear in payload (`level3_suppressed_reason`)
 
 ### Phase 3 Verification
 - [ ] Tick frequency computed and included in market_context
@@ -1321,6 +1448,7 @@ Phase 6 (Volatility-Adaptive Expiry)
 
 ### Phase 4 Verification
 - [ ] AI review loop runs at configured interval
+- [ ] AI review calls `AIService.chat()` using `AIChatRequest`, not an ad-hoc dict payload
 - [ ] AI review produces structured response
 - [ ] AI review is advisory-only — does NOT modify signals or trigger trades
 - [ ] `GET /api/strategy/ai-review` returns latest review or null
@@ -1335,12 +1463,14 @@ Phase 6 (Volatility-Adaptive Expiry)
 - [ ] Frontend build passes with 0 errors
 
 ### Phase 6 Verification
-- [ ] Suggested expiry varies with ATR percentile
+- [ ] `market_context` exposes `atr_percentile`
+- [ ] Suggested expiry varies with ATR percentile after regime classification
 - [ ] High ATR → longer suggested expiry
 - [ ] Low ATR → shorter suggested expiry
+- [ ] Runtime config includes `auto_ghost_use_adaptive_expiry` and updates backend state
 - [ ] Auto-Ghost uses suggested expiry when adaptive expiry enabled
 - [ ] Auto-Ghost uses config default when adaptive expiry disabled
-- [ ] Frontend settings toggle for adaptive expiry works
+- [ ] Frontend settings toggle for adaptive expiry syncs through `App.jsx` and `strategy.py`
 
 ---
 
@@ -1395,9 +1525,10 @@ Per `.clinerules/PHASE_REVIEW_PROTOCOL.md`:
 
 | Phase | Reviewer Gate | Status |
 |-------|--------------|--------|
-| Phase 0 | @Reviewer reviews streaming.py + market_context.py + trade_service.py | [ ] Pending |
-| Phase 1 | @Reviewer reviews regime_classifier.py + streaming.py integration | [ ] Pending |
-| Phase 2 | @Reviewer reviews apply_level3_policy() + StreamingService wiring | [ ] Pending |
+| Phase 0 | @Reviewer reviews streaming.py + market_context.py + trade_service.py | [x] Signed off 2026-05-01 |
+| Phase 1 | @Reviewer reviews regime_classifier.py + streaming.py integration | [x] Signed off 2026-05-01 |
+| Phase 2 | @Reviewer reviews apply_level3_policy() + StreamingService wiring | [x] Signed off 2026-05-01 |
+| Pre-Phase-3 hardening | @Reviewer/@Optimizer/@Code_Simplifier audit recommendations #1 and #4 | [x] Completed 2026-05-01 |
 | Phase 3 | @Reviewer reviews market_context.py + auto_ghost.py optimizations | [ ] Pending |
 | Phase 4 | @Reviewer reviews ai_review.py + strategy.py endpoint | [ ] Pending |
 | Phase 5 | @Reviewer reviews useStreamConnection.js + OTEORing.jsx + MultiChartView.jsx | [ ] Pending |
@@ -1443,9 +1574,11 @@ These are **NOT in scope** for this plan but the architecture supports them:
 
 Use this section when resuming Level 3 work later.
 
-- [ ] Phase 0 bug fixes completed and verified
-- [ ] `regime_classifier.py` exists and produces valid labels
-- [ ] `apply_level3_policy()` exists and adjusts scores/confidence/actionable
+- [x] Phase 0 bug fixes completed, validated, and signed off on 2026-05-01
+- [x] `regime_classifier.py` exists and produces valid labels
+- [x] `apply_level3_policy()` exists and adjusts scores/confidence/actionable
+- [x] Signal logs include `regime_confidence` and `regime_stable` for later journal analytics
+- [x] Regime transition behavior is covered by focused unit test (`CHOPPY → TREND_PULLBACK → STRONG_MOMENTUM`)
 - [ ] Tick frequency health check integrated into context and policy
 - [ ] Entry confirmation window active in Auto-Ghost
 - [ ] Adaptive cooldown active in Auto-Ghost
@@ -1462,4 +1595,4 @@ Use this section when resuming Level 3 work later.
 *Plan compiled: 2026-04-29*  
 *Source: Forensic investigation of 25+ files, Pre_Level3_Critical_Review, Market_Regimes.md, and full L1→L2→L3 architecture analysis*  
 *Compiled by: @Investigator, @Reviewer, @Architect*  
-*Status: Awaiting explicit approval before implementation*
+*Status: In Progress — Phases 0, 1, and 2 complete and signed off on 2026-05-01; pre-Phase-3 hardening complete; Phase 3 not started*

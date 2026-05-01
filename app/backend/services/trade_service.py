@@ -26,6 +26,14 @@ class TradeService:
     def set_auto_ghost(self, auto_ghost) -> None:
         self._auto_ghost = auto_ghost
 
+    @staticmethod
+    def _log_task_failure(task: asyncio.Task, task_name: str) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("%s failed: %s", task_name, exc)
+
     def _resolve_trade_kind(self, request: TradeExecutionRequest) -> TradeKind:
         trade_mode = str(getattr(request, "trade_mode", "live") or "live").strip().lower()
         if trade_mode == "ghost" or bool(getattr(request, "demo", False)):
@@ -308,7 +316,8 @@ class TradeService:
         await self._emit_trade_entry(trade_record)
 
         # Launch background task to check win
-        asyncio.create_task(self._track_trade_outcome(trade_record, adapter, request.expiration))
+        task = asyncio.create_task(self._track_trade_outcome(trade_record, adapter, request.expiration))
+        task.add_done_callback(lambda t: self._log_task_failure(t, "_track_trade_outcome"))
 
         return {
             "success": True,

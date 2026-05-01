@@ -7,9 +7,10 @@ import time
 from typing import Dict, Any
 
 from .auto_ghost import AutoGhostService
-from .market_context import MarketContextEngine, Level2Config, apply_level2_policy
+from .market_context import MarketContextEngine, Level2Config, apply_level2_policy, apply_level3_policy
 from .oteo import OTEO, OTEOConfig
 from .manipulation import ManipulationDetector
+from .regime_classifier import RegimeClassifier
 from .trade_service import TradeService
 from .tick_logger import TickLogger
 from .signal_logger import SignalLogger
@@ -43,10 +44,18 @@ class StreamingService:
         self._oteo_engines: Dict[str, OTEO] = {}
         self._market_context_engines: Dict[str, MarketContextEngine] = {}
         self._manip_engines: Dict[str, ManipulationDetector] = {}
+        self._regime_classifiers: Dict[str, RegimeClassifier] = {}
+        self._last_regime: Dict[str, dict[str, Any]] = {}
         self._tick_counts: Dict[str, int] = {}
         self._allowed_assets: set[str] = set()
         self._streaming_active: bool = False
         self._payout_cache: Dict[str, tuple[float, float]] = {}
+
+    def _clear_level3_state(self, *, reset_classifiers: bool) -> None:
+        """Clear cached Level 3 regime state."""
+        self._last_regime.clear()
+        if reset_classifiers:
+            self._regime_classifiers.clear()
 
     def update_runtime_settings(
         self,
@@ -63,10 +72,15 @@ class StreamingService:
         auto_ghost_drawdown_cooldown_seconds: int | None = None,
         auto_ghost_minimum_payout_pct: float | None = None,
     ) -> dict[str, Any]:
+        previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
             self.level2_enabled = bool(level2_enabled)
         if level3_enabled is not None:
             self.level3_enabled = bool(level3_enabled) and self.level2_enabled
+            if previous_level3_enabled and not self.level3_enabled:
+                self._clear_level3_state(reset_classifiers=False)
+            elif not previous_level3_enabled and self.level3_enabled:
+                self._clear_level3_state(reset_classifiers=True)
         auto_ghost_status = self.auto_ghost.update_config(
             enabled=auto_ghost_enabled,
             amount=auto_ghost_amount,
@@ -93,6 +107,8 @@ class StreamingService:
             self._oteo_engines.pop(asset, None)
             self._market_context_engines.pop(asset, None)
             self._manip_engines.pop(asset, None)
+            self._regime_classifiers.pop(asset, None)
+            self._last_regime.pop(asset, None)
             self._tick_counts.pop(asset, None)
             self._payout_cache.pop(asset, None)
             logger.info("Cleaned up engines for removed asset: %s", asset)
@@ -110,6 +126,7 @@ class StreamingService:
         self._oteo_engines.clear()
         self._market_context_engines.clear()
         self._manip_engines.clear()
+        self._clear_level3_state(reset_classifiers=True)
         self._tick_counts.clear()
         self._payout_cache.clear()
         logger.info("StreamingService stopped — all engines cleared")
@@ -131,6 +148,9 @@ class StreamingService:
             self._market_context_engines[asset] = market_context
             self._manip_engines[asset] = ManipulationDetector()
             self._tick_counts[asset] = len(recent_ticks)
+
+        if asset not in self._regime_classifiers:
+            self._regime_classifiers[asset] = RegimeClassifier()
             
         return self._oteo_engines[asset], self._market_context_engines[asset], self._manip_engines[asset]
 
@@ -172,6 +192,17 @@ class StreamingService:
         oteo_result = oteo.update_tick(price, timestamp=timestamp)
         market_context = market_context_engine.update_tick(price, timestamp=timestamp)
         manipulation = manip_detector.update(timestamp, price)
+        regime = None
+
+        if self.level3_enabled:
+            candle_closed = bool(market_context.get("candle_closed", False))
+            if candle_closed and market_context.get("ready"):
+                classifier = self._regime_classifiers.get(asset)
+                if classifier is not None:
+                    regime = classifier.classify(market_context)
+                    self._last_regime[asset] = regime
+            if regime is None:
+                regime = self._last_regime.get(asset)
         
         payload = {
             "asset": asset,
@@ -184,6 +215,11 @@ class StreamingService:
         is_warmed_up = isinstance(oteo_result, dict)
         if is_warmed_up:
             enriched_result = apply_level2_policy(oteo_result, market_context, self.level2_enabled)
+            enriched_result["level2_enabled"] = self.level2_enabled
+            enriched_result["level3_enabled"] = self.level3_enabled
+            if self.level3_enabled and regime is not None:
+                enriched_result["regime"] = regime
+                enriched_result = apply_level3_policy(enriched_result, market_context, regime)
             payload.update({
                 "oteo_score": enriched_result["oteo_score"],
                 "recommended": enriched_result["recommended"],
@@ -200,8 +236,11 @@ class StreamingService:
                 "base_confidence": enriched_result["base_confidence"],
                 "base_actionable": enriched_result["base_actionable"],
                 "level2_enabled": enriched_result["level2_enabled"],
+                "level3_enabled": enriched_result["level3_enabled"],
                 "level2_score_adjustment": enriched_result["level2_score_adjustment"],
                 "level2_suppressed_reason": enriched_result["level2_suppressed_reason"],
+                "level3_score_adjustment": enriched_result.get("level3_score_adjustment", 0.0),
+                "level3_suppressed_reason": enriched_result.get("level3_suppressed_reason"),
                 "market_context": enriched_result["market_context"],
             })
             oteo_result = enriched_result
@@ -212,7 +251,18 @@ class StreamingService:
                 "confidence": "LOW",
                 "maturity": 0.0,
                 "level2_enabled": self.level2_enabled,
+                "level3_enabled": self.level3_enabled,
+                "level3_score_adjustment": 0.0,
+                "level3_suppressed_reason": None,
                 "market_context": market_context,
+            })
+
+        if self.level3_enabled and regime is not None:
+            payload.update({
+                "regime_label": regime["regime_label"],
+                "regime_confidence": regime["regime_confidence"],
+                "regime_stable": regime["regime_stable"],
+                "regime_detail": regime["regime_detail"],
             })
 
         await self.tick_logger.write_tick(asset, {
@@ -236,6 +286,11 @@ class StreamingService:
                 "level2_enabled": oteo_result["level2_enabled"],
                 "level2_score_adjustment": oteo_result["level2_score_adjustment"],
                 "level2_suppressed_reason": oteo_result["level2_suppressed_reason"],
+                "level3_score_adjustment": oteo_result.get("level3_score_adjustment"),
+                "level3_suppressed_reason": oteo_result.get("level3_suppressed_reason"),
+                "regime_label": oteo_result.get("regime_label"),
+                "regime_confidence": oteo_result.get("regime_confidence"),
+                "regime_stable": oteo_result.get("regime_stable"),
                 "market_context": oteo_result["market_context"],
                 "manip": bool(manipulation),
                 "broker": source
