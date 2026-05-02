@@ -14,7 +14,10 @@ app/data/
 .zenflow/
 
 # .ENV
-.env/
+.env
+.env.*
+**/.env
+**/.env.*
 
 # CHROME PROFILE
 Chrome_profile/
