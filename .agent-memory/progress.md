@@ -1,7 +1,7 @@
 # Development Progress
 
 ## Summary
-- This file tracks completed milestones, recent delivered work, and remaining validation targets
+- This file tracks completed milestones, recent delivered work, and remaining validation targets.
 
 ## Completed Milestones
 - Architecture separation (Workspace vs App Root)
@@ -31,6 +31,8 @@
 - **Level 3 Phase 1 (2026-05-01, SIGNED OFF)** — Added `regime_classifier.py`, exposed `candle_closed`, wired persisted regime state into `streaming.py`, and validated with focused unit tests and clean diagnostics.
 - **Level 3 Phase 2 (2026-05-01, SIGNED OFF)** — Added `Level3PolicyConfig` + `apply_level3_policy()`, wired Level 3 policy into `streaming.py`, preserved Level 3 metadata in `auto_ghost.py` trade audit context, and validated with focused unit tests and clean diagnostics.
 - **Level 3 Pre-Phase-3 Hardening (2026-05-01, COMPLETED)** — Added `regime_confidence` and `regime_stable` to signal logs and added a focused regime transition test for `CHOPPY → TREND_PULLBACK → STRONG_MOMENTUM`.
+- **Level 3 Phase 3 (2026-05-02, SIGNED OFF)** — Added tick-frequency health checks, dead/low-market Level 3 handling, Auto-Ghost confirmation windows, adaptive cooldown after losses, per-condition win-rate stats, CCI divergence detection, and focused Phase 3 tests.
+- **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`, including the ghost done-callback fix, canonical `market_context` sourcing, divergence-window optimization, tick-frequency cap, and `warming_up` tick-health contract.
 
 ## Recent Delivery Snapshot
 - **TRAE Sprint (2026-04-27):** Resolved the manual live trade execution blocker (HTTP 422 caused by numeric `confidence` sent to a `str`-only backend field). Pydantic validator now normalises all confidence forms. Auto-connect NameError fixed. httpClient 422 parsing improved. Demo flag corrected. Payout hot-path cached.
@@ -51,11 +53,13 @@
 - Manual Ghost Mode was fully deprecated and removed from the stores and UI to eliminate user confusion and functional overlap with Demo accounts.
 - Auto-Ghost notifications were enhanced to include Asset and Expiration details, improving background execution visibility.
 - `GhostTradingBanner.jsx` was deleted and `MainLayout` was simplified.
-- **Level 3 kickoff:** `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` was forensically reviewed, corrected to match the real backend/frontend integration contracts, approved for execution, and backend Phases 0, 1, and 2 were implemented and signed off. The recommended pre-Phase-3 hardening pass is complete. Overall plan status remains `In Progress`; Phase 3 has not started.
+- **Level 3 update:** `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` now reflects Phase 3 as completed, reviewed, remediated, and signed off. The next valid implementation step is Phase 4.
+- **Phase 3 review gate:** `Dev_Docs/Level3_Phase3_Multi_Agent_Review_26-05-02.md` recorded 0 blocking issues, 11 low-severity findings, and confirmed all 11 Phase 3 verification criteria. Those findings have now been finalized in code.
 
 ## Latest Review / Documentation Update
 - **2026-04-28:** TRAE Fixes Implementation Plan reviewed via Phase Review Protocol. All 4 phases confirmed implemented and closed. Plan signed off.
-- **2026-05-01:** Level 3 Implementation Plan updated to reflect the actual backend/frontend integration contracts. Phases 0, 1, and 2 are now completed, validated, and signed off. A pre-Phase-3 hardening patch added regime confidence/stability to signal logs and a regime transition test. The next valid implementation step is Phase 3.
+- **2026-05-01:** Level 3 Implementation Plan updated to reflect the actual backend/frontend integration contracts. Phases 0, 1, and 2 are completed, validated, and signed off. A pre-Phase-3 hardening patch added regime confidence/stability to signal logs and a regime transition test.
+- **2026-05-02:** Phase 3 multi-agent review gate completed. Consolidated report written to `Dev_Docs/Level3_Phase3_Multi_Agent_Review_26-05-02.md`. User then approved continuation, the 11 low-severity findings were remediated, and the plan status was advanced to Phase 3 signed off / Phase 4 pending.
 - A 401-trade Auto-Ghost session was analyzed to identify leaks in the manipulation detector and flaws in the original Level 2 policy weights.
 - The Level 2 implementation plan's Phase A (Critical Fixes) and Phase B (Tuning) have been executed and validated against smoke tests.
 - A full report on the 401-trade session and subsequent logic tightening was generated in `@reports/401Trades_Level2_Ghost_Trade_report_26-04-06.md`.
@@ -71,19 +75,20 @@
 - `python -m py_compile app/backend/services/streaming.py app/backend/services/market_context.py app/backend/services/trade_service.py` → ✅ passed after Level 3 Phase 0
 - `conda run -n QuFLX-v2 python -m py_compile app/backend/services/regime_classifier.py app/backend/services/market_context.py app/backend/services/streaming.py app/backend/services/auto_ghost.py test_level3_phase1.py test_level3_phase2.py` → ✅ passed after Level 3 Phases 1 and 2
 - `conda run -n QuFLX-v2 python -m unittest test_level3_phase1.py test_level3_phase2.py` → ✅ passed (10 tests) after pre-Phase-3 hardening
-- Diagnostics were clean for `regime_classifier.py`, `market_context.py`, `streaming.py`, `auto_ghost.py`, `test_level3_phase1.py`, and `test_level3_phase2.py` after Level 3 Phase 2
+- `conda run -n QuFLX-v2 python -m unittest test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` → ✅ passed (18 tests) after Phase 3 remediation
+- `conda run -n QuFLX-v2 python -m py_compile app/backend/services/trade_service.py app/backend/services/auto_ghost.py app/backend/services/market_context.py test_level3_phase3.py` → ✅ passed after Phase 3 remediation
+- Diagnostics were clean for `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py` after the remediation pass
 
 ## Open Validation
 - Confirm sparkline rendering through the repaired Socket.IO path.
 - Confirm live trade-result delivery through the repaired Socket.IO path.
-- Monitor the next Auto-Ghost session to benchmark the new `Level2PolicyConfig` and hardened Manipulation Detector.
-- Monitor a live or ghost session with Level 3 enabled to verify persisted regime output and Level 3 suppression reasons under real streaming conditions.
+- Monitor the next Auto-Ghost session to benchmark the new `Level2PolicyConfig`, Phase 3 win-rate filters, and hardened Manipulation Detector.
+- Monitor a live or ghost session with Level 3 enabled to verify persisted regime output, Level 3 suppression reasons, tick-health behavior, and confirmation-window timing under real streaming conditions.
 - Validate the readability of confluence badges and larger mini-chart gauges during live streaming conditions.
-- Validate the Phase 0-2 backend changes in a live runtime cycle, especially `strategy_level` tagging, regime payload continuity, and Level 3 policy behavior.
 
 ## Planned Work
-- (Next approved implementation step) Begin Level 3 Phase 3: Win-Rate Optimization Features.
-- (Current state) Phases 0, 1, and 2 of `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` are complete and signed off; pre-Phase-3 hardening is complete; Phase 3 is not started.
+- (Next approved implementation step) Begin Level 3 Phase 4: AI Advisory Review Loop.
+- (Current state) Phases 0, 1, 2, and 3 of `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` are complete and signed off. Phase 4 is not started.
 - (Near-term validation) Observe the new explainability UI during live market conditions and decide whether extra backend confluence fields are needed.
 - (Future) Supabase migration
 - (Future) Auth0 integration
@@ -96,4 +101,4 @@
 - Confluence badges currently reflect only the signal and `market_context` data already emitted in the streaming payload.
 - Pre-existing `api.py` cleanup items remain noted in the implementation report for future low-risk polish.
 - `raw_confidence` (categorical string) is not propagated into the frontend signal object — optional add (TRAE B.3) if a future UI gauge needs it.
-- Focused automated coverage is still light around `StreamingService` and `MarketContextEngine`; however, Phase 1 now includes explicit regime transition coverage and Phase 2 policy behavior is covered by focused unit tests.
+- Focused automated coverage is still light around `StreamingService` and `MarketContextEngine`; however, Phase 1, Phase 2, and Phase 3 now have focused backend unit coverage.

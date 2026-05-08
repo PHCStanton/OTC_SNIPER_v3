@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -66,6 +67,9 @@ class Level3PolicyConfig:
     suppress_counter_strong_momentum: bool = True
     suppress_in_breakout: bool = True
     unstable_regime_penalty: float = -3.0
+    low_tick_health_penalty: float = -3.0
+    cci_divergence_boost: float = 4.0
+    min_actionable_score: float = 55.0
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -172,7 +176,7 @@ def _typical_price(candle: Candle) -> float:
 
 def _compute_cci(candles: list[Candle], period: int) -> dict[str, float | None]:
     if len(candles) < period:
-        return {"cci": None, "cci_slope": None}
+        return {"cci": None, "cci_slope": None, "series": []}
 
     typical_prices = [_typical_price(candle) for candle in candles]
     cci_series: list[float] = []
@@ -188,11 +192,38 @@ def _compute_cci(candles: list[Candle], period: int) -> dict[str, float | None]:
         cci_series.append(cci)
 
     if not cci_series:
-        return {"cci": None, "cci_slope": None}
+        return {"cci": None, "cci_slope": None, "series": []}
 
     cci = cci_series[-1]
     cci_slope = cci_series[-1] - cci_series[-3] if len(cci_series) >= 3 else 0.0
-    return {"cci": cci, "cci_slope": cci_slope}
+    return {"cci": cci, "cci_slope": cci_slope, "series": cci_series}
+
+
+def _detect_cci_divergence(candles: list[Candle], cci_values: list[float]) -> str | None:
+    if len(candles) < 10 or len(cci_values) < 10:
+        return None
+
+    aligned_candles = candles[-len(cci_values):]
+    recent_candles = aligned_candles[-5:]
+    prior_candles = aligned_candles[-10:-5]
+    recent_cci = cci_values[-5:]
+    prior_cci = cci_values[-10:-5]
+
+    recent_high = max(candle.high for candle in recent_candles)
+    prior_high = max(candle.high for candle in prior_candles)
+    recent_low = min(candle.low for candle in recent_candles)
+    prior_low = min(candle.low for candle in prior_candles)
+
+    recent_cci_high = max(recent_cci)
+    prior_cci_high = max(prior_cci)
+    recent_cci_low = min(recent_cci)
+    prior_cci_low = min(prior_cci)
+
+    if recent_high > prior_high and recent_cci_high < prior_cci_high - 10.0:
+        return "bearish"
+    if recent_low < prior_low and recent_cci_low > prior_cci_low + 10.0:
+        return "bullish"
+    return None
 
 
 class MarketContextEngine:
@@ -201,6 +232,16 @@ class MarketContextEngine:
         self._closed_candles: list[Candle] = []
         self._current_candle: Candle | None = None
         self._cached_context: dict[str, Any] | None = None
+        self._tick_timestamps: deque[float] = deque(maxlen=60)
+
+    def _compute_tick_frequency(self, timestamp: float) -> float:
+        self._tick_timestamps.append(float(timestamp))
+        if len(self._tick_timestamps) < 2:
+            return 0.0
+        time_span = self._tick_timestamps[-1] - self._tick_timestamps[0]
+        if time_span <= 0:
+            return 0.0
+        return min(300.0, ((len(self._tick_timestamps) - 1) / time_span) * 60.0)
 
     def seed_tick(self, price: float, timestamp: float) -> None:
         self.update_tick(price, timestamp)
@@ -237,6 +278,12 @@ class MarketContextEngine:
             cci_metrics = _compute_cci(candles, self.config.cci_period)
             cci = cci_metrics["cci"]
             cci_slope = cci_metrics["cci_slope"]
+            divergence_window = self._closed_candles[-20:] if len(self._closed_candles) > 20 else self._closed_candles
+            closed_cci_metrics = _compute_cci(divergence_window, self.config.cci_period)
+            cci_divergence = _detect_cci_divergence(
+                divergence_window,
+                closed_cci_metrics["series"],
+            )
 
             closed_candles = self._closed_candles
             micro_support = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "low")
@@ -297,9 +344,19 @@ class MarketContextEngine:
                 "adx_falling": bool(adx_slope is not None and adx_slope < 0),
                 "reversal_friendly": adx is not None and (adx < 28 or (adx_slope is not None and adx_slope < -0.5)),
                 "distant_structure_atr_threshold": self.config.distant_structure_atr,
+                "cci_divergence": cci_divergence,
             }
 
         c = self._cached_context
+        tick_frequency = self._compute_tick_frequency(timestamp)
+        if len(self._tick_timestamps) < 2:
+            tick_health = "warming_up"
+        elif tick_frequency >= 20.0:
+            tick_health = "healthy"
+        elif tick_frequency >= 5.0:
+            tick_health = "low"
+        else:
+            tick_health = "dead"
         atr = c["atr"]
         micro_support_proximity = _proximity_atr(price, c["micro_support"], atr)
         micro_resistance_proximity = _proximity_atr(price, c["micro_resistance"], atr)
@@ -342,6 +399,9 @@ class MarketContextEngine:
             "adx_falling": c["adx_falling"],
             "reversal_friendly": c["reversal_friendly"],
             "distant_structure_atr_threshold": c["distant_structure_atr_threshold"],
+            "tick_frequency": round(float(tick_frequency), 1),
+            "tick_health": tick_health,
+            "cci_divergence": c["cci_divergence"],
         }
 
 
@@ -361,7 +421,8 @@ def apply_level2_policy(oteo_result: dict[str, Any], market_context: dict[str, A
     result["base_confidence"] = oteo_result["confidence"]
     result["base_actionable"] = oteo_result["actionable"]
     result["level2_enabled"] = enabled
-    result["market_context"] = market_context
+    # Keep the nested market_context isolated from upstream callers.
+    result["market_context"] = dict(market_context)
 
     if not enabled or not market_context.get("ready"):
         result["level2_score_adjustment"] = 0.0
@@ -486,11 +547,12 @@ def apply_level3_policy(
 
     policy = config or Level3PolicyConfig()
     result = dict(oteo_result)
+    result["market_context"] = dict(result.get("market_context") or market_context or {})
     regime_label = str(regime.get("regime_label") or "INSUFFICIENT_DATA")
     regime_confidence = float(regime.get("regime_confidence") or 0.0)
     regime_stable = bool(regime.get("regime_stable", False))
     score = float(oteo_result.get("oteo_score", 50.0))
-    actionable_floor = Level2PolicyConfig().min_actionable_score
+    actionable_floor = policy.min_actionable_score
 
     result["level3_score_adjustment"] = 0.0
     result["level3_suppressed_reason"] = None
@@ -520,6 +582,13 @@ def apply_level3_policy(
     )
     level3_adjustment = 0.0
     suppress_reason = None
+    tick_health = str(market_context.get("tick_health") or "healthy").lower()
+    cci_divergence = str(market_context.get("cci_divergence") or "").lower()
+
+    if tick_health == "dead":
+        suppress_reason = "L3: dead market (tick frequency < 5/min)"
+    elif tick_health == "low":
+        level3_adjustment += policy.low_tick_health_penalty
 
     if regime_label == "RANGE_BOUND":
         level3_adjustment += policy.range_bound_boost * confidence_scale
@@ -556,10 +625,14 @@ def apply_level3_policy(
     if not regime_stable:
         level3_adjustment += policy.unstable_regime_penalty
 
+    if (
+        (cci_divergence == "bearish" and direction == "PUT")
+        or (cci_divergence == "bullish" and direction == "CALL")
+    ):
+        level3_adjustment += policy.cci_divergence_boost
+
     adjusted_score = round(_clamp(score + level3_adjustment, 0.0, 100.0), 1)
     adjusted_confidence = str(result.get("confidence") or "LOW").upper()
-    if adjusted_confidence not in {"LOW", "MEDIUM", "HIGH"}:
-        adjusted_confidence = "LOW"
 
     if level3_adjustment >= 8.0 and adjusted_score >= 75.0:
         adjusted_confidence = _confidence_from_rank(_confidence_rank(adjusted_confidence) + 1)

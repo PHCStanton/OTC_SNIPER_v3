@@ -28,11 +28,16 @@ class AutoGhostConfig:
 
 
 class AutoGhostService:
+    CONFIRMATION_TICKS = 3
+
     def __init__(self, trade_service: TradeService, config: AutoGhostConfig | None = None):
         self.trade_service = trade_service
         self.config = config or AutoGhostConfig()
         self._active_assets: set[str] = set()
         self._cooldown_until: dict[str, float] = {}
+        self._pending_signals: dict[str, tuple[dict[str, Any], int]] = {}
+        self._consecutive_losses: dict[str, int] = {}
+        self._condition_stats: dict[str, dict[str, int]] = {}
         self._session_id: str | None = None
         self._session_pnl: float = 0.0
         self._session_trade_count: int = 0
@@ -84,6 +89,9 @@ class AutoGhostService:
         )
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
+            self._pending_signals.clear()
+            self._consecutive_losses.clear()
+            self._condition_stats.clear()
             self._session_pnl = 0.0
             self._session_trade_count = 0
             self._session_wins = 0
@@ -97,6 +105,8 @@ class AutoGhostService:
             self._avg_recovery_time = 0.0
             self._total_recovery_sessions = 0
             logger.info("Started Auto-Ghost session %s", self._session_id)
+        elif not self.config.enabled and previous_enabled:
+            self._pending_signals.clear()
         return self.status
 
     @property
@@ -123,7 +133,15 @@ class AutoGhostService:
             "auto_ghost_session_halted": self._session_halted,
         }
 
-    def report_outcome(self, trade_id: str, outcome: str, profit: float) -> None:
+    def report_outcome(
+        self,
+        trade_id: str,
+        outcome: str,
+        profit: float,
+        *,
+        asset: str | None = None,
+        entry_context: dict[str, Any] | None = None,
+    ) -> None:
         self._session_trade_count += 1
         self._session_pnl += profit
         now = unix_time()
@@ -163,6 +181,49 @@ class AutoGhostService:
             logger.warning("Ghost session drawdown limit hit (%.2f <= -%.2f). Cooling down for %ds.",
                            self._session_pnl, self.config.max_drawdown_amount, self.config.drawdown_cooldown_seconds)
 
+        if asset:
+            if outcome == "loss":
+                loss_count = self._consecutive_losses.get(asset, 0) + 1
+                self._consecutive_losses[asset] = loss_count
+                extended_cooldown = self.config.per_asset_cooldown_seconds * (3 if loss_count >= 3 else 2)
+                self._cooldown_until[asset] = max(
+                    self._cooldown_until.get(asset, 0.0),
+                    now + extended_cooldown,
+                )
+                if loss_count >= 3:
+                    logger.warning(
+                        "Triple cooldown for %s after %d consecutive losses (%ds)",
+                        asset,
+                        loss_count,
+                        extended_cooldown,
+                    )
+                else:
+                    logger.info(
+                        "Extended cooldown for %s after loss (%ds)",
+                        asset,
+                        extended_cooldown,
+                    )
+            elif outcome == "win":
+                self._consecutive_losses.pop(asset, None)
+
+        if entry_context and outcome in {"win", "loss"}:
+            is_win = outcome == "win"
+            market_context = entry_context.get("market_context") or {}
+            regime_label = entry_context.get("regime_label", "unknown")
+            adx_regime = market_context.get("adx_regime") or "unknown"
+            cci_state = market_context.get("cci_state") or "unknown"
+            tick_health = market_context.get("tick_health") or "unknown"
+
+            self._update_condition_stat(f"regime:{regime_label}", is_win)
+            self._update_condition_stat(f"adx:{adx_regime}", is_win)
+            self._update_condition_stat(f"cci:{cci_state}", is_win)
+            self._update_condition_stat(f"tick_health:{tick_health}", is_win)
+            if asset:
+                self._update_condition_stat(f"asset:{asset}", is_win)
+
+    def _reject(self, asset: str) -> None:
+        self._pending_signals.pop(asset, None)
+
     async def consider_signal(
         self,
         *,
@@ -181,18 +242,18 @@ class AutoGhostService:
             logger.info("Cleaned up stale active asset: %s", a)
 
         if not self.config.enabled:
-            return None
+            return self._reject(asset)
             
         if self._session_halted:
-            return None
+            return self._reject(asset)
         if self._session_trade_count >= self.config.max_session_trades:
-            return None
+            return self._reject(asset)
         if now < self._drawdown_cooldown_until:
-            return None
+            return self._reject(asset)
         if oteo_result.get("recommended") not in {"CALL", "PUT"}:
-            return None
+            return self._reject(asset)
         if not oteo_result.get("actionable"):
-            return None
+            return self._reject(asset)
         if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
             logger.debug(
                 "Auto-Ghost skipped %s: payout %.1f%% < minimum %.1f%%",
@@ -200,15 +261,32 @@ class AutoGhostService:
                 payout_pct,
                 self.config.minimum_payout_pct,
             )
-            return None
+            return self._reject(asset)
         if self.config.block_on_manipulation and manipulation:
-            return None
+            return self._reject(asset)
         if asset in self._active_assets:
-            return None
+            return self._reject(asset)
         if len(self._active_assets) >= self.config.max_concurrent_trades:
-            return None
+            return self._reject(asset)
         if unix_time() < self._cooldown_until.get(asset, 0):
+            return self._reject(asset)
+
+        direction = str(oteo_result.get("recommended"))
+        pending = self._pending_signals.get(asset)
+        if pending is None:
+            self._pending_signals[asset] = (dict(oteo_result), 1)
             return None
+
+        pending_signal, pending_count = pending
+        if pending_signal.get("recommended") != direction:
+            return self._reject(asset)
+
+        pending_count += 1
+        if pending_count < self.CONFIRMATION_TICKS:
+            self._pending_signals[asset] = (dict(oteo_result), pending_count)
+            return None
+
+        self._pending_signals.pop(asset, None)
 
         entry_context = {
             "asset": asset,
@@ -277,3 +355,24 @@ class AutoGhostService:
     async def _release_asset(self, asset: str, delay_seconds: int) -> None:
         await asyncio.sleep(max(1, delay_seconds))
         self._active_assets.discard(asset)
+
+    def _update_condition_stat(self, key: str, is_win: bool) -> None:
+        stats = self._condition_stats.setdefault(key, {"wins": 0, "losses": 0})
+        if is_win:
+            stats["wins"] += 1
+        else:
+            stats["losses"] += 1
+
+    def get_condition_stats(self) -> dict[str, dict[str, float | int]]:
+        result: dict[str, dict[str, float | int]] = {}
+        for key, stats in self._condition_stats.items():
+            wins = int(stats.get("wins", 0))
+            losses = int(stats.get("losses", 0))
+            total = wins + losses
+            result[key] = {
+                "wins": wins,
+                "losses": losses,
+                "total": total,
+                "win_rate": round((wins / total) * 100.0, 1) if total > 0 else 0.0,
+            }
+        return result

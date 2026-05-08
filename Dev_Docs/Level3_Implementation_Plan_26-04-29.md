@@ -1,7 +1,7 @@
 # OTC SNIPER v3 — Level 3 Implementation Plan: Regime-Aware Trading
 
 **File date:** 2026-04-29  
-**Status:** In Progress — Phases 0, 1, and 2 complete and signed off; pre-Phase-3 hardening complete; Phase 3 not started  
+**Status:** In Progress — Phases 0, 1, 2, and 3 complete and signed off; pre-Phase-3 hardening complete; Phase 4 not started  
 **Compiled by:** @Investigator (full-stack forensic analysis), @Reviewer (quality assessment), @Architect (regime design)  
 **Scope:** Implement Level 3 regime-aware trading: deterministic regime classifier, win-rate optimization features, AI advisory review loop, volatility-adaptive expiry, and frontend visualization  
 **Reference documents:**
@@ -725,6 +725,9 @@ if self.level3_enabled and "regime" in oteo_result:
 
 These features address the most common failure modes in OTC binary options trading.
 
+**Implementation status (2026-05-02):** Implemented, reviewed, remediated, and signed off.  
+**Review outcome:** `Dev_Docs/Level3_Phase3_Multi_Agent_Review_26-05-02.md` confirmed 0 blocking issues, 11 low-severity findings, and all 11 verification criteria met. The follow-up remediation pass closed the ghost-task callback gap, centralized pending-signal cleanup, canonicalized `market_context` sourcing in `entry_context`, optimized divergence-window CCI computation, capped extreme tick frequency, added a `warming_up` tick-health state, isolated nested `market_context` copies, and removed the hidden Level 2 -> Level 3 policy config dependency.
+
 #### 3.1 — Tick Frequency Health Check
 
 **File:** `app/backend/services/market_context.py`
@@ -751,7 +754,14 @@ Include in the market_context dict:
 
 ```python
 context["tick_frequency"] = round(self._compute_tick_frequency(timestamp), 1)
-context["tick_health"] = "healthy" if context["tick_frequency"] >= 20 else "low" if context["tick_frequency"] >= 5 else "dead"
+if len(self._tick_timestamps) < 2:
+    context["tick_health"] = "warming_up"
+elif context["tick_frequency"] >= 20:
+    context["tick_health"] = "healthy"
+elif context["tick_frequency"] >= 5:
+    context["tick_health"] = "low"
+else:
+    context["tick_health"] = "dead"
 ```
 
 **Policy integration:** In `apply_level3_policy()`, add:
@@ -845,24 +855,25 @@ def report_outcome(self, asset: str, outcome: str, entry_context: dict | None = 
     
     if entry_context and outcome in ("win", "loss"):
         is_win = outcome == "win"
+        market_context = entry_context.get("market_context") or {}
         
         # Track by regime
         regime = entry_context.get("regime_label", "unknown")
         self._update_condition_stat(f"regime:{regime}", is_win)
         
         # Track by ADX regime  
-        adx_regime = entry_context.get("adx_regime", "unknown")
+        adx_regime = market_context.get("adx_regime", "unknown")
         self._update_condition_stat(f"adx:{adx_regime}", is_win)
         
         # Track by CCI state
-        cci_state = entry_context.get("cci_state", "unknown")
+        cci_state = market_context.get("cci_state", "unknown")
         self._update_condition_stat(f"cci:{cci_state}", is_win)
         
         # Track by asset
         self._update_condition_stat(f"asset:{asset}", is_win)
         
         # Track by tick health
-        tick_health = entry_context.get("tick_health", "unknown")
+        tick_health = market_context.get("tick_health", "unknown")
         self._update_condition_stat(f"tick_health:{tick_health}", is_win)
 
 def _update_condition_stat(self, key: str, is_win: bool) -> None:
@@ -1435,16 +1446,17 @@ Phase 6 (Volatility-Adaptive Expiry)
 - [x] L3 suppression reasons appear in payload (`level3_suppressed_reason`)
 
 ### Phase 3 Verification
-- [ ] Tick frequency computed and included in market_context
-- [ ] Dead market (< 5 ticks/min) suppresses signals
-- [ ] Entry confirmation window delays execution by N ticks
-- [ ] Confirmation resets when direction changes
-- [ ] Cooldown doubles after a loss on the same asset
-- [ ] Cooldown triples after 3 consecutive losses
-- [ ] Consecutive losses reset after a win
-- [ ] Per-condition stats track wins/losses by regime, ADX, CCI, asset, tick_health
-- [ ] `get_condition_stats()` returns structured win-rate data
-- [ ] CCI divergence detected when price and CCI diverge
+- [x] Tick frequency computed and included in `market_context`
+- [x] Dead market (< 5 ticks/min) suppresses signals
+- [x] Entry confirmation window delays execution by N ticks
+- [x] Confirmation resets when direction changes
+- [x] Cooldown doubles after a loss on the same asset
+- [x] Cooldown triples after 3 consecutive losses
+- [x] Consecutive losses reset after a win
+- [x] Per-condition stats track wins/losses by regime, ADX, CCI, asset, `tick_health`
+- [x] `get_condition_stats()` returns structured win-rate data
+- [x] CCI divergence detected when price and CCI diverge
+- [x] Ghost trade outcome forwarding preserves `entry_context` for Phase 3 condition stats and audit paths
 
 ### Phase 4 Verification
 - [ ] AI review loop runs at configured interval
@@ -1483,7 +1495,7 @@ Phase 6 (Volatility-Adaptive Expiry)
 | Entry confirmation window misses fast signals | Low | Missed entries | Window is 3 ticks (~3 seconds) — fast enough for 60s expiry |
 | CCI divergence false positives | Medium | Incorrect boost | Divergence adds only +4 to score; not enough to override other factors |
 | AI review produces misleading advice | Low | User confusion | AI is advisory-only with clear labeling; deterministic policy always takes precedence |
-| Tick frequency metric noisy during warmup | Medium | False dead-market suppression | Only suppress when frequency < 5/min (very conservative threshold) |
+| Tick frequency metric noisy during warmup | Low | False dead-market suppression | Warmup now emits `tick_health = "warming_up"` before any real interval exists; suppression still only occurs when frequency < 5/min |
 | Adaptive expiry produces suboptimal results | Medium | Worse outcomes | Opt-in feature (disabled by default); user must explicitly enable |
 | Regime flapping in transitions | Medium | Inconsistent signals | Persistence counter + unstable penalty mitigate this |
 
@@ -1529,7 +1541,7 @@ Per `.clinerules/PHASE_REVIEW_PROTOCOL.md`:
 | Phase 1 | @Reviewer reviews regime_classifier.py + streaming.py integration | [x] Signed off 2026-05-01 |
 | Phase 2 | @Reviewer reviews apply_level3_policy() + StreamingService wiring | [x] Signed off 2026-05-01 |
 | Pre-Phase-3 hardening | @Reviewer/@Optimizer/@Code_Simplifier audit recommendations #1 and #4 | [x] Completed 2026-05-01 |
-| Phase 3 | @Reviewer reviews market_context.py + auto_ghost.py optimizations | [ ] Pending |
+| Phase 3 | @Reviewer reviews market_context.py + auto_ghost.py optimizations | [x] Signed off 2026-05-02 — reviewed via `Dev_Docs/Level3_Phase3_Multi_Agent_Review_26-05-02.md`, user-approved, and low-severity remediation pass completed. |
 | Phase 4 | @Reviewer reviews ai_review.py + strategy.py endpoint | [ ] Pending |
 | Phase 5 | @Reviewer reviews useStreamConnection.js + OTEORing.jsx + MultiChartView.jsx | [ ] Pending |
 | Phase 6 | @Reviewer reviews expiry suggestion + auto_ghost.py + useSettingsStore.js | [ ] Pending |
@@ -1579,11 +1591,11 @@ Use this section when resuming Level 3 work later.
 - [x] `apply_level3_policy()` exists and adjusts scores/confidence/actionable
 - [x] Signal logs include `regime_confidence` and `regime_stable` for later journal analytics
 - [x] Regime transition behavior is covered by focused unit test (`CHOPPY → TREND_PULLBACK → STRONG_MOMENTUM`)
-- [ ] Tick frequency health check integrated into context and policy
-- [ ] Entry confirmation window active in Auto-Ghost
-- [ ] Adaptive cooldown active in Auto-Ghost
-- [ ] Per-condition win rate tracking active
-- [ ] CCI divergence detection integrated
+- [x] Tick frequency health check integrated into context and policy
+- [x] Entry confirmation window active in Auto-Ghost
+- [x] Adaptive cooldown active in Auto-Ghost
+- [x] Per-condition win rate tracking active
+- [x] CCI divergence detection integrated
 - [ ] AI review loop operational (optional — depends on API key)
 - [ ] Frontend displays regime labels in OTEORing and MultiChartView
 - [ ] Volatility-adaptive expiry available as opt-in feature
@@ -1595,4 +1607,4 @@ Use this section when resuming Level 3 work later.
 *Plan compiled: 2026-04-29*  
 *Source: Forensic investigation of 25+ files, Pre_Level3_Critical_Review, Market_Regimes.md, and full L1→L2→L3 architecture analysis*  
 *Compiled by: @Investigator, @Reviewer, @Architect*  
-*Status: In Progress — Phases 0, 1, and 2 complete and signed off on 2026-05-01; pre-Phase-3 hardening complete; Phase 3 not started*
+*Status: In Progress — Phases 0, 1, 2, and 3 complete and signed off; pre-Phase-3 hardening complete; Phase 4 not started*

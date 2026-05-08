@@ -252,7 +252,8 @@ class TradeService:
             )
             await self.repository.write_trade(trade_record)
             await self._emit_trade_entry(trade_record)
-            asyncio.create_task(self._track_ghost_trade_outcome(trade_record, request.expiration))
+            task = asyncio.create_task(self._track_ghost_trade_outcome(trade_record, request.expiration))
+            task.add_done_callback(lambda t: self._log_task_failure(t, "_track_ghost_trade_outcome"))
             return {
                 "success": True,
                 "message": trade_record.message,
@@ -368,7 +369,13 @@ class TradeService:
             await self._emit_trade_result(trade)
             
             if self._auto_ghost:
-                self._auto_ghost.report_outcome(trade.trade_id, trade.outcome, trade.profit or 0.0)
+                self._auto_ghost.report_outcome(
+                    trade.trade_id,
+                    trade.outcome,
+                    trade.profit or 0.0,
+                    asset=trade.asset,
+                    entry_context=trade.entry_context,
+                )
                 
             logger.info(
                 "Ghost trade %s tracked. Outcome: %s, Profit: %s",
