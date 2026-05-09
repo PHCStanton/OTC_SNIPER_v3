@@ -73,16 +73,16 @@ export default function VerticalRiskChart({
             <text x={width - 10} y={targetY - 6} fill="#10b981" fontSize="11" fontWeight="700" textAnchor="end">
               Take Profit
             </text>
-            <text x={width - 10} y={targetY + 10} fill="#10b981" fontSize="10" textAnchor="end" opacity="0.85">
+            <text x={width - 10} y={targetY + 10} fill="#10b981" fontSize="16" textAnchor="end" opacity="0.85">
               ${takeProfitTarget.toFixed(2)}
             </text>
           </g>
 
           <g>
-            <text x={width - 10} y={startY - 6} fill="#94a3b8" fontSize="11" fontWeight="700" textAnchor="end">
+            <text x={width - 10} y={startY - 6} fill="#94a3b8" fontSize="12" fontWeight="700" textAnchor="end">
               Starting Balance
             </text>
-            <text x={width - 10} y={startY + 10} fill="#94a3b8" fontSize="10" textAnchor="end" opacity="0.85">
+            <text x={width - 10} y={startY + 10} fill="#94a3b8" fontSize="16" textAnchor="end" opacity="0.85">
               ${startBalance.toFixed(2)}
             </text>
           </g>
@@ -91,7 +91,7 @@ export default function VerticalRiskChart({
             <text x={width - 10} y={limitY - 6} fill="#ef4444" fontSize="11" fontWeight="700" textAnchor="end">
               Max Drawdown
             </text>
-            <text x={width - 10} y={limitY + 10} fill="#ef4444" fontSize="10" textAnchor="end" opacity="0.85">
+            <text x={width - 10} y={limitY + 10} fill="#ef4444" fontSize="16" textAnchor="end" opacity="0.85">
               ${maxDrawdownLimit.toFixed(2)}
             </text>
           </g>

@@ -6,15 +6,15 @@ const OUTCOME_LABELS = {
   void: { label: 'V', tone: 'border-slate-400/30 bg-slate-400/12 text-slate-300' },
 };
 
-export default function TradeRunHistory({ tradeRuns, currentTradeRun, onCycleTradeResult }) {
+export default function TradeRunHistory({ tradeRuns, currentTradeRun, onCycleTradeResult, compact = false }) {
   const allRuns = [...tradeRuns, currentTradeRun].filter((run) => run && run.trades);
 
   return (
-    <div className="rounded-2xl border border-white/5 bg-[#0f1419] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
-      <div className="flex items-center justify-between gap-3">
+    <div className={compact ? "flex flex-col h-full" : "rounded-2xl border border-white/5 bg-[#0f1419] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.22)]"}>
+      <div className={`flex ${compact ? 'flex-col items-start gap-2' : 'items-center justify-between gap-3'}`}>
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-gray-500">Trade Run History</p>
-          <p className="mt-1 text-sm font-semibold text-[#e3e6e7]">WIN / LOSS / VOID badges with override support</p>
+          {!compact && <p className="mt-1 text-sm font-semibold text-[#e3e6e7]">WIN / LOSS / VOID badges with override support</p>}
         </div>
         <div className="inline-flex items-center gap-1.5 rounded-full border border-white/5 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">
           <PencilLine size={11} />
@@ -22,7 +22,7 @@ export default function TradeRunHistory({ tradeRuns, currentTradeRun, onCycleTra
         </div>
       </div>
 
-      <div className="mt-4 space-y-3">
+      <div className={`mt-4 space-y-3 ${compact ? 'overflow-y-auto custom-scrollbar flex-1 min-h-0 pb-2' : ''}`}>
         {allRuns.length === 0 ? (
           <EmptyState />
         ) : (

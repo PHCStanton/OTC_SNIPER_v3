@@ -16,6 +16,7 @@ export const SETTINGS_DEFAULTS = {
   // Ghost trading
   ghostAmount: 20,
   autoGhostEnabled: false,
+  autoGhostCopyMode: 'copy', // 'copy' | 'execute'
   autoGhostExpirationSeconds: 60,
   autoGhostMaxConcurrentTrades: 3,
   autoGhostPerAssetCooldownSeconds: 30,
@@ -54,11 +55,15 @@ export const SETTINGS_DEFAULTS = {
   showSignalConfidence: true,
   autoFocusOnSignal: false,
 
+  // Data Feeds
+  assetAutoRefreshEnabled: false,
+  assetAutoRefreshInterval: 60,
+
   // Mini-Chart Modular Configuration
   miniChartConfig: {
     showSparkline: true,
     showGauge: true,
-    hybridMode: true,
+    gaugeOnHover: false,
     showStats: true,
     showRegime: true,
     showManipulation: true,
@@ -104,6 +109,7 @@ export function validateSettings(input = {}) {
 
     ghostAmount: toNumber(input.ghostAmount, SETTINGS_DEFAULTS.ghostAmount, { min: 0, max: 100000, integer: false }),
     autoGhostEnabled: toBoolean(input.autoGhostEnabled, SETTINGS_DEFAULTS.autoGhostEnabled),
+    autoGhostCopyMode: ['copy', 'execute'].includes(input.autoGhostCopyMode) ? input.autoGhostCopyMode : 'copy',
     autoGhostExpirationSeconds: toNumber(input.autoGhostExpirationSeconds, SETTINGS_DEFAULTS.autoGhostExpirationSeconds, { min: 5, max: 3600, integer: true }),
     autoGhostMaxConcurrentTrades: toNumber(input.autoGhostMaxConcurrentTrades, SETTINGS_DEFAULTS.autoGhostMaxConcurrentTrades, { min: 1, max: 20, integer: true }),
     autoGhostPerAssetCooldownSeconds: toNumber(input.autoGhostPerAssetCooldownSeconds, SETTINGS_DEFAULTS.autoGhostPerAssetCooldownSeconds, { min: 0, max: 3600, integer: true }),
@@ -140,11 +146,14 @@ export function validateSettings(input = {}) {
     showManipulationAlerts: toBoolean(input.showManipulationAlerts, SETTINGS_DEFAULTS.showManipulationAlerts),
     showSignalConfidence: toBoolean(input.showSignalConfidence, SETTINGS_DEFAULTS.showSignalConfidence),
     autoFocusOnSignal: toBoolean(input.autoFocusOnSignal, SETTINGS_DEFAULTS.autoFocusOnSignal),
+    
+    assetAutoRefreshEnabled: toBoolean(input.assetAutoRefreshEnabled, SETTINGS_DEFAULTS.assetAutoRefreshEnabled),
+    assetAutoRefreshInterval: toNumber(input.assetAutoRefreshInterval, SETTINGS_DEFAULTS.assetAutoRefreshInterval, { min: 10, max: 3600, integer: true }),
 
     miniChartConfig: {
       showSparkline: toBoolean(input.miniChartConfig?.showSparkline, SETTINGS_DEFAULTS.miniChartConfig.showSparkline),
       showGauge: toBoolean(input.miniChartConfig?.showGauge, SETTINGS_DEFAULTS.miniChartConfig.showGauge),
-      hybridMode: toBoolean(input.miniChartConfig?.hybridMode, SETTINGS_DEFAULTS.miniChartConfig.hybridMode),
+      gaugeOnHover: toBoolean(input.miniChartConfig?.gaugeOnHover, SETTINGS_DEFAULTS.miniChartConfig.gaugeOnHover),
       showStats: toBoolean(input.miniChartConfig?.showStats, SETTINGS_DEFAULTS.miniChartConfig.showStats),
       showRegime: toBoolean(input.miniChartConfig?.showRegime, SETTINGS_DEFAULTS.miniChartConfig.showRegime),
       showManipulation: toBoolean(input.miniChartConfig?.showManipulation, SETTINGS_DEFAULTS.miniChartConfig.showManipulation),
@@ -192,6 +201,7 @@ export const useSettingsStore = create()(
       setOteoCooldownBars: (val) => commitSettingsPatch(set, { oteoCooldownBars: val }),
       setGhostAmount: (val) => commitSettingsPatch(set, { ghostAmount: val }),
       setAutoGhostEnabled: (val) => commitSettingsPatch(set, { autoGhostEnabled: val }),
+      setAutoGhostCopyMode: (val) => commitSettingsPatch(set, { autoGhostCopyMode: val }),
       setAutoGhostExpirationSeconds: (val) => commitSettingsPatch(set, { autoGhostExpirationSeconds: val }),
       setAutoGhostMaxConcurrentTrades: (val) => commitSettingsPatch(set, { autoGhostMaxConcurrentTrades: val }),
       setAutoGhostPerAssetCooldownSeconds: (val) => commitSettingsPatch(set, { autoGhostPerAssetCooldownSeconds: val }),
@@ -219,6 +229,8 @@ export const useSettingsStore = create()(
       setShowManipulationAlerts: (val) => commitSettingsPatch(set, { showManipulationAlerts: val }),
       setShowSignalConfidence: (val) => commitSettingsPatch(set, { showSignalConfidence: val }),
       setAutoFocusOnSignal: (val) => commitSettingsPatch(set, { autoFocusOnSignal: val }),
+      setAssetAutoRefreshEnabled: (val) => commitSettingsPatch(set, { assetAutoRefreshEnabled: val }),
+      setAssetAutoRefreshInterval: (val) => commitSettingsPatch(set, { assetAutoRefreshInterval: val }),
       setMiniChartConfig: (patch) => set((state) => ({
         miniChartConfig: { ...state.miniChartConfig, ...patch }
       })),

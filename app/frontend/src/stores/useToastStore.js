@@ -12,11 +12,11 @@ export const useToastStore = create((set) => ({
 
   /**
    * Add a toast. Auto-removes after `duration` ms (default 4000).
-   * @param {{ type: 'success'|'error'|'warning'|'info', message: string, duration?: number }} toast
+   * @param {{ type: 'success'|'error'|'warning'|'info', message: string, duration?: number, onDoubleClick?: Function }} toast
    */
-  addToast: ({ type = 'info', message, duration = 4000 }) => {
+  addToast: ({ type = 'info', message, duration = 4000, onDoubleClick }) => {
     const id = _nextId++;
-    set((state) => ({ toasts: [...state.toasts, { id, type, message, duration }] }));
+    set((state) => ({ toasts: [...state.toasts, { id, type, message, duration, onDoubleClick }] }));
   },
 
   removeToast: (id) =>

@@ -2,7 +2,7 @@
  * RightSidebar — collapsible info/risk panel.
  * Shows session risk summary and AI assistant tabs when expanded.
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Activity, Target } from 'lucide-react';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
@@ -11,10 +11,12 @@ import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useTradingStore } from '../../stores/useTradingStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import VerticalRiskChart from '../risk/VerticalRiskChart.jsx';
+import TradeRunHistory from '../risk/TradeRunHistory.jsx';
 
 export default function RightSidebar() {
+  const [activeView, setActiveView] = useState('chart');
   const { rightSidebarOpen, toggleRightSidebar } = useLayoutStore();
-  const { sessionPnl, winRate, totalTrades, startBalance, currentBalance } = useRiskStore();
+  const { sessionPnl, winRate, totalTrades, startBalance, currentBalance, tradeRuns, currentTradeRun, overrideTradeResult } = useRiskStore();
   const settings = useSettingsStore();
   const selectedAsset = useAssetStore((s) => s.selectedAsset);
   const executeTrade = useTradingStore((s) => s.executeTrade);
@@ -22,6 +24,13 @@ export default function RightSidebar() {
 
   const pnlPositive = sessionPnl > 0;
   const pnlNegative = sessionPnl < 0;
+
+  const handleCycleTradeResult = (runId, tradeId, currentOutcome) => {
+    const cycleOrder = ['win', 'loss', 'void'];
+    const currentIndex = cycleOrder.indexOf(currentOutcome);
+    const nextOutcome = cycleOrder[(currentIndex + 1) % cycleOrder.length];
+    overrideTradeResult(runId, tradeId, nextOutcome);
+  };
 
   const metrics = useMemo(() => computeRiskMetrics({
     startBalance: startBalance || settings.initialBalance,
@@ -103,14 +112,42 @@ export default function RightSidebar() {
             />
           </div>
 
-          <div className="mt-2 mb-2 flex-1 min-h-[300px] flex flex-col">
-            <VerticalRiskChart
-              startBalance={metrics.startBalance}
-              currentBalance={currentBalance}
-              takeProfitTarget={metrics.takeProfitTarget}
-              maxDrawdownLimit={metrics.maxDrawdownLimit}
-              height={380}
-            />
+          <div className="flex bg-[#151a22] border border-white/5 rounded-xl p-1 mt-1">
+            <button
+              onClick={() => setActiveView('chart')}
+              className={`flex-1 text-[10px] font-bold uppercase tracking-[0.18em] py-2 rounded-lg transition-colors ${
+                activeView === 'chart' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              Risk Chart
+            </button>
+            <button
+              onClick={() => setActiveView('history')}
+              className={`flex-1 text-[10px] font-bold uppercase tracking-[0.18em] py-2 rounded-lg transition-colors ${
+                activeView === 'history' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              Trade Runs
+            </button>
+          </div>
+
+          <div className="mt-1 mb-2 flex-1 min-h-[300px] flex flex-col">
+            {activeView === 'chart' ? (
+              <VerticalRiskChart
+                startBalance={metrics.startBalance}
+                currentBalance={currentBalance}
+                takeProfitTarget={metrics.takeProfitTarget}
+                maxDrawdownLimit={metrics.maxDrawdownLimit}
+                height={350}
+              />
+            ) : (
+              <TradeRunHistory
+                tradeRuns={tradeRuns}
+                currentTradeRun={currentTradeRun}
+                onCycleTradeResult={handleCycleTradeResult}
+                compact={true}
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

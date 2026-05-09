@@ -67,7 +67,10 @@ function ToastItem({ toast, onRemove }) {
       role="alert"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur-sm min-w-[260px] max-w-[380px] animate-in slide-in-from-right-4 fade-in duration-200 transition-all ${style.container} ${isHovered ? 'scale-[1.02] border-opacity-60' : ''}`}
+      onDoubleClick={() => {
+        if (toast.onDoubleClick) toast.onDoubleClick();
+      }}
+      className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur-sm min-w-[260px] max-w-[380px] animate-in slide-in-from-right-4 fade-in duration-200 transition-all ${toast.onDoubleClick ? 'cursor-pointer hover:border-[#f5df19]/50 hover:shadow-[#f5df19]/10' : ''} ${style.container} ${isHovered ? 'scale-[1.02] border-opacity-60' : ''}`}
     >
       <Icon size={16} className={`mt-0.5 shrink-0 ${style.iconClass}`} />
       <p className="flex-1 text-sm font-medium leading-snug">{toast.message}</p>

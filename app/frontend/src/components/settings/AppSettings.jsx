@@ -5,7 +5,7 @@ import { useState } from 'react';
 import {
   Target, Bot, Ghost, Gauge, Volume2, LayoutGrid,
   ChevronDown, Info, ShieldAlert, Activity, Zap,
-  BarChart3, Settings2, RefreshCcw, Save
+  BarChart3, Settings2, RefreshCcw, RefreshCw, Save
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 
@@ -157,6 +157,7 @@ export default function AppSettings() {
     oteoCooldownBars,
     ghostAmount,
     autoGhostEnabled,
+    autoGhostCopyMode,
     autoGhostExpirationSeconds,
     autoGhostMaxConcurrentTrades,
     autoGhostPerAssetCooldownSeconds,
@@ -175,6 +176,7 @@ export default function AppSettings() {
     setOteoCooldownBars,
     setGhostAmount,
     setAutoGhostEnabled,
+    setAutoGhostCopyMode,
     setAutoGhostExpirationSeconds,
     setAutoGhostMaxConcurrentTrades,
     setAutoGhostPerAssetCooldownSeconds,
@@ -187,6 +189,10 @@ export default function AppSettings() {
     setShowManipulationAlerts,
     setShowSignalConfidence,
     setAutoFocusOnSignal,
+    assetAutoRefreshEnabled,
+    setAssetAutoRefreshEnabled,
+    assetAutoRefreshInterval,
+    setAssetAutoRefreshInterval,
     miniChartConfig,
     setMiniChartConfig,
     uiSoundsEnabled,
@@ -291,6 +297,8 @@ export default function AppSettings() {
                     onChange={(e) => setAutoGhostExpirationSeconds(Number(e.target.value))}
                     className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-sm font-black uppercase tracking-widest text-white outline-none border border-white/5"
                   >
+                    <option value={15}>S15 (15 Seconds)</option>
+                    <option value={30}>S30 (30 Seconds)</option>
                     <option value={60}>M1 (60 Seconds)</option>
                     <option value={120}>M2 (120 Seconds)</option>
                     <option value={300}>M5 (300 Seconds)</option>
@@ -309,37 +317,68 @@ export default function AppSettings() {
               </InputGroup>
             </div>
 
-            <button
-              onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
-              className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-6 border border-white/5 transition hover:bg-[#25282f]"
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1c22] border border-white/10 group-hover:border-[#ffb800]/30 transition-colors">
-                  <img src={GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic} alt="Ghost" className="h-8 w-8 object-contain mix-blend-screen" />
-                </div>
-                <div className="text-left">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-white">Copy Ghost Signals Executions</p>
-                  <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Double click triggered master sync</p>
-                </div>
+            {/* Ghost Trade Copy Mode */}
+            <InputGroup label="Copy Ghost Trades" description="Double-click Ghost toast to execute.">
+              <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
+                <button
+                  type="button"
+                  onClick={() => setAutoGhostCopyMode('copy')}
+                  className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                    autoGhostCopyMode === 'copy'
+                      ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                      : 'text-gray-500 hover:text-white'
+                  }`}
+                >
+                  Only Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAutoGhostCopyMode('execute')}
+                  className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                    autoGhostCopyMode === 'execute'
+                      ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                      : 'text-gray-500 hover:text-white'
+                  }`}
+                >
+                  Copy & Execute
+                </button>
               </div>
-              <div className={`h-6 w-6 rounded-full border-2 transition-all ${isGhostSelectorOpen ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/10'}`} />
-            </button>
+            </InputGroup>
 
-            {isGhostSelectorOpen && (
-              <div className="grid grid-cols-8 gap-3 p-4 bg-[#1a1c22] rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
-                {GHOST_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => setGhostIcon(option.id)}
-                    className={`aspect-square rounded-lg border flex items-center justify-center transition-all ${
-                      ghostIcon === option.id ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/5 bg-white/5 hover:bg-white/10'
-                    }`}
-                  >
-                    <img src={option.src} alt={option.name} className="h-6 w-6 object-contain mix-blend-screen" />
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* Ghost Avatar Selection */}
+            <div className="pt-2 border-t border-white/5">
+              <button
+                onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
+                className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-6 border border-white/5 transition hover:bg-[#25282f]"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1c22] border border-white/10 group-hover:border-[#ffb800]/30 transition-colors">
+                    <img src={GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic} alt="Ghost" className="h-8 w-8 object-contain mix-blend-screen" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-white">Ghost Widget Avatar</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Select visual style for ghost mode</p>
+                  </div>
+                </div>
+                <div className={`h-6 w-6 rounded-full border-2 transition-all ${isGhostSelectorOpen ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/10'}`} />
+              </button>
+
+              {isGhostSelectorOpen && (
+                <div className="grid grid-cols-8 gap-3 mt-3 p-4 bg-[#1a1c22] rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
+                  {GHOST_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => setGhostIcon(option.id)}
+                      className={`aspect-square rounded-lg border flex items-center justify-center transition-all ${
+                        ghostIcon === option.id ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/5 bg-white/5 hover:bg-white/10'
+                      }`}
+                    >
+                      <img src={option.src} alt={option.name} className="h-6 w-6 object-contain mix-blend-screen" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </SectionCard>
         </div>
 
@@ -422,6 +461,42 @@ export default function AppSettings() {
                 </button>
               </div>
 
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <RefreshCw size={16} className="text-[#ffb800]" />
+                  <p className="text-[11px] font-black uppercase tracking-widest text-white">Auto-Refresh Interval</p>
+                </div>
+                <button
+                  onClick={() => setAssetAutoRefreshEnabled(!assetAutoRefreshEnabled)}
+                  className={`h-5 w-10 rounded-full transition-colors ${assetAutoRefreshEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                >
+                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${assetAutoRefreshEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+
+              <InputGroup description="Background polling for live payouts.">
+                <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
+                  {[
+                    { value: 15, label: '15 SEC' },
+                    { value: 30, label: '30 SEC' },
+                    { value: 60, label: '1 MIN' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setAssetAutoRefreshInterval(preset.value)}
+                      className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                        assetAutoRefreshInterval === preset.value
+                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                          : 'text-gray-500 hover:text-white'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </InputGroup>
+
               <div className="rounded-xl bg-white/[0.02] p-6 text-center border border-white/5">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Signal Integrity</p>
                 <h4 className="mt-2 text-2xl font-black uppercase tracking-tighter text-[#ffb800]">Optimal</h4>
@@ -477,9 +552,9 @@ export default function AppSettings() {
                 icon={BarChart3}
               />
               <MiniModule 
-                label="Ghost Stats (W/L)" 
-                active={true} // Placeholder
-                onClick={() => {}}
+                label="Gauge on Hover" 
+                active={miniChartConfig.gaugeOnHover} 
+                onClick={() => setMiniChartConfig({ gaugeOnHover: !miniChartConfig.gaugeOnHover })}
                 icon={Ghost}
               />
               <MiniModule 

@@ -2,10 +2,11 @@
  * LeftSidebar — collapsible navigation + asset list.
  * Collapse state persisted via useLayoutStore.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, BarChart2, Star, Search, Filter, RefreshCw } from 'lucide-react';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { getBrokerAssets } from '../../api/tradingApi.js';
 
@@ -48,18 +49,36 @@ export default function LeftSidebar() {
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const handleRefreshAssets = async () => {
+  const assetAutoRefreshEnabled = useSettingsStore((s) => s.assetAutoRefreshEnabled);
+  const setAssetAutoRefreshEnabled = useSettingsStore((s) => s.setAssetAutoRefreshEnabled);
+  const assetAutoRefreshInterval = useSettingsStore((s) => s.assetAutoRefreshInterval);
+
+  const handleRefreshAssets = async (silent = false) => {
     try {
       setIsRefreshing(true);
       const res = await getBrokerAssets('pocket_option');
       useAssetStore.getState().setAssetCatalog(res.assets);
-      useToastStore.getState().addToast({ type: 'success', message: 'Assets refreshed successfully!' });
+      if (!silent) {
+        useToastStore.getState().addToast({ type: 'success', message: 'Assets refreshed successfully!' });
+      }
     } catch (err) {
-      useToastStore.getState().addToast({ type: 'error', message: `Failed to refresh assets: ${err.message}` });
+      if (!silent) {
+        useToastStore.getState().addToast({ type: 'error', message: `Failed to refresh assets: ${err.message}` });
+      }
     } finally {
       setIsRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (!assetAutoRefreshEnabled) return;
+    
+    const intervalId = setInterval(() => {
+      handleRefreshAssets(true);
+    }, assetAutoRefreshInterval * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [assetAutoRefreshEnabled, assetAutoRefreshInterval]);
 
   const searchFilteredAssets = useMemo(() => {
     if (!searchQuery.trim()) return availableAssets;
@@ -139,14 +158,24 @@ export default function LeftSidebar() {
                 />
               </div>
               <button 
-                onClick={handleRefreshAssets} 
-                disabled={isRefreshing}
-                className={`p-1.5 rounded-md border border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 transition-colors ${
-                  isRefreshing ? 'animate-spin text-[#f5df19]' : ''
+                onClick={() => handleRefreshAssets(false)}
+                onDoubleClick={() => {
+                  const nextState = !assetAutoRefreshEnabled;
+                  setAssetAutoRefreshEnabled(nextState);
+                  useToastStore.getState().addToast({
+                    type: nextState ? 'success' : 'info',
+                    message: `Auto-refresh ${nextState ? 'enabled' : 'disabled'}`
+                  });
+                }}
+                disabled={isRefreshing && !assetAutoRefreshEnabled}
+                className={`p-1.5 rounded-md border transition-colors ${
+                  assetAutoRefreshEnabled
+                    ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]'
+                    : 'border-white/10 bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
                 }`}
-                title="Refresh Assets"
+                title={assetAutoRefreshEnabled ? 'Auto-refresh Active (Double-click to disable)' : 'Refresh Assets (Double-click for Auto-refresh)'}
               >
-                <RefreshCw size={12} />
+                <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
             </div>
             <div className="mt-2 rounded-lg border border-white/5 bg-white/[0.02]">

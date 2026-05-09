@@ -3,6 +3,7 @@ import { initSocket } from './api/socketClient.js';
 import { updateRuntimeStrategyConfig } from './api/strategyApi.js';
 import { useStreamConnection } from './hooks/useStreamConnection.js';
 import { useLayoutStore } from './stores/useLayoutStore.js';
+import { useAssetStore } from './stores/useAssetStore.js';
 import { useOpsStore } from './stores/useOpsStore.js';
 import { useRiskStore } from './stores/useRiskStore.js';
 import { useSettingsStore } from './stores/useSettingsStore.js';
@@ -81,9 +82,29 @@ export default function App() {
         const expiryLabel = data.expiration_seconds === 60 ? '1M' : `${data.expiration_seconds}s`;
         const prefix = data.kind === 'ghost' ? 'Auto-Ghost trade' : 'Auto trade';
         
+        const toastMessage = `${prefix} [${data.direction.toUpperCase()}] executed: ${assetLabel} | Expiry: ${expiryLabel}`;
+        
+        const onDoubleClick = data.kind === 'ghost' ? () => {
+          const { autoGhostCopyMode } = useSettingsStore.getState();
+          useAssetStore.getState().setSelectedAsset(data.asset);
+          
+          useToastStore.getState().addToast({
+            type: 'success',
+            message: `Selected Ghost Asset: ${assetLabel}`,
+            duration: 3000
+          });
+
+          if (autoGhostCopyMode === 'execute') {
+            useTradingStore.getState().setDirection(data.direction);
+            useTradingStore.getState().setDuration(data.expiration_seconds);
+            useTradingStore.getState().executeTrade('pocket_option', data.asset);
+          }
+        } : undefined;
+
         useToastStore.getState().addToast({ 
           type: 'info', 
-          message: `${prefix} [${data.direction.toUpperCase()}] executed: ${assetLabel} | Expiry: ${expiryLabel}` 
+          message: toastMessage,
+          onDoubleClick
         });
 
         if (data.kind === 'ghost') {
