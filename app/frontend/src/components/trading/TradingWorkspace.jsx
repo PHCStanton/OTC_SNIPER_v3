@@ -56,13 +56,19 @@ export default function TradingWorkspace() {
           <MultiChartView />
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_380px]">
-          <Sparkline
-            asset={selectedAsset}
-            ticks={selectedTicks}
-            signal={selectedSignal}
-            warmup={isWarmup}
-          />
+        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_380px] xl:items-start">
+          {/* Left column: Sparkline + Trade History stacked */}
+          <div className="flex flex-col gap-4">
+            <Sparkline
+              asset={selectedAsset}
+              ticks={selectedTicks}
+              signal={selectedSignal}
+              warmup={isWarmup}
+            />
+            <TradeHistory />
+          </div>
+
+          {/* Right column: OTEORing spans full height */}
           <MetricCard
             label="Signal confidence"
             icon={Activity}
@@ -75,10 +81,6 @@ export default function TradingWorkspace() {
               warmup={isWarmup}
             />
           </MetricCard>
-        </section>
-
-        <section>
-          <TradeHistory />
         </section>
       </div>
     </div>

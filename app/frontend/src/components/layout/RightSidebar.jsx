@@ -11,7 +11,7 @@ import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useTradingStore } from '../../stores/useTradingStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import VerticalRiskChart from '../risk/VerticalRiskChart.jsx';
-import TradeRunHistory from '../risk/TradeRunHistory.jsx';
+import MiniTradeRunHistory from '../risk/MiniTradeRunHistory.jsx';
 
 export default function RightSidebar() {
   const [activeView, setActiveView] = useState('chart');
@@ -72,9 +72,30 @@ export default function RightSidebar() {
 
       {rightSidebarOpen && (
         <div className="flex flex-col gap-3 p-3 overflow-y-auto custom-scrollbar flex-1">
-          <div className="flex items-center gap-1.5 px-1 py-1">
-            <Activity size={14} className="text-[#f5df19]" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#f5df19]">Session Risk</span>
+          <div className="flex items-center justify-between px-1 py-1">
+            <div className="flex items-center gap-1.5">
+              <Activity size={14} className="text-[#f5df19]" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#f5df19]">Session Risk</span>
+            </div>
+
+            <div className="flex bg-[#151a22] border border-white/5 rounded-lg p-0.5">
+              <button
+                onClick={() => setActiveView('chart')}
+                className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase transition-colors ${
+                  activeView === 'chart' ? 'bg-[#f5df19] text-black' : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                Chart
+              </button>
+              <button
+                onClick={() => setActiveView('history')}
+                className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase transition-colors ${
+                  activeView === 'history' ? 'bg-[#f5df19] text-black' : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                Runs
+              </button>
+            </div>
           </div>
 
           <div className="bg-[#151a22] border border-white/5 shadow-md rounded-xl p-3">
@@ -111,27 +132,7 @@ export default function RightSidebar() {
               }}
             />
           </div>
-
-          <div className="flex bg-[#151a22] border border-white/5 rounded-xl p-1 mt-1">
-            <button
-              onClick={() => setActiveView('chart')}
-              className={`flex-1 text-[10px] font-bold uppercase tracking-[0.18em] py-2 rounded-lg transition-colors ${
-                activeView === 'chart' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-              }`}
-            >
-              Risk Chart
-            </button>
-            <button
-              onClick={() => setActiveView('history')}
-              className={`flex-1 text-[10px] font-bold uppercase tracking-[0.18em] py-2 rounded-lg transition-colors ${
-                activeView === 'history' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-              }`}
-            >
-              Trade Runs
-            </button>
-          </div>
-
-          <div className="mt-1 mb-2 flex-1 min-h-[300px] flex flex-col">
+          <div className="mt-1 mb-2 flex-1 min-h-[200px] flex flex-col overflow-y-auto custom-scrollbar">
             {activeView === 'chart' ? (
               <VerticalRiskChart
                 startBalance={metrics.startBalance}
@@ -141,11 +142,10 @@ export default function RightSidebar() {
                 height={350}
               />
             ) : (
-              <TradeRunHistory
+              <MiniTradeRunHistory
                 tradeRuns={tradeRuns}
                 currentTradeRun={currentTradeRun}
                 onCycleTradeResult={handleCycleTradeResult}
-                compact={true}
               />
             )}
           </div>
@@ -155,11 +155,7 @@ export default function RightSidebar() {
             <StatCard label="Trades" value={totalTrades > 0 ? totalTrades : '—'} />
           </div>
 
-          {totalTrades === 0 && (
-            <p className="text-[10px] text-gray-500 text-center py-4 font-medium uppercase tracking-wider">
-              No trades this session
-            </p>
-          )}
+
         </div>
       )}
     </aside>

@@ -11,6 +11,7 @@ class SoundManager {
       GHOST_WIN: new Audio('/AUDIO/GHOST_WIN2.ogg'),
       GHOST_LOSS: new Audio('/AUDIO/GHOST_LOSS1.ogg'),
       NOTIFICATION: new Audio('/AUDIO/NOTIFICATIONS.ogg'),
+      TIMER_ALERT: new Audio('/AUDIO/iPhone_haptic.mp3'),
     };
 
     // Preload sounds
@@ -51,6 +52,13 @@ class SoundManager {
     const { uiSoundsEnabled } = useSettingsStore.getState();
     if (uiSoundsEnabled) {
       this._play('NOTIFICATION');
+    }
+  }
+  
+  playTimerAlert() {
+    const { uiSoundsEnabled } = useSettingsStore.getState();
+    if (uiSoundsEnabled) {
+      this._play('TIMER_ALERT');
     }
   }
 

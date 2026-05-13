@@ -191,11 +191,22 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
           </span>
         </div>
 
-        {/* Bottom Center: Manipulation */}
-        <div className="flex flex-col items-center justify-end w-1/3 pb-1">
-           {config.showManipulation && isManipulated && (
-             <AlertTriangle size={18} className="text-rose-500 animate-pulse" />
-           )}
+        {/* Bottom Center: W/L Stats + Manipulation */}
+        <div className="flex flex-col items-center justify-end w-1/3 pb-1 gap-1">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-gray-500 leading-none">W</span>
+            <span className="text-[13px] font-black text-emerald-400 leading-none">
+              {assetStats?.w ?? 0}
+            </span>
+            <span className="text-[10px] text-gray-600 leading-none">/</span>
+            <span className="text-[13px] font-black text-[#fe7453] leading-none">
+              {assetStats?.l ?? 0}
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-gray-500 leading-none">L</span>
+          </div>
+          {config.showManipulation && isManipulated && (
+            <AlertTriangle size={14} className="text-rose-500 animate-pulse" />
+          )}
         </div>
 
         {/* Bottom Right: Regime & Ticker */}

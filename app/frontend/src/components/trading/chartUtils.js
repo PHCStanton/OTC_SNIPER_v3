@@ -1,3 +1,61 @@
+export function toTitleCase(value) {
+  return String(value ?? '')
+    .replaceAll('_', ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function getManipulationLabels(manipulation) {
+  if (!manipulation || typeof manipulation !== 'object') return [];
+
+  const flags = manipulation.flags && typeof manipulation.flags === 'object'
+    ? manipulation.flags
+    : manipulation;
+
+  const labels = Object.entries(flags)
+    .filter(([, active]) => Boolean(active))
+    .map(([key]) => {
+      if (key === 'push_snap') return 'Push & Snap';
+      if (key === 'pinning') return 'Pinning';
+      return toTitleCase(key);
+    });
+
+  if (labels.length > 0) return labels;
+  if (manipulation.type) return [toTitleCase(manipulation.type)];
+  return [];
+}
+
+export function getConfluenceItems(signal, direction) {
+  if (!signal || typeof signal !== 'object') return [];
+
+  const marketContext = signal.market_context && typeof signal.market_context === 'object'
+    ? signal.market_context
+    : {};
+
+  const items = [];
+  const velocity = Number(signal.velocity ?? 0);
+  const pressurePct = Number(signal.pressure_pct ?? 0);
+  const zScore = Number(signal.z_score ?? 0);
+  const maturity = Number(signal.maturity ?? 0);
+  const level2Adjustment = Number(signal.level2_score_adjustment ?? 0);
+
+  if (direction === 'call' && velocity < 0) items.push('Sell Exhaustion');
+  if (direction === 'put' && velocity > 0) items.push('Buy Exhaustion');
+  if (Math.abs(zScore) >= 0.35) items.push(`Z-Score ${zScore > 0 ? 'High' : 'Low'}`);
+  if (Math.abs(pressurePct) >= 12) items.push(`Pressure ${pressurePct > 0 ? 'Up' : 'Down'}`);
+  if (signal.trend_aligned) items.push('Trend Aligned');
+  if (direction === 'call' && marketContext.support_alignment) items.push('Support Align');
+  if (direction === 'put' && marketContext.resistance_alignment) items.push('Resistance Align');
+  if (marketContext.reversal_friendly) items.push('Reversal Friendly');
+  if (marketContext.cci_state) items.push(`CCI ${toTitleCase(marketContext.cci_state)}`);
+  if (marketContext.adx_regime) items.push(`ADX ${toTitleCase(marketContext.adx_regime)}`);
+  if (maturity >= 0.5) items.push(`Maturity ${Math.round(maturity * 100)}%`);
+  if (signal.level2_enabled && level2Adjustment !== 0) items.push(`L2 ${level2Adjustment > 0 ? '+' : ''}${level2Adjustment.toFixed(1)}`);
+  if (signal.actionable) items.push('Actionable');
+
+  return items.slice(0, 8);
+}
+
 export function extractNumericSeries(ticks) {
   if (!Array.isArray(ticks)) return [];
 

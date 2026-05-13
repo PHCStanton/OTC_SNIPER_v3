@@ -5,7 +5,8 @@ import { useState } from 'react';
 import {
   Target, Bot, Ghost, Gauge, Volume2, LayoutGrid,
   ChevronDown, Info, ShieldAlert, Activity, Zap,
-  BarChart3, Settings2, RefreshCcw, RefreshCw, Save
+  BarChart3, Settings2, RefreshCcw, RefreshCw, Save, Timer,
+  TrendingUp, Eye, Layers
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 
@@ -199,6 +200,8 @@ export default function AppSettings() {
     setUiSoundsEnabled,
     tradingSoundsEnabled,
     setTradingSoundsEnabled,
+    showGlobalTimer,
+    setShowGlobalTimer,
   } = useSettingsStore();
 
   const [isGhostSelectorOpen, setIsGhostSelectorOpen] = useState(false);
@@ -219,6 +222,55 @@ export default function AppSettings() {
           <button className="flex items-center gap-2 rounded-lg bg-[#ffb800] px-8 py-3 text-xs font-black uppercase tracking-widest text-black transition hover:bg-[#ffc833] shadow-[0_4px_20px_rgba(255,184,0,0.3)]">
             <Save size={14} />
             Commit Protocol
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Toggles — Interface Sounds, Trading Events, Global Timer Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
+          <div className="flex items-center gap-4">
+            <Volume2 className="text-gray-500" size={20} />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-white">Interface Sounds</p>
+              <p className="text-[10px] font-medium text-gray-600 uppercase">Modern click effects for dashboard UI</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setUiSoundsEnabled(!uiSoundsEnabled)}
+            className={`h-5 w-10 rounded-full transition-colors ${uiSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+          >
+            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${uiSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+        <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
+          <div className="flex items-center gap-4">
+            <Bot className="text-gray-500" size={20} />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-white">Trading Events</p>
+              <p className="text-[10px] font-medium text-gray-600 uppercase">Audible alerts for wins and losses</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setTradingSoundsEnabled(!tradingSoundsEnabled)}
+            className={`h-5 w-10 rounded-full transition-colors ${tradingSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+          >
+            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${tradingSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+        <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
+          <div className="flex items-center gap-4">
+            <Timer className="text-gray-500" size={20} />
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-widest text-white">Global Timer Bar</p>
+              <p className="text-[10px] font-medium text-gray-600 uppercase">Universal UTC Clock and Stopwatch footer</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowGlobalTimer(!showGlobalTimer)}
+            className={`h-5 w-10 rounded-full transition-colors ${showGlobalTimer ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+          >
+            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${showGlobalTimer ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         </div>
       </div>
@@ -543,70 +595,38 @@ export default function AppSettings() {
                 label="Gauges" 
                 active={miniChartConfig.showGauge} 
                 onClick={() => setMiniChartConfig({ showGauge: !miniChartConfig.showGauge })}
-                icon={BarChart3}
+                icon={Gauge}
               />
               <MiniModule 
                 label="Live Stats (W/L)" 
                 active={miniChartConfig.showStats} 
                 onClick={() => setMiniChartConfig({ showStats: !miniChartConfig.showStats })}
-                icon={BarChart3}
+                icon={TrendingUp}
               />
               <MiniModule 
                 label="Gauge on Hover" 
                 active={miniChartConfig.gaugeOnHover} 
                 onClick={() => setMiniChartConfig({ gaugeOnHover: !miniChartConfig.gaugeOnHover })}
-                icon={Ghost}
+                icon={Eye}
               />
               <MiniModule 
                 label="Regime" 
                 active={miniChartConfig.showRegime} 
                 onClick={() => setMiniChartConfig({ showRegime: !miniChartConfig.showRegime })}
-                icon={Settings2}
+                icon={Layers}
               />
               <MiniModule 
                 label="Pulse" 
                 active={miniChartConfig.showManipulation} 
                 onClick={() => setMiniChartConfig({ showManipulation: !miniChartConfig.showManipulation })}
-                icon={Activity}
+                icon={Zap}
               />
             </div>
           </SectionCard>
         </div>
       </div>
 
-      {/* Footer / Sounds Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-10 border-t border-white/5">
-        <div className="rounded-xl bg-[#25282f]/30 p-6 flex items-center justify-between border border-white/5">
-          <div className="flex items-center gap-4">
-            <Volume2 className="text-gray-500" size={20} />
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-white">Interface Sounds</p>
-              <p className="text-[10px] font-medium text-gray-600 uppercase">Modern click effects for dashboard UI</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setUiSoundsEnabled(!uiSoundsEnabled)}
-            className={`h-5 w-10 rounded-full transition-colors ${uiSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-          >
-            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${uiSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-        </div>
-        <div className="rounded-xl bg-[#25282f]/30 p-6 flex items-center justify-between border border-white/5">
-          <div className="flex items-center gap-4">
-            <Bot className="text-gray-500" size={20} />
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-widest text-white">Trading Events</p>
-              <p className="text-[10px] font-medium text-gray-600 uppercase">Audible alerts for wins and losses</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setTradingSoundsEnabled(!tradingSoundsEnabled)}
-            className={`h-5 w-10 rounded-full transition-colors ${tradingSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-          >
-            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${tradingSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-          </button>
-        </div>
-      </div>
+
     </div>
   );
 }

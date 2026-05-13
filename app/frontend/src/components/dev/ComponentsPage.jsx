@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import MiniSparkline from '../trading/MiniSparkline.jsx';
 import PercentageGauge from '../shared/PercentageGauge.jsx';
 import OTEORing from '../trading/OTEORing.jsx';
+import MiniTradeRunHistory from '../risk/MiniTradeRunHistory.jsx';
 import { Star, X, Layers3, Activity, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 
 // --- AI SVG Icons from Ai_svg_icons.md ---
@@ -204,6 +205,78 @@ function MultiChartCardMock({ asset, isSelected, signal, manipulation, stats, re
   );
 }
 
+// --- Demo wrappers for MiniTradeRunHistory ---
+const CYCLE = { win: 'loss', loss: 'void', void: 'win' };
+
+function makeTrade(id, outcome) {
+  return { id, outcome, edited: false };
+}
+
+function MiniTradeRunHistoryDemo() {
+  const [runs, setRuns] = useState([
+    {
+      id: 'r1', label: 'Trade Run 1', pnl: -40,
+      trades: [makeTrade('t1', 'loss'), makeTrade('t2', 'loss'), makeTrade('t3', 'loss'), makeTrade('t4', 'loss')],
+      completedAt: '2026-05-09T10:00:00Z',
+    },
+    {
+      id: 'r2', label: 'Trade Run 2', pnl: 50,
+      trades: [makeTrade('t5', 'win'), makeTrade('t6', 'win'), makeTrade('t7', 'loss'), makeTrade('t8', 'win')],
+      completedAt: '2026-05-09T11:00:00Z',
+    },
+  ]);
+  const current = {
+    id: 'r3', label: 'Trade Run 3', pnl: 20,
+    trades: [makeTrade('t9', 'loss'), makeTrade('t10', 'win'), makeTrade('t11', 'loss'), makeTrade('t12', 'win')],
+    completedAt: null,
+  };
+
+  function handleCycle(runId, tradeId) {
+    setRuns((prev) =>
+      prev.map((run) =>
+        run.id !== runId ? run : {
+          ...run,
+          trades: run.trades.map((t) =>
+            t.id !== tradeId ? t : { ...t, outcome: CYCLE[t.outcome], edited: true }
+          ),
+        }
+      )
+    );
+  }
+
+  return <MiniTradeRunHistory tradeRuns={runs} currentTradeRun={current} onCycleTradeResult={handleCycle} />;
+}
+
+function MiniTradeRunHistoryLossDemo() {
+  const [runs, setRuns] = useState([
+    {
+      id: 'lr1', label: 'Trade Run 1', pnl: -40,
+      trades: [makeTrade('lt1', 'loss'), makeTrade('lt2', 'loss'), makeTrade('lt3', 'loss'), makeTrade('lt4', 'loss')],
+      completedAt: '2026-05-09T09:00:00Z',
+    },
+    {
+      id: 'lr2', label: 'Trade Run 2', pnl: -30,
+      trades: [makeTrade('lt5', 'loss'), makeTrade('lt6', 'loss'), makeTrade('lt7', 'loss')],
+      completedAt: '2026-05-09T09:30:00Z',
+    },
+  ]);
+
+  function handleCycle(runId, tradeId) {
+    setRuns((prev) =>
+      prev.map((run) =>
+        run.id !== runId ? run : {
+          ...run,
+          trades: run.trades.map((t) =>
+            t.id !== tradeId ? t : { ...t, outcome: CYCLE[t.outcome], edited: true }
+          ),
+        }
+      )
+    );
+  }
+
+  return <MiniTradeRunHistory tradeRuns={runs} currentTradeRun={null} onCycleTradeResult={handleCycle} />;
+}
+
 export default function ComponentsPage() {
   const [gaugeValue, setGaugeValue] = useState(75);
   
@@ -395,6 +468,26 @@ export default function ComponentsPage() {
                 regime="WEAK"
               />
               <p className="text-[10px] text-gray-500 italic px-1">Star for Quick-Select, Session W/L in footer</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Section 5: MiniTradeRunHistory */}
+        <section>
+          <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+            <span className="w-2 h-6 bg-rose-500 rounded-full"></span>
+            Mini Trade Run History
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Demo A — mixed results */}
+            <div className="bg-[#0f1419] border border-white/5 rounded-2xl p-5">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">Mixed Session</p>
+              <MiniTradeRunHistoryDemo />
+            </div>
+            {/* Demo B — all losses */}
+            <div className="bg-[#0f1419] border border-white/5 rounded-2xl p-5">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">All-Loss Session</p>
+              <MiniTradeRunHistoryLossDemo />
             </div>
           </div>
         </section>

@@ -16,9 +16,12 @@ import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
 import ErrorBoundary from '../shared/ErrorBoundary.jsx';
 import ToastContainer from '../shared/ToastContainer.jsx';
 import GhostTradingWidget from '../shared/GhostTradingWidget.jsx';
+import GlobalTimer from './GlobalTimer.jsx';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
 
 export default function MainLayout() {
   const { activeView, dashboardMode } = useLayoutStore();
+  const showGlobalTimer = useSettingsStore((s) => s.showGlobalTimer);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#0c0f0f] text-[#e3e6e7]">
@@ -47,6 +50,12 @@ export default function MainLayout() {
           <RightSidebar />
         </ErrorBoundary>
       </div>
+
+      {showGlobalTimer && (
+        <ErrorBoundary label="Global Timer">
+          <GlobalTimer />
+        </ErrorBoundary>
+      )}
 
       {/* Global toast notification layer — always on top */}
       <ToastContainer />

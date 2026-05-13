@@ -70,6 +70,7 @@ export const SETTINGS_DEFAULTS = {
   },
   uiSoundsEnabled: true,
   tradingSoundsEnabled: true,
+  showGlobalTimer: false,
 };
 
 function toBoolean(value, fallback = false) {
@@ -160,6 +161,7 @@ export function validateSettings(input = {}) {
     },
     uiSoundsEnabled: toBoolean(input.uiSoundsEnabled, SETTINGS_DEFAULTS.uiSoundsEnabled),
     tradingSoundsEnabled: toBoolean(input.tradingSoundsEnabled, SETTINGS_DEFAULTS.tradingSoundsEnabled),
+    showGlobalTimer: toBoolean(input.showGlobalTimer, SETTINGS_DEFAULTS.showGlobalTimer),
   };
 }
 
@@ -236,6 +238,7 @@ export const useSettingsStore = create()(
       })),
       setUiSoundsEnabled: (val) => commitSettingsPatch(set, { uiSoundsEnabled: val }),
       setTradingSoundsEnabled: (val) => commitSettingsPatch(set, { tradingSoundsEnabled: val }),
+      setShowGlobalTimer: (val) => commitSettingsPatch(set, { showGlobalTimer: val }),
     }),
     {
       name: 'otc-sniper-settings-storage',

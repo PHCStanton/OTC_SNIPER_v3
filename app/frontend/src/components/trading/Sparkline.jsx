@@ -69,6 +69,22 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
     return (price) => padding + usableHeight - ((price - min) / range) * usableHeight;
   }, [series]);
 
+  /**
+   * Compute the LAST PRICE tag's vertical position in container-pixel space.
+   * Scales the last SVG point's Y (viewBox 0-360) into the 330px rendered SVG,
+   * offset by the container's pt-10 (40px) top padding, then clamped so the
+   * tag (≈56px tall) never clips the chart boundaries.
+   */
+  const lastPriceLabelY = useMemo(() => {
+    if (points.length === 0) return null;
+    const SVG_TOP_PX  = 40;   // pt-10 container padding
+    const SVG_H_PX    = 330;  // h-[330px] SVG rendered height
+    const SVG_VB_H    = 360;  // viewBox height
+    const HALF_TAG_H  = 28;   // ≈ half of the tag's ~56px height
+    const dotY = SVG_TOP_PX + (points[points.length - 1].y / SVG_VB_H) * SVG_H_PX;
+    return Math.max(SVG_TOP_PX + HALF_TAG_H, Math.min(SVG_TOP_PX + SVG_H_PX - HALF_TAG_H, dotY));
+  }, [points]);
+
   return (
     <section className={`relative overflow-hidden rounded-xl border border-white/5 bg-[#212127] shadow-2xl shadow-black/30 backdrop-blur ${className}`}>
       <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[#f5df19]/10 via-transparent to-[#f2892c]/10" />
@@ -210,8 +226,11 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
             })}
           </svg>
 
-          {latest !== null && (
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 rounded-xl border border-[#f5df19]/30 bg-[#f5df19] px-3 py-2 text-right shadow-lg shadow-black/30">
+          {latest !== null && lastPriceLabelY !== null && (
+            <div
+              className="absolute right-4 rounded-xl border border-[#f5df19]/30 bg-[#f5df19] px-3 py-2 text-right shadow-lg shadow-black/30 transition-[top] duration-300 ease-out"
+              style={{ top: lastPriceLabelY, transform: 'translateY(-50%)' }}
+            >
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#584f00]/70">Last price</p>
               <p className="text-lg font-black leading-none text-[#584f00]">{formatPrice(latest)}</p>
             </div>
