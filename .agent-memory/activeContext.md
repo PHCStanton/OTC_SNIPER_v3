@@ -5,9 +5,18 @@
 - The Auto-Ghost trader's 401-trade evidence set already drove the Level 2 hardening and tuning work; that foundation remains stable.
 - **TRAE session fixes (2026-04-27) remain fully implemented and closed.**
 - **Level 3 Phases 0, 1, 2, and 3 are now complete.** Phase 3 passed the multi-agent review gate on 2026-05-02, the user approved continuation, and the full low-severity remediation pass is complete.
-- The next valid implementation target is **Phase 4: AI Advisory Review Loop**.
+- **OTEO Level Backtest Plan (2026-05-15) is now fully closed.** All 4 phases implemented, reviewed, and signed off. `scripts/backtest_oteo_levels.py` + `test_backtest_oteo_levels.py` are the deliverables. 39/39 tests passing.
+- The next valid implementation target is **Phase 4: AI Advisory Review Loop** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
+- A separate planning track is now documented in `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`; if approved, its next implementation step is `Phase 1 - Analyzer Core and Join Validation`.
 
 ## Latest Changes
+
+### Applied on 2026-05-16 - L1/L2/L3 Optimization and AI Knowledge Base Planning (PLANNED)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| KB-P1 | Planning | `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md` | Saved a new offline analyzer plan covering joined `ghost_trades`, `signals`, and `tick_logs`, UTC-only reporting, manipulation-first diagnostics, Level 1/2/3 optimization matrices, and AI-ready knowledge base compression. |
+| KB-P2 | Context Audit | `.agent-memory/activeContext.md`, `.agent-memory/progress.md`, `.agent-memory/previousTaskSession.md` | Identified memory gaps relative to the new plan and updated the session context to reflect the new planning state. |
 
 ### Applied on 2026-05-02 — Level 3 Phase 3 Review Gate + Remediation (SIGNED OFF ✅)
 
@@ -40,13 +49,17 @@
 - Manipulation Detection still uses the hardened 15-second spike memory and realistic OTC pinning bounds.
 - Auto-Ghost now includes Phase 3 win-rate optimization features plus the post-review cleanup pass.
 - The Level 3 implementation plan is active with **Phases 0, 1, 2, and 3 completed and signed off**.
-- Phase 4 has not started yet.
+- Phase 4 (AI Advisory Review Loop) has not started.
+- **OTEO Level Backtest Plan is closed.** Both `--mode replay` and `--mode ghost-reprice` now auto-emit Markdown analysis reports alongside CSV and JSON.
+- **The L1/L2/L3 optimization and AI knowledge base plan is documented but not implemented.** The intended first build step is an offline analyzer that remains read-only against production trading logic.
 
 ## Validation
 - `conda run -n QuFLX-v2 python -m unittest test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` passed with `18` tests after the Phase 3 remediation pass.
 - `conda run -n QuFLX-v2 python -m py_compile app/backend/services/trade_service.py app/backend/services/auto_ghost.py app/backend/services/market_context.py test_level3_phase3.py` passed after the remediation pass.
 - Diagnostics were clean for `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`.
 - Earlier Phase 0-2 compile and unit-test validation remains green.
+- `conda run -n QuFLX-v2 python -m py_compile scripts/backtest_oteo_levels.py test_backtest_oteo_levels.py` → ✅ passed (OTEO Backtest Plan Phase 4 final).
+- `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` → ✅ passed (39/39) — OTEO Backtest Plan Phase 4 final.
 
 ## Active Risks
 - Runtime validation is still needed in a live or ghost session to observe persisted regime output, Level 3 suppression reasons, tick-health behavior, and confirmation-window timing under real market conditions.
@@ -59,6 +72,8 @@
 - Run a live or ghost session with Level 3 enabled to validate persisted regime continuity, tick-health behavior, confirmation-window timing, and suppression reasons in runtime.
 - Revalidate sparkline subscription and live trade-result delivery in the next live test cycle.
 - Observe the explainability UI during live market conditions and decide whether extra backend confluence fields are needed.
+- (Optional) Run `scripts/backtest_oteo_levels.py --mode replay` against fresh tick data to produce a real analysis report now that the backtester is fully operational.
+- If explicitly approved, begin `Phase 1 - Analyzer Core and Join Validation` from `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`.
 
 ## Environment Notes
 - Backend start: `conda run -n QuFLX-v2 python -m uvicorn app.backend.main:app --host 0.0.0.0 --port 8000 --reload`

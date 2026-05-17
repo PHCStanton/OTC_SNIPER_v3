@@ -33,6 +33,8 @@
 - **Level 3 Pre-Phase-3 Hardening (2026-05-01, COMPLETED)** — Added `regime_confidence` and `regime_stable` to signal logs and added a focused regime transition test for `CHOPPY → TREND_PULLBACK → STRONG_MOMENTUM`.
 - **Level 3 Phase 3 (2026-05-02, SIGNED OFF)** — Added tick-frequency health checks, dead/low-market Level 3 handling, Auto-Ghost confirmation windows, adaptive cooldown after losses, per-condition win-rate stats, CCI divergence detection, and focused Phase 3 tests.
 - **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`, including the ghost done-callback fix, canonical `market_context` sourcing, divergence-window optimization, tick-frequency cap, and `warming_up` tick-health contract.
+- **OTEO Level Backtest Plan (2026-05-15, CLOSED ✅)** — 4-phase plan fully implemented and signed off. Phase 1: replay core + tests. Phase 2: ghost trade reprice mode. Phase 3: Markdown analysis report + recommendation matrices. Phase 4: final multi-agent review (all 4 specialists ✅, 0 blocking). Deliverables: `scripts/backtest_oteo_levels.py` + `test_backtest_oteo_levels.py`. 39/39 tests passing.
+- **L1/L2/L3 Optimization and AI Knowledge Base Plan (2026-05-16, PLANNED)** — New implementation plan saved as `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`. Scope: offline analyzer for joined `ghost_trades`, `signals`, and `tick_logs`, manipulation-first diagnostics, UTC-only reporting, Level 1/2/3 optimization matrices, dual-regime comparison, and compact AI-ready knowledge base outputs.
 
 ## Recent Delivery Snapshot
 - **TRAE Sprint (2026-04-27):** Resolved the manual live trade execution blocker (HTTP 422 caused by numeric `confidence` sent to a `str`-only backend field). Pydantic validator now normalises all confidence forms. Auto-connect NameError fixed. httpClient 422 parsing improved. Demo flag corrected. Payout hot-path cached.
@@ -55,11 +57,13 @@
 - `GhostTradingBanner.jsx` was deleted and `MainLayout` was simplified.
 - **Level 3 update:** `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` now reflects Phase 3 as completed, reviewed, remediated, and signed off. The next valid implementation step is Phase 4.
 - **Phase 3 review gate:** `Dev_Docs/Level3_Phase3_Multi_Agent_Review_26-05-02.md` recorded 0 blocking issues, 11 low-severity findings, and confirmed all 11 Phase 3 verification criteria. Those findings have now been finalized in code.
+- **OTEO Level Backtest Plan closed (2026-05-15):** `scripts/backtest_oteo_levels.py` + `test_backtest_oteo_levels.py` fully signed off. Both `--mode replay` and `--mode ghost-reprice` CLI paths now auto-emit Markdown analysis reports. Final 39/39 test suite clean.
 
 ## Latest Review / Documentation Update
 - **2026-04-28:** TRAE Fixes Implementation Plan reviewed via Phase Review Protocol. All 4 phases confirmed implemented and closed. Plan signed off.
 - **2026-05-01:** Level 3 Implementation Plan updated to reflect the actual backend/frontend integration contracts. Phases 0, 1, and 2 are completed, validated, and signed off. A pre-Phase-3 hardening patch added regime confidence/stability to signal logs and a regime transition test.
 - **2026-05-02:** Phase 3 multi-agent review gate completed. Consolidated report written to `Dev_Docs/Level3_Phase3_Multi_Agent_Review_26-05-02.md`. User then approved continuation, the 11 low-severity findings were remediated, and the plan status was advanced to Phase 3 signed off / Phase 4 pending.
+- **2026-05-16:** Planning completed for the offline historical analyzer and AI knowledge base pipeline. The new reference document is `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`. No production code changes have started under that plan yet.
 - A 401-trade Auto-Ghost session was analyzed to identify leaks in the manipulation detector and flaws in the original Level 2 policy weights.
 - The Level 2 implementation plan's Phase A (Critical Fixes) and Phase B (Tuning) have been executed and validated against smoke tests.
 - A full report on the 401-trade session and subsequent logic tightening was generated in `@reports/401Trades_Level2_Ghost_Trade_report_26-04-06.md`.
@@ -78,6 +82,8 @@
 - `conda run -n QuFLX-v2 python -m unittest test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` → ✅ passed (18 tests) after Phase 3 remediation
 - `conda run -n QuFLX-v2 python -m py_compile app/backend/services/trade_service.py app/backend/services/auto_ghost.py app/backend/services/market_context.py test_level3_phase3.py` → ✅ passed after Phase 3 remediation
 - Diagnostics were clean for `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py` after the remediation pass
+- `conda run -n QuFLX-v2 python -m py_compile scripts/backtest_oteo_levels.py test_backtest_oteo_levels.py` → ✅ passed (OTEO Backtest Plan Phase 4 final validation)
+- `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` → ✅ passed (39/39) — OTEO Backtest Plan Phase 4 final validation
 
 ## Open Validation
 - Confirm sparkline rendering through the repaired Socket.IO path.
@@ -88,6 +94,8 @@
 
 ## Planned Work
 - (Next approved implementation step) Begin Level 3 Phase 4: AI Advisory Review Loop.
+- (Planned, not started) If approved, begin `Phase 1 - Analyzer Core and Join Validation` from `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`.
+- (CLOSED 2026-05-15) OTEO Level Backtest Plan — all 4 phases complete and signed off per `Dev_Docs/backtesting/OTEO_Level_Backtest_Plan_26-05-15.md`.
 - (Current state) Phases 0, 1, 2, and 3 of `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` are complete and signed off. Phase 4 is not started.
 - (Near-term validation) Observe the new explainability UI during live market conditions and decide whether extra backend confluence fields are needed.
 - (Future) Supabase migration
