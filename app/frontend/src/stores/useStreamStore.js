@@ -1,5 +1,7 @@
 /**
  * Stream store — live tick data, signal state, manipulation alerts.
+/**
+ * Stream store — live tick data, signal state, manipulation alerts.
  * Updated by Socket.IO market_data and signal events.
  */
 import { create } from 'zustand';
@@ -13,6 +15,7 @@ export const useStreamStore = create((set) => ({
   manipulation: {},// { [asset]: { detected: bool, type: string|null } }
   warmup: {},      // { [asset]: bool }
   tradeMarkers: {},// { [asset]: TradeMarker[] }
+  latestPrice: {}, // { [asset]: number } (Phase 2: lightweight updates)
 
   // Streaming state
   isStreaming: false,
@@ -24,6 +27,7 @@ export const useStreamStore = create((set) => ({
     manipulation: {},
     warmup: {},
     tradeMarkers: {},
+    latestPrice: {},
     isStreaming: false,
   }),
 
@@ -38,10 +42,12 @@ export const useStreamStore = create((set) => ({
       const nextTicks = { ...state.ticks };
       const nextSignals = { ...state.signals };
       const nextManipulation = { ...state.manipulation };
+      const nextLatestPrice = { ...state.latestPrice };
       
       let hasTicks = false;
       let hasSignals = false;
       let hasManip = false;
+      let hasLatestPrice = false;
 
       for (const [asset, data] of Object.entries(updates)) {
         if (data.ticks) {
@@ -56,12 +62,17 @@ export const useStreamStore = create((set) => ({
           nextManipulation[asset] = data.manipulation;
           hasManip = true;
         }
+        if (data.latestPrice !== undefined) {
+          nextLatestPrice[asset] = data.latestPrice;
+          hasLatestPrice = true;
+        }
       }
 
       return {
         ...(hasTicks ? { ticks: nextTicks } : {}),
         ...(hasSignals ? { signals: nextSignals } : {}),
         ...(hasManip ? { manipulation: nextManipulation } : {}),
+        ...(hasLatestPrice ? { latestPrice: nextLatestPrice } : {}),
       };
     }),
 
@@ -83,10 +94,12 @@ export const useStreamStore = create((set) => ({
   addTradeMarker: (marker) => set((state) => {
     const asset = marker.asset;
     const existing = state.tradeMarkers[asset] || [];
+    // Phase 3: Bounding Session Growth (cap to last 50 markers)
+    const capped = [...existing, marker].slice(-50);
     return {
       tradeMarkers: {
         ...state.tradeMarkers,
-        [asset]: [...existing, marker],
+        [asset]: capped,
       },
     };
   }),
@@ -122,11 +135,13 @@ export const useStreamStore = create((set) => ({
       const manipulation = { ...state.manipulation };
       const warmup = { ...state.warmup };
       const tradeMarkers = { ...state.tradeMarkers };
+      const latestPrice = { ...state.latestPrice };
       delete ticks[asset];
       delete signals[asset];
       delete manipulation[asset];
       delete warmup[asset];
       delete tradeMarkers[asset];
-      return { ticks, signals, manipulation, warmup, tradeMarkers };
+      delete latestPrice[asset];
+      return { ticks, signals, manipulation, warmup, tradeMarkers, latestPrice };
     }),
 }));

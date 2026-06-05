@@ -67,15 +67,19 @@ class PocketOptionSession:
                                     )
                                     return res
 
-                                future = asyncio.run_coroutine_threadsafe(
-                                    cls._tick_callback(asset, price, ts),
-                                    loop,
-                                )
-                                future.add_done_callback(
-                                    lambda f, asset_key=key: logging.getLogger("PocketOptionSession").error(
-                                        "Tick dispatch error for %s: %s", asset_key, f.exception()
-                                    ) if not f.cancelled() and f.exception() else None
-                                )
+                                import inspect
+                                if inspect.iscoroutinefunction(cls._tick_callback):
+                                    future = asyncio.run_coroutine_threadsafe(
+                                        cls._tick_callback(asset, price, ts),
+                                        loop,
+                                    )
+                                    future.add_done_callback(
+                                        lambda f, asset_key=key: logging.getLogger("PocketOptionSession").error(
+                                            "Tick dispatch error for %s: %s", asset_key, f.exception()
+                                        ) if not f.cancelled() and f.exception() else None
+                                    )
+                                else:
+                                    loop.call_soon_threadsafe(cls._tick_callback, asset, price, ts)
                             except Exception as hook_err:
                                 # Fix #7: log instead of silently swallowing
                                 logging.getLogger("PocketOptionSession").warning(

@@ -14,14 +14,16 @@
 - **Async Boundary Protection:** Blocking broker calls are offloaded from the FastAPI event loop and wrapped with timeouts
 - **Split Transport Model:** Trade execution flows over HTTP, while sparklines and trade result updates flow over Socket.IO
 - **Auto-Ghost Simulation Pattern:** Purpose-built background execution engine for automated strategy validation. It uses the `trigger_mode` metadata in WebSocket payloads to differentiate background activity from manual user actions.
+- **Asynchronous Hot-path Queueing:** Ticks are enqueued thread-safely via `loop.call_soon_threadsafe` and consumed asynchronously in a background queue worker task, isolating the event loop from high market volatility.
+- **Memory-Buffered Logging:** I/O logging is offloaded from the tick processing hot-path. Ticks are buffered in memory and flushed periodically in batch cycles.
 
 ## Data Flow
 - Frontend → API client → thin routes → business services → repository → persisted state
 
 ## Streaming Path
-- Pocket Option tick callback (`PocketOptionSession`) -> `StreamingService.process_tick()`
-- `StreamingService` enriches/logs tick data and emits `market_data` / `warmup_status` over Socket.IO
-- Frontend consumer for live sparklines is still pending in `app/frontend/src`
+- Pocket Option tick callback (`PocketOptionSession`) -> `StreamingService.enqueue_tick` (thread-safe handoff)
+- `StreamingService` background consumer queue -> `_process_tick_inner` -> socket emission -> `TickLogger.write_tick` (memory buffer)
+- Frontend client -> throttled store batching -> selectors -> UI components (Sparkline, OTEORing, MultiChartView)
 
 ## Legacy Note
 - The older Redis Pub/Sub gateway exists only in `legacy_reference/backend_reuse/data_streaming/redis_gateway.py` and is not part of the current v3 runtime path.
@@ -33,3 +35,5 @@
 - **Direct tick streaming in v3:** Live market data is currently routed directly from the broker tick callback into Socket.IO, without Redis in the runtime path.
 - **Direct Socket.IO dev connection:** Local frontend development may connect directly to the backend Socket.IO endpoint when the Vite proxy handshake is unreliable.
 - **Explicit trade rejection feedback:** Frontend trade flows must validate broker response success and render failure state immediately.
+- **Zustand Selector Hygiene:** Prohibits broad Zustand hook destructuring (e.g. `const { x, y } = useStore()`) in high-frequency rendering contexts to avoid global re-render cascades. Components must consume state through narrow selectors (e.g. `const x = useStore((s) => s.x)`).
+- **requestAnimationFrame Throttling:** Non-critical UI elements (such as historical tick arrays/sparklines) are throttled via requestAnimationFrame (10 FPS active, 2 FPS inactive) to prevent browser main-thread congestion.

@@ -5,9 +5,7 @@ import { create } from 'zustand';
 import { executeTrade, getTrades } from '../api/tradingApi.js';
 import { getRuntimeStrategyConfig } from '../api/strategyApi.js';
 import { useOpsStore } from './useOpsStore.js';
-import { useRiskStore } from './useRiskStore.js';
 import { useToastStore } from './useToastStore.js';
-import { useSettingsStore } from './useSettingsStore.js';
 import { useAssetStore } from './useAssetStore.js';
 
 function normalizeSignalSnapshot(signal = {}) {
@@ -29,6 +27,23 @@ function normalizeSignalSnapshot(signal = {}) {
     level2_suppressed_reason: signal.level2_suppressed_reason ?? null,
     market_context: signal.market_context ?? signal.marketContext ?? null,
   };
+}
+
+export function resolveTradeStake({ amount, amountType, balance }) {
+  const parsedAmount = Number(amount);
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return 0;
+
+  if (amountType === '$') {
+    return Number(parsedAmount.toFixed(2));
+  }
+
+  if (amountType === '%') {
+    const parsedBalance = Number(balance);
+    if (!Number.isFinite(parsedBalance) || parsedBalance <= 0) return 0;
+    return Number((parsedBalance * (parsedAmount / 100)).toFixed(2));
+  }
+
+  throw new Error(`Invalid trade amount type: ${amountType}`);
 }
 
 function validateTradeRequest(asset, amount, duration) {
@@ -56,6 +71,7 @@ function validateTradeRequest(asset, amount, duration) {
 export const useTradingStore = create((set, get) => ({
   // Form state
   amount: 20,
+  amountType: '$',
   direction: 'call', // 'call' | 'put'
   duration: 60,      // seconds
 
@@ -70,6 +86,12 @@ export const useTradingStore = create((set, get) => ({
   tradeHistoryMode: 'live', // 'live' | 'ghost'
 
   setAmount: (amount) => set({ amount }),
+  setAmountType: (amountType) => {
+    if (!['$', '%'].includes(amountType)) {
+      throw new Error(`Invalid trade amount type: ${amountType}`);
+    }
+    set({ amountType });
+  },
   setDirection: (direction) => set({ direction }),
   setDuration: (duration) => set({ duration }),
   setLastTradeResult: (value) => set({ lastTradeResult: value }),
@@ -80,8 +102,24 @@ export const useTradingStore = create((set, get) => ({
   },
 
   executeTrade: async (broker, asset, overrideAmount = null) => {
-    const { amount, direction, duration } = get();
-    const finalAmount = overrideAmount !== null ? overrideAmount : amount;
+    const { amount, amountType, direction, duration } = get();
+    let finalAmount;
+
+    try {
+      finalAmount = overrideAmount !== null
+        ? Number(overrideAmount)
+        : resolveTradeStake({
+            amount,
+            amountType,
+            balance: useOpsStore.getState().balance,
+          });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ tradeError: message, lastTradeResult: null });
+      useToastStore.getState().addToast({ type: 'error', message });
+      return;
+    }
+
     const validationError = validateTradeRequest(asset, finalAmount, duration);
 
     if (validationError) {

@@ -1,12 +1,11 @@
 /**
  * TradePanel — execution controls for the Phase 5 trading workspace.
  */
-import { useMemo, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, AlertTriangle, DollarSign, Ghost, Loader2, Wallet } from 'lucide-react';
+import { useMemo } from 'react';
+import { ArrowDownRight, ArrowUpRight, AlertTriangle, DollarSign, Loader2, Wallet } from 'lucide-react';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useOpsStore } from '../../stores/useOpsStore.js';
-import { useTradingStore } from '../../stores/useTradingStore.js';
-import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { resolveTradeStake, useTradingStore } from '../../stores/useTradingStore.js';
 import { formatAssetLabel } from './chartUtils.js';
 
 export default function TradePanel() {
@@ -14,35 +13,23 @@ export default function TradePanel() {
   const { sessionStatus, balance, accountType } = useOpsStore();
   const {
     amount,
+    amountType,
     duration,
     isExecuting,
     tradeError,
-    lastTradeResult,
     setAmount,
+    setAmountType,
     setDuration,
     setDirection,
     executeTrade,
   } = useTradingStore();
 
-  const { ghostAmount } = useSettingsStore();
-  const [amountType, setAmountType] = useState('$');
-
   const sessionConnected = sessionStatus === 'connected';
   const broker = 'pocket_option';
 
-  const parsedAmount = useMemo(() => {
-    const value = Number(amount);
-    return Number.isFinite(value) ? value : 0;
-  }, [amount]);
-
   const calculatedStake = useMemo(() => {
-    if (amountType === '$') return parsedAmount;
-    if (amountType === '%') {
-      const bal = Number(balance) || 0;
-      return Number((bal * (parsedAmount / 100)).toFixed(2));
-    }
-    return 0;
-  }, [amountType, parsedAmount, balance]);
+    return resolveTradeStake({ amount, amountType, balance });
+  }, [amount, amountType, balance]);
 
   const parsedDuration = useMemo(() => {
     const value = Number(duration);
@@ -54,7 +41,7 @@ export default function TradePanel() {
   async function handleExecute(direction) {
     if (!sessionConnected || isExecuting || calculatedStake <= 0 || parsedDuration <= 0) return;
     setDirection(direction);
-    await executeTrade(broker, selectedAsset, calculatedStake);
+    await executeTrade(broker, selectedAsset);
   }
 
   return (

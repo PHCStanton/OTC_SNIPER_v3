@@ -4,7 +4,10 @@ Orchestrates live market data enrichment and real-time emissions.
 """
 import logging
 import time
+import asyncio
 from typing import Dict, Any
+
+from .perf_monitor import PerformanceMonitor
 
 from .auto_ghost import AutoGhostService
 from .market_context import MarketContextEngine, Level2Config, apply_level2_policy, apply_level3_policy
@@ -50,6 +53,13 @@ class StreamingService:
         self._allowed_assets: set[str] = set()
         self._streaming_active: bool = False
         self._payout_cache: Dict[str, tuple[float, float]] = {}
+        
+        # Telemetry and Bounded Queue (Phase 0/1)
+        self.perf_monitor = PerformanceMonitor(sio_server)
+        self._tick_queue = asyncio.Queue(maxsize=500)
+        self.perf_monitor.set_queue(self._tick_queue)
+        self._loop = None
+        self._consumer_task = None
 
     def _clear_level3_state(self, *, reset_classifiers: bool) -> None:
         """Clear cached Level 3 regime state."""
@@ -118,10 +128,27 @@ class StreamingService:
 
     def start(self) -> None:
         self._streaming_active = True
+        self._loop = asyncio.get_running_loop()
+        self.perf_monitor.start()
+        self.tick_logger.start()
+        self._consumer_task = asyncio.create_task(self._tick_consumer_loop())
         logger.info("StreamingService started — tick processing enabled")
 
     def stop(self) -> None:
         self._streaming_active = False
+        self.perf_monitor.stop()
+        self.tick_logger.stop()
+        if self._consumer_task:
+            self._consumer_task.cancel()
+            self._consumer_task = None
+        
+        # Drain the queue
+        while not self._tick_queue.empty():
+            try:
+                self._tick_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+                
         self._allowed_assets.clear()
         self._oteo_engines.clear()
         self._market_context_engines.clear()
@@ -169,17 +196,55 @@ class StreamingService:
             logger.debug("Failed to resolve payout for %s: %s", asset, exc)
             return 0.0
 
-    async def process_tick(self, asset: str, price: float, timestamp: float, source: str = "pocket_option") -> None:
+    def process_tick(self, asset: str, price: float, timestamp: float, source: str = "pocket_option") -> None:
         """
-        Main entry point for incoming ticks from the broker.
-        Enriches, logs, and emits the tick data.
+        Main entry point for incoming ticks from the broker thread.
+        Pushes the tick to the internal asyncio Queue thread-safely.
         """
-        # Fix #2: Wrap entire body in a top-level handler so errors are visible,
-        # not silently dropped in fire-and-forget asyncio.create_task calls.
+        if not self._streaming_active:
+            return
+        if asset not in self._allowed_assets:
+            return
+
+        loop = self._loop
+        if loop and loop.is_running():
+            loop.call_soon_threadsafe(self._enqueue_tick_inner, asset, price, timestamp, source)
+
+    def _enqueue_tick_inner(self, asset: str, price: float, timestamp: float, source: str) -> None:
+        if self._tick_queue.full():
+            try:
+                self._tick_queue.get_nowait()
+                self.perf_monitor.record_drop()
+            except asyncio.QueueEmpty:
+                pass
+        
         try:
-            await self._process_tick_inner(asset, price, timestamp, source)
+            self._tick_queue.put_nowait((asset, price, timestamp, source))
         except Exception as e:
-            logger.error("process_tick error for %s @ %.5f: %s", asset, price, e)
+            logger.error("Failed to enqueue tick for %s: %s", asset, e)
+
+    async def _tick_consumer_loop(self):
+        """Background loop consuming ticks from the queue and processing them."""
+        while self._streaming_active:
+            try:
+                tick = await self._tick_queue.get()
+                asset, price, timestamp, source = tick
+                
+                start_time = time.time()
+                try:
+                    await self._process_tick_inner(asset, price, timestamp, source)
+                except Exception as proc_err:
+                    logger.error("Error processing tick for %s: %s", asset, proc_err)
+                
+                duration = time.time() - start_time
+                self.perf_monitor.record_tick(duration)
+                
+                self._tick_queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as loop_err:
+                logger.error("Error in tick consumer loop: %s", loop_err)
+                await asyncio.sleep(0.01)
 
     async def _process_tick_inner(self, asset: str, price: float, timestamp: float, source: str) -> None:
         if not self._streaming_active:
@@ -265,6 +330,22 @@ class StreamingService:
                 "regime_detail": regime["regime_detail"],
             })
 
+        if self.sio:
+            room = f"market_data:{asset}"
+            await self.sio.emit("market_data", payload, room=room)
+            self.perf_monitor.record_emit()
+            
+            # Emit warmup status
+            self._tick_counts[asset] += 1
+            count = self._tick_counts[asset]
+            if count % 10 == 0 or count == 50:
+                await self.sio.emit("warmup_status", {
+                    "asset": asset,
+                    "ready": count >= 50,
+                    "ticks_received": count
+                }, room=room)
+
+        # Asynchronously write to tick log and process signals (post-emit)
         await self.tick_logger.write_tick(asset, {
             "t": timestamp,
             "p": price,
@@ -304,20 +385,6 @@ class StreamingService:
                 manipulation=manipulation,
                 payout_pct=payout_pct,
             )
-
-        if self.sio:
-            room = f"market_data:{asset}"
-            await self.sio.emit("market_data", payload, room=room)
-            
-            # Emit warmup status
-            self._tick_counts[asset] += 1
-            count = self._tick_counts[asset]
-            if count % 10 == 0 or count == 50:
-                await self.sio.emit("warmup_status", {
-                    "asset": asset,
-                    "ready": count >= 50,
-                    "ticks_received": count
-                }, room=room)
 
     def clear_detector_buffers(self, asset: str) -> None:
         """Clear manipulation detector buffers (used on focus switch)."""

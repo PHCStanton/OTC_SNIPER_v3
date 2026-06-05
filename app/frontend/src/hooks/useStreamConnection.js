@@ -52,6 +52,7 @@ export function useStreamConnection() {
   const tickBufferRef = useRef({});
   const pendingUpdatesRef = useRef({});
   const rafIdRef = useRef(null);
+  const lastTicksEmitRef = useRef({});
 
   useEffect(() => {
     const socket = initSocket();
@@ -61,11 +62,19 @@ export function useStreamConnection() {
       const entries = Object.entries(updates);
       if (entries.length > 0) {
         const resolved = {};
+        const now = Date.now();
         for (const [asset, data] of entries) {
            resolved[asset] = {
              ...data,
-             ticks: [...(tickBufferRef.current[asset] || [])],
            };
+           const isSelected = asset === selectedAsset;
+           const interval = isSelected ? 100 : 500; // 10 FPS vs 2 FPS
+           const lastEmit = lastTicksEmitRef.current[asset] || 0;
+           
+           if (now - lastEmit >= interval) {
+             resolved[asset].ticks = [...(tickBufferRef.current[asset] || [])];
+             lastTicksEmitRef.current[asset] = now;
+           }
         }
         batchUpdate(resolved);
         pendingUpdatesRef.current = {};
@@ -131,8 +140,8 @@ export function useStreamConnection() {
         };
       }
 
-      // Queue for batch update
-      pendingUpdatesRef.current[asset] = { signal, manipulation };
+      // Queue for batch update (includes latestPrice)
+      pendingUpdatesRef.current[asset] = { signal, manipulation, latestPrice: price };
 
       if (!rafIdRef.current) {
         rafIdRef.current = requestAnimationFrame(processBatch);
@@ -162,9 +171,12 @@ export function useStreamConnection() {
       socket.off('market_data', handleMarketData);
       socket.off('warmup_status', handleWarmupStatus);
       socket.off('disconnect', handleDisconnect);
-      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
     };
-  }, [setIsStreaming, setWarmup, batchUpdate]);
+  }, [setIsStreaming, setWarmup, batchUpdate, selectedAsset]);
 
   useEffect(() => {
     if (!selectedAsset) return;

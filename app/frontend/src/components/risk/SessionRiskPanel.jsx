@@ -4,7 +4,7 @@ import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
-import { useTradingStore } from '../../stores/useTradingStore.js';
+import { resolveTradeStake, useTradingStore } from '../../stores/useTradingStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import SessionControls from './SessionControls.jsx';
 import TradeRunHistory from './TradeRunHistory.jsx';
@@ -45,34 +45,44 @@ function SummaryChip({ label, value }) {
 }
 
 export default function SessionRiskPanel() {
-  const { balance, accountType } = useOpsStore();
-  const settings = useSettingsStore();
+  const balance = useOpsStore((s) => s.balance);
+  const accountType = useOpsStore((s) => s.accountType);
+  const sessionStatus = useOpsStore((s) => s.sessionStatus);
+  const initialBalance = useSettingsStore((s) => s.initialBalance);
+  const payoutPercentage = useSettingsStore((s) => s.payoutPercentage);
+  const riskPercentPerTrade = useSettingsStore((s) => s.riskPercentPerTrade);
+  const drawdownPercent = useSettingsStore((s) => s.drawdownPercent);
+  const riskRewardRatio = useSettingsStore((s) => s.riskRewardRatio);
+  const useFixedAmount = useSettingsStore((s) => s.useFixedAmount);
+  const fixedRiskAmount = useSettingsStore((s) => s.fixedRiskAmount);
   const selectedAsset = useAssetStore((s) => s.selectedAsset);
+  const amount = useTradingStore((s) => s.amount);
+  const amountType = useTradingStore((s) => s.amountType);
+  const duration = useTradingStore((s) => s.duration);
+  const isExecuting = useTradingStore((s) => s.isExecuting);
   const executeTrade = useTradingStore((s) => s.executeTrade);
   const setDirection = useTradingStore((s) => s.setDirection);
-  const {
-    startBalance,
-    currentBalance,
-    sessionPnl,
-    sessionWins,
-    sessionLosses,
-    sessionVoids,
-    resolvedTrades,
-    totalTrades,
-    currentStreak,
-    maxDrawdown,
-    peakBalance,
-    winRate,
-    tradeRuns,
-    currentTradeRun,
-    recordingMode,
-    syncStartBalance,
-    setRecordingMode,
-    recordTradeResult,
-    startNewTradeRun,
-    overrideTradeResult,
-    resetSession,
-  } = useRiskStore();
+  const startBalance = useRiskStore((s) => s.startBalance);
+  const currentBalance = useRiskStore((s) => s.currentBalance);
+  const sessionPnl = useRiskStore((s) => s.sessionPnl);
+  const sessionWins = useRiskStore((s) => s.sessionWins);
+  const sessionLosses = useRiskStore((s) => s.sessionLosses);
+  const sessionVoids = useRiskStore((s) => s.sessionVoids);
+  const resolvedTrades = useRiskStore((s) => s.resolvedTrades);
+  const totalTrades = useRiskStore((s) => s.totalTrades);
+  const currentStreak = useRiskStore((s) => s.currentStreak);
+  const maxDrawdown = useRiskStore((s) => s.maxDrawdown);
+  const peakBalance = useRiskStore((s) => s.peakBalance);
+  const winRate = useRiskStore((s) => s.winRate);
+  const tradeRuns = useRiskStore((s) => s.tradeRuns);
+  const currentTradeRun = useRiskStore((s) => s.currentTradeRun);
+  const recordingMode = useRiskStore((s) => s.recordingMode);
+  const syncStartBalance = useRiskStore((s) => s.syncStartBalance);
+  const setRecordingMode = useRiskStore((s) => s.setRecordingMode);
+  const recordTradeResult = useRiskStore((s) => s.recordTradeResult);
+  const startNewTradeRun = useRiskStore((s) => s.startNewTradeRun);
+  const overrideTradeResult = useRiskStore((s) => s.overrideTradeResult);
+  const resetSession = useRiskStore((s) => s.resetSession);
 
   useEffect(() => {
     if (balance > 0 && startBalance === 0) {
@@ -80,42 +90,58 @@ export default function SessionRiskPanel() {
       return;
     }
 
-    if (balance <= 0 && startBalance === 0 && settings.initialBalance > 0) {
-      syncStartBalance(settings.initialBalance);
+    if (balance <= 0 && startBalance === 0 && initialBalance > 0) {
+      syncStartBalance(initialBalance);
     }
-  }, [balance, settings.initialBalance, startBalance, syncStartBalance]);
+  }, [balance, initialBalance, startBalance, syncStartBalance]);
 
   const metrics = useMemo(() => computeRiskMetrics({
-    startBalance: startBalance || settings.initialBalance,
-    payoutPercentage: settings.payoutPercentage,
-    riskPercentPerTrade: settings.riskPercentPerTrade,
-    drawdownPercent: settings.drawdownPercent,
-    riskRewardRatio: settings.riskRewardRatio,
-    useFixedAmount: settings.useFixedAmount,
-    fixedRiskAmount: settings.fixedRiskAmount,
+    startBalance: startBalance || initialBalance,
+    payoutPercentage,
+    riskPercentPerTrade,
+    drawdownPercent,
+    riskRewardRatio,
+    useFixedAmount,
+    fixedRiskAmount,
     currentSessionPnl: sessionPnl,
   }), [
     startBalance,
-    settings.initialBalance,
-    settings.payoutPercentage,
-    settings.riskPercentPerTrade,
-    settings.drawdownPercent,
-    settings.riskRewardRatio,
-    settings.useFixedAmount,
-    settings.fixedRiskAmount,
+    initialBalance,
+    payoutPercentage,
+    riskPercentPerTrade,
+    drawdownPercent,
+    riskRewardRatio,
+    useFixedAmount,
+    fixedRiskAmount,
     sessionPnl,
   ]);
 
   const tradeCountForRun = currentTradeRun?.trades?.length ?? 0;
   const canAddTrades = true;
 
+  const resolvedStake = useMemo(() => {
+    return resolveTradeStake({ amount, amountType, balance });
+  }, [amount, amountType, balance]);
+
+  const canExecuteTrade = sessionStatus === 'connected'
+    && !isExecuting
+    && Boolean(selectedAsset)
+    && resolvedStake > 0
+    && Number(duration) > 0;
+
+  const handleExecute = (direction) => {
+    if (!canExecuteTrade) return;
+    setDirection(direction);
+    void executeTrade('pocket_option', selectedAsset);
+  };
+
   const handleAddTrade = (outcome) => {
-    const riskAmount = settings.useFixedAmount
-      ? settings.fixedRiskAmount
+    const riskAmount = useFixedAmount
+      ? fixedRiskAmount
       : metrics.riskPerTrade;
 
     const pnl = outcome === 'win'
-      ? riskAmount * (settings.payoutPercentage / 100)
+      ? riskAmount * (payoutPercentage / 100)
       : outcome === 'loss'
         ? -riskAmount
         : 0;
@@ -124,7 +150,7 @@ export default function SessionRiskPanel() {
       outcome,
       pnl,
       stake: riskAmount,
-      payoutPercentage: settings.payoutPercentage,
+      payoutPercentage,
       source: 'manual',
     });
   };
@@ -214,10 +240,8 @@ export default function SessionRiskPanel() {
             icon={Target} 
             tone="emerald" 
             actionLabel="CALL"
-            onAction={() => {
-              setDirection('call');
-              executeTrade('pocket_option', selectedAsset);
-            }}
+            disabled={!canExecuteTrade}
+            onAction={() => handleExecute('call')}
           />
           <ActionStatCard 
             label="To Limit" 
@@ -226,10 +250,8 @@ export default function SessionRiskPanel() {
             icon={Layers3} 
             tone="rose"
             actionLabel="PUT"
-            onAction={() => {
-              setDirection('put');
-              executeTrade('pocket_option', selectedAsset);
-            }}
+            disabled={!canExecuteTrade}
+            onAction={() => handleExecute('put')}
           />
           <StatCard label="Min Win Rate" value={`${metrics.minimumWinRate.toFixed(1)}%`} sub={`Risk/trade $${metrics.riskPerTrade.toFixed(2)}`} icon={Trophy} tone="amber" />
         </section>
@@ -241,7 +263,7 @@ export default function SessionRiskPanel() {
               onModeChange={setRecordingMode}
               onAddTrade={handleAddTrade}
               onNewRun={startNewTradeRun}
-              onSync={() => syncStartBalance(balance > 0 ? balance : settings.initialBalance)}
+              onSync={() => syncStartBalance(balance > 0 ? balance : initialBalance)}
               onExport={handleExport}
               onReset={handleReset}
               canAddTrades={canAddTrades}
@@ -267,7 +289,7 @@ export default function SessionRiskPanel() {
   );
 }
 
-function ActionStatCard({ label, value, sub, icon: Icon, tone = 'neutral', actionLabel, onAction }) {
+function ActionStatCard({ label, value, sub, icon: Icon, tone = 'neutral', actionLabel, onAction, disabled = false }) {
   const toneClasses = {
     neutral: 'border-white/5 bg-[#10151a] text-[#e3e6e7] hover:bg-white/5',
     emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20 hover:border-emerald-400/40',
@@ -276,7 +298,7 @@ function ActionStatCard({ label, value, sub, icon: Icon, tone = 'neutral', actio
   };
 
   return (
-    <button onClick={onAction} className={`flex text-left flex-col justify-center rounded-2xl border p-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition-colors duration-200 cursor-pointer ${toneClasses[tone]}`}>
+    <button disabled={disabled} onClick={onAction} className={`flex text-left flex-col justify-center rounded-2xl border p-4 shadow-[0_8px_24px_rgba(0,0,0,0.18)] transition-colors duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 ${toneClasses[tone]}`}>
       <div className="flex items-start justify-between gap-3 w-full">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.26em] text-gray-500">{label}</p>

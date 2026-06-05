@@ -18,14 +18,12 @@ import TradeHistoryTable from './TradeHistoryTable.jsx';
 import EquityCurve from './EquityCurve.jsx';
 
 export default function JournalView() {
-  const { 
-    ghostTrades, 
-    ghostWins, 
-    ghostLosses, 
-    ghostPnl,
-    ghostWinRate,
-    autoGhostMetrics
-  } = useRiskStore();
+  const ghostTrades = useRiskStore((s) => s.ghostTrades);
+  const ghostWins = useRiskStore((s) => s.ghostWins);
+  const ghostLosses = useRiskStore((s) => s.ghostLosses);
+  const ghostPnl = useRiskStore((s) => s.ghostPnl);
+  const ghostWinRate = useRiskStore((s) => s.ghostWinRate);
+  const autoGhostMetrics = useRiskStore((s) => s.autoGhostMetrics);
 
   // Use real backend autoGhostMetrics for streaks and recovery time
   const currentStreakCount = autoGhostMetrics?.auto_ghost_current_streak_count || 0;

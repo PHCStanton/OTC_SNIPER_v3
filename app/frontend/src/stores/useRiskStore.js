@@ -17,14 +17,64 @@ function createRun(runNumber) {
   };
 }
 
-function createTrade({ outcome, pnl, stake, payoutPercentage, source }) {
+function normalizeOptionalNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function createTrade({
+  outcome,
+  pnl,
+  stake,
+  payoutPercentage,
+  source,
+  tradeId,
+  sessionId,
+  asset,
+  direction,
+  expirationSeconds,
+  confidence,
+  oteoScore,
+  baseOteoScore,
+  baseConfidence,
+  level2ScoreAdjustment,
+  level3ScoreAdjustment,
+  strategyLevel,
+  triggerMode,
+  entryPrice,
+  entryTime,
+  exitPrice,
+  exitTime,
+  zScore,
+  manipulation,
+}) {
   return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: tradeId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    tradeId: tradeId ?? null,
+    sessionId: sessionId ?? null,
+    asset: asset ?? null,
+    direction: typeof direction === 'string' ? direction.toLowerCase() : null,
     outcome,
     pnl,
     stake,
     payoutPercentage,
     source,
+    expirationSeconds: normalizeOptionalNumber(expirationSeconds),
+    confidence: typeof confidence === 'string' ? confidence.toUpperCase() : confidence ?? null,
+    oteo_score: normalizeOptionalNumber(oteoScore),
+    base_oteo_score: normalizeOptionalNumber(baseOteoScore),
+    baseConfidence: typeof baseConfidence === 'string' ? baseConfidence.toUpperCase() : baseConfidence ?? null,
+    level2ScoreAdjustment: normalizeOptionalNumber(level2ScoreAdjustment),
+    level3ScoreAdjustment: normalizeOptionalNumber(level3ScoreAdjustment),
+    strategyLevel: strategyLevel ?? null,
+    triggerMode: triggerMode ?? null,
+    entryPrice: normalizeOptionalNumber(entryPrice),
+    entryTime: normalizeOptionalNumber(entryTime),
+    exitPrice: normalizeOptionalNumber(exitPrice),
+    exitTime: normalizeOptionalNumber(exitTime),
+    zScore: normalizeOptionalNumber(zScore),
+    manipulation: manipulation ?? null,
     edited: false,
     createdAt: new Date().toISOString(),
   };
@@ -160,42 +210,34 @@ function summarizeSession(startBalance, tradeRuns, currentTradeRun) {
   };
 }
 
-function summarizeGhostTrades(ghostTrades) {
-  const trades = ghostTrades.map((trade) => ({
-    ...trade,
-    outcome: VALID_OUTCOMES.has(trade.outcome) ? trade.outcome : 'void',
-    pnl: normalizeNumber(trade.pnl, 0),
-    stake: normalizeNumber(trade.stake, 0),
-  }));
+function updateGhostTradeStats(state, newTrade) {
+  const outcome = VALID_OUTCOMES.has(newTrade.outcome) ? newTrade.outcome : 'void';
+  const tradePnl = normalizeNumber(newTrade.pnl, 0);
 
-  let wins = 0;
-  let losses = 0;
-  let resolvedTrades = 0;
-  let pnl = 0;
+  const wins = outcome === 'win' ? state.ghostWins + 1 : state.ghostWins;
+  const losses = outcome === 'loss' ? state.ghostLosses + 1 : state.ghostLosses;
+  const total = state.ghostTotalTrades + 1;
+  const pnl = state.ghostPnl + tradePnl;
+
+  const nextTrades = [...state.ghostTrades, newTrade].slice(-200);
+
   let peak = 0;
   let running = 0;
   let maxDrawdown = 0;
-
-  trades.forEach((trade) => {
-    pnl += trade.pnl;
-    running += trade.pnl;
+  nextTrades.forEach((t) => {
+    running += t.pnl;
     peak = Math.max(peak, running);
     maxDrawdown = Math.max(maxDrawdown, peak - running);
-    if (trade.outcome === 'win') {
-      wins += 1;
-      resolvedTrades += 1;
-    } else if (trade.outcome === 'loss') {
-      losses += 1;
-      resolvedTrades += 1;
-    }
   });
 
+  const resolvedTrades = wins + losses;
+
   return {
-    ghostTrades: trades,
+    ghostTrades: nextTrades,
     ghostWins: wins,
     ghostLosses: losses,
     ghostPnl: pnl,
-    ghostTotalTrades: trades.length,
+    ghostTotalTrades: total,
     ghostWinRate: resolvedTrades > 0 ? (wins / resolvedTrades) * 100 : 0,
     ghostMaxDrawdown: maxDrawdown,
   };
@@ -268,7 +310,32 @@ export const useRiskStore = create((set, get) => ({
     });
   },
 
-  recordTradeResult: ({ outcome, pnl, stake, payoutPercentage, source = 'auto' }) => {
+  recordTradeResult: ({
+    outcome,
+    pnl,
+    stake,
+    payoutPercentage,
+    source = 'auto',
+    tradeId,
+    sessionId,
+    asset,
+    direction,
+    expirationSeconds,
+    confidence,
+    oteoScore,
+    baseOteoScore,
+    baseConfidence,
+    level2ScoreAdjustment,
+    level3ScoreAdjustment,
+    strategyLevel,
+    triggerMode,
+    entryPrice,
+    entryTime,
+    exitPrice,
+    exitTime,
+    zScore,
+    manipulation,
+  }) => {
     const state = get();
 
     if (!VALID_OUTCOMES.has(outcome)) {
@@ -293,11 +360,30 @@ export const useRiskStore = create((set, get) => ({
       stake: resolvedStake,
       payoutPercentage: resolvedPayout,
       source,
+      tradeId,
+      sessionId,
+      asset,
+      direction,
+      expirationSeconds,
+      confidence,
+      oteoScore,
+      baseOteoScore,
+      baseConfidence,
+      level2ScoreAdjustment,
+      level3ScoreAdjustment,
+      strategyLevel,
+      triggerMode,
+      entryPrice,
+      entryTime,
+      exitPrice,
+      exitTime,
+      zScore,
+      manipulation,
     });
 
     if (source === 'ghost') {
       set({
-        ...summarizeGhostTrades([...state.ghostTrades, nextTrade]),
+        ...updateGhostTradeStats(state, nextTrade),
       });
       return;
     }

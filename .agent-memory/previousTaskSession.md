@@ -1,41 +1,28 @@
-## L1/L2/L3 Optimization and AI Knowledge Base Planning Session
+## Lagging and Latency Optimizations Session (2026-06-05)
 
-This session did not implement production code. It assessed how to build a new offline analysis pipeline that can refine the current Level 1, Level 2, and Level 3 strategies before any new AI advisory loop is introduced.
+This session focused on hardening the backend hot-path, resolving progressive event loop lag, optimizing Zustand stores and selectors to eliminate re-render cascades on the frontend, and resolving a critical UI freeze.
 
 ### What was completed
 
-- Reviewed the current project state using `.agent-memory/activeContext.md` and `.agent-memory/progress.md`.
-- Delegated the assessment through `@Investigator`, `@Engineer`, and `@Reviewer` roles and consolidated the recommendations.
-- Audited the relevant data sources:
-  - `app/data/ghost_trades/sessions/*.jsonl`
-  - `app/data/signals/*.jsonl`
-  - `app/data/tick_logs/{asset}/{YYYY-MM-DD}.jsonl`
-  - `Market_Analyzer/dev_docs/market_regime_analyzer.py`
-  - `app/backend/services/regime_classifier.py`
-- Confirmed that:
-  - `ghost_trades` should be treated as the realized outcome ledger.
-  - `signals` should be treated as the primary signal-truth source for manipulation and Level 3 context.
-  - `tick_logs` should enrich and validate the analysis, not replace the signal ledger.
-  - runtime AI should not consume raw logs directly because that would be too expensive and too noisy.
+*   **Performance Telemetry:** Added `perf_monitor.py` to track event loop lag, queue lengths, processing percentiles, and emit them via Socket.IO.
+*   **Backend Hardening:** 
+    *   Wired `loop.call_soon_threadsafe` in `pocket_option_session.py` to hand ticks off thread-safely without blocking the async broker loop.
+    *   Implemented `asyncio.Queue` (size 500) and a background consumer task in `streaming.py`.
+    *   Implemented in-memory buffering in `tick_logger.py` to flush logs to disk in batches every 5 seconds or 100 ticks, removing synchronous I/O blocks.
+*   **Frontend Throttling:** 
+    *   Split the Zustand `useStreamStore.js` to isolate `ticks` history from real-time `latestPrice`/`latestSignal` fields.
+    *   Throttled tick updates using `requestAnimationFrame` (10 FPS for selected asset, 2 FPS for watchlist).
+    *   Capped collections (`tradeMarkers` to 50, `ghostTrades` to 200, active `toasts` to 5) to bound memory growth.
+*   **UI Freezing Bug Fix:** Identified a bug in `useStreamConnection.js` where the cleanup callback cancelled the animation frame but did not reset `rafIdRef.current` to `null`. This blocked future updates upon selected asset changes. Fixed by explicitly setting it to `null`.
+*   **Selector Cleanup:** Refactored `RightSidebar`, `GhostTradingWidget`, `SessionRiskPanel`, and `JournalView` to use narrow individual selectors, eliminating render cascades when unrelated settings or stats change.
 
-### Plan created
+### Verification Status
 
-- Saved a new implementation plan at `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`.
-- The plan defines:
-  - UTC-only reporting and grouping
-  - manipulation-first diagnostics
-  - Level 1/2/3 optimization matrices
-  - dual-regime comparison using production and research regime logic
-  - compact AI-ready knowledge base outputs for low-cost retrieval later
+*   **Backend Compiles:** Checked using `py_compile` on all modified Python services -> ✅ Success (exit 0).
+*   **Frontend Builds:** Ran Vite production build check -> ✅ Success (built in 5.09s).
+*   **Tests:** 39/39 tests continue passing successfully.
 
-### Current status
+### Next Session Targets
 
-- No production code changes have been made under this new plan.
-- The plan is documented and awaiting implementation approval.
-- The next implementation step, if explicitly approved, is:
-  - `Phase 1 - Analyzer Core and Join Validation`
-
-### Memory maintenance
-
-- `.agent-memory/activeContext.md` and `.agent-memory/progress.md` were identified as stale relative to the new planning document.
-- Those memory files should reflect that the new analyzer and knowledge base plan now exists, while Level 3 Phase 4 remains not started.
+*   Monitor a live or ghost trading session to verify performance telemetry stats under high market volatility.
+*   Proceed to Level 3 Phase 4 (AI Advisory Review Loop) or historical analyzer Phase 1 when explicitly approved.

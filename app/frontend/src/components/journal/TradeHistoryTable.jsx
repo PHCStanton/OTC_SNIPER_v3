@@ -2,6 +2,24 @@ import React from 'react';
 import { History } from 'lucide-react';
 
 export default function TradeHistoryTable({ ghostTrades }) {
+  const formatTradeTime = (trade) => {
+    const timestamp = Number(trade.entryTime ?? trade.exitTime);
+    if (Number.isFinite(timestamp) && timestamp > 0) {
+      return new Date(timestamp * 1000).toLocaleTimeString();
+    }
+    return new Date(trade.createdAt || Date.now()).toLocaleTimeString();
+  };
+
+  const formatOteoScore = (score) => {
+    const numericScore = Number(score);
+    return Number.isFinite(numericScore) ? numericScore.toFixed(1) : '--';
+  };
+
+  const formatProfit = (pnl) => {
+    const numericPnl = Number(pnl);
+    return Number.isFinite(numericPnl) ? `${numericPnl >= 0 ? '+' : ''}${numericPnl.toFixed(2)}` : '--';
+  };
+
   return (
     <div className="bg-[#141818] border border-white/5 rounded-xl overflow-hidden flex flex-col flex-1 min-h-[300px]">
       <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
@@ -28,13 +46,13 @@ export default function TradeHistoryTable({ ghostTrades }) {
             {ghostTrades.length > 0 ? (
               ghostTrades.slice(-50).reverse().map((trade, idx) => (
                 <tr key={trade.id || idx} className="hover:bg-white/[0.02] transition-colors group">
-                  <td className="px-5 py-3 font-bold text-gray-300">{trade.asset || 'AUDCAD_otc'}</td>
+                  <td className="px-5 py-3 font-bold text-gray-300">{trade.asset || '—'}</td>
                   <td className="px-5 py-3 text-gray-500">
-                    {new Date(trade.createdAt || Date.now()).toLocaleTimeString()}
+                    {formatTradeTime(trade)}
                   </td>
                   <td className="px-5 py-3">
                     <span className="px-2 py-0.5 rounded bg-[#f5df19]/10 text-[#f5df19] font-black">
-                      {trade.oteo_score || '--'}
+                      {formatOteoScore(trade.oteo_score)}
                     </span>
                   </td>
                   <td className="px-5 py-3">
@@ -48,7 +66,7 @@ export default function TradeHistoryTable({ ghostTrades }) {
                   <td className={`px-5 py-3 text-right font-bold ${
                     trade.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
                   }`}>
-                    {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
+                    {formatProfit(trade.pnl)}
                   </td>
                 </tr>
               ))

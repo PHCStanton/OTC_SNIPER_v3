@@ -46,25 +46,29 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
   const isStarred = starredAssets.includes(asset);
   const payout = useAssetStore((s) => s.assetPayouts[asset] ?? s.assetDetails[asset]?.payout ?? 0);
 
-  const ticks = useStreamStore((s) => s.ticks?.[asset] ?? EMPTY_TICKS);
+  const config = useSettingsStore((s) => s.miniChartConfig ?? SETTINGS_DEFAULTS.miniChartConfig);
+  
+  // Phase 2: Split store subscriptions
+  const latestPrice = useStreamStore((s) => s.latestPrice?.[asset] ?? null);
+  const ticks = useStreamStore((s) => config.showSparkline ? (s.ticks?.[asset] ?? EMPTY_TICKS) : EMPTY_TICKS);
   const signal = useStreamStore((s) => s.signals?.[asset] ?? null);
   const manipulation = useStreamStore((s) => s.manipulation?.[asset] ?? null);
   const isWarmup = useStreamStore((s) => Boolean(s.warmup?.[asset]));
   
   const assetStats = useRiskStore((s) => s.assetStats?.[asset] ?? null);
-  const config = useSettingsStore((s) => s.miniChartConfig ?? SETTINGS_DEFAULTS.miniChartConfig);
+  const [isHovered, setIsHovered] = React.useState(false);
 
   const series = React.useMemo(() => extractNumericSeries(ticks), [ticks]);
   const { latest, trend, positive, direction, confidence } = React.useMemo(() => {
     const t = getTrendPercent(series);
     return {
-      latest: series.length > 0 ? series[series.length - 1] : null,
+      latest: latestPrice ?? (series.length > 0 ? series[series.length - 1] : null),
       trend: t,
       positive: t >= 0,
       direction: getSignalDirection(signal),
       confidence: getSignalConfidence(signal),
     };
-  }, [series, signal]);
+  }, [series, signal, latestPrice]);
   
   const regime = signal?.regime ?? null;
   const manipulationFlags = manipulation?.flags ?? manipulation;
@@ -81,13 +85,13 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
     setSelectedAsset(asset);
   };
 
-  const gaugeVisibilityClass = config.gaugeOnHover 
-    ? 'opacity-0 group-hover:opacity-100' 
-    : 'opacity-100';
+  const shouldRenderGauge = config.showGauge && confidence > 0 && (!config.gaugeOnHover || isHovered);
 
   return (
     <article 
       onDoubleClick={handleDoubleClick}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className={`group relative rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden p-3 min-h-[160px] flex flex-col justify-between
         ${isSelected 
           ? 'border-[#f5df19]/50 bg-[#282d2e] shadow-[0_0_15px_rgba(245,223,25,0.1)]' 
@@ -139,8 +143,8 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
       </div>
 
       {/* CENTER AREA (GAUGE) */}
-      <div className={`relative flex-1 flex items-center justify-center py-2 z-10 transition-opacity duration-300 ${gaugeVisibilityClass}`}>
-        {config.showGauge && confidence > 0 && (
+      <div className="relative flex-1 flex items-center justify-center py-2 z-10 min-h-[76px] transition-all duration-300">
+        {shouldRenderGauge && (
           <div className="relative flex items-center justify-center w-full max-w-[200px]">
             {/* BUY Text */}
             <div className={`absolute left-0 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-colors ${direction === 'call' ? 'text-emerald-500' : 'text-gray-600/50'}`}>

@@ -10,8 +10,21 @@ export default function OTEOEfficiency({ ghostTrades }) {
     { label: "Score < 85", min: 0, max: 84.99, color: "bg-rose-500" },
   ];
 
+  const scoredResolvedTrades = ghostTrades
+    .map((trade) => ({
+      ...trade,
+      numericOteoScore: Number(trade.oteo_score),
+      outcome: typeof trade.outcome === 'string' ? trade.outcome.toLowerCase() : '',
+    }))
+    .filter((trade) => (
+      Number.isFinite(trade.numericOteoScore)
+      && trade.numericOteoScore >= 0
+      && trade.numericOteoScore <= 100
+      && ['win', 'loss'].includes(trade.outcome)
+    ));
+
   const stats = buckets.map(bucket => {
-    const tradesInBucket = ghostTrades.filter(t => t.oteo_score >= bucket.min && t.oteo_score <= bucket.max);
+    const tradesInBucket = scoredResolvedTrades.filter(t => t.numericOteoScore >= bucket.min && t.numericOteoScore <= bucket.max);
     const wins = tradesInBucket.filter(t => t.outcome === 'win').length;
     const count = tradesInBucket.length;
     const winRate = count > 0 ? Math.round((wins / count) * 100) : 0;
@@ -25,17 +38,23 @@ export default function OTEOEfficiency({ ghostTrades }) {
         <Target size={16} className="text-[#f5df19]" />
         OTEO Score Efficiency
       </h3>
-      <div className="space-y-4">
-        {stats.map((stat, idx) => (
-          <EfficiencyRow 
-            key={idx} 
-            label={stat.label} 
-            winRate={stat.winRate} 
-            count={stat.count} 
-            color={stat.color} 
-          />
-        ))}
-      </div>
+      {scoredResolvedTrades.length === 0 ? (
+        <div className="rounded-lg border border-white/5 bg-white/[0.02] px-4 py-6 text-center text-xs italic text-gray-500">
+          No scored ghost trades yet. New Auto-Ghost results will appear here once OTEO scores are included in trade results.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {stats.map((stat, idx) => (
+            <EfficiencyRow 
+              key={idx} 
+              label={stat.label} 
+              winRate={stat.winRate} 
+              count={stat.count} 
+              color={stat.color} 
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

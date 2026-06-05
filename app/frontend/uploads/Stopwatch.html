@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neumorphic Stopwatch</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap');
+
+    body {
+      margin: 0;
+      height: 100vh;
+      background: #0a0a12;
+      display: grid;
+      place-items: center;
+      font-family: 'Orbitron', sans-serif;
+    }
+
+    .stopwatch {
+      position: relative;
+      width: 480px;
+      padding: 48px 40px 68px;
+      background: #111118;
+      border-radius: 32px;
+      box-shadow:
+        22px 22px 44px #07070c,
+        -22px -22px 44px #1b1b24,
+        inset 10px 10px 20px rgba(255, 255, 255, 0.04),
+        inset -10px -10px 20px rgba(0, 0, 0, 0.65);
+      overflow: hidden;
+      text-align: center;
+    }
+
+    .display {
+      font-size: 7.2rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      color: #ff3366;
+      text-shadow: 0 0 35px #ff3366;
+      line-height: 1;
+      margin-bottom: 12px;
+      min-height: 92px;
+    }
+
+    .milliseconds {
+      font-size: 2.8rem;
+      vertical-align: super;
+      margin-left: -8px;
+      opacity: 0.85;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-top: 20px;
+    }
+
+    button {
+      width: 68px;
+      height: 68px;
+      border: none;
+      border-radius: 50%;
+      background: #111118;
+      color: #ff3366;
+      font-size: 1.1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow:
+        6px 6px 12px #07070c,
+        -6px -6px 12px #1b1b24;
+    }
+
+    button:hover {
+      transform: translateY(-4px);
+      box-shadow:
+        4px 4px 10px #07070c,
+        -4px -4px 10px #1b1b24,
+        0 0 0 4px rgba(255, 51, 102, 0.2);
+    }
+
+    button:active {
+      transform: scale(0.92);
+      box-shadow: inset 4px 4px 8px #07070c, inset -4px -4px 8px #1b1b24;
+    }
+
+    .start {
+      background: #111118;
+      color: #22ff88;
+    }
+
+    .stop {
+      background: #111118;
+      color: #ff3366;
+    }
+
+    .reset {
+      background: #111118;
+      color: #888;
+    }
+
+    .label {
+      position: absolute;
+      bottom: 26px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 1.35rem;
+      color: #777;
+      letter-spacing: 4px;
+      font-weight: 500;
+      opacity: 0.85;
+    }
+
+    /* Outer glow */
+    .stopwatch::before {
+      content: '';
+      position: absolute;
+      inset: -14px;
+      background: radial-gradient(circle at center, rgba(255, 51, 102, 0.13), transparent 75%);
+      border-radius: 44px;
+      z-index: -1;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="stopwatch">
+    <div class="display" id="display">00:00.00</div>
+
+    <div class="controls">
+      <button class="start" id="startBtn">START</button>
+      <button class="stop" id="stopBtn" disabled>STOP</button>
+      <button class="reset" id="resetBtn">RESET</button>
+    </div>
+
+    <div class="label">STOPWATCH</div>
+  </div>
+
+  <script>
+    let startTime = 0;
+    let elapsedTime = 0;
+    let timerInterval = null;
+    let isRunning = false;
+
+    const display = document.getElementById('display');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function formatTime(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+      const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+      const centiseconds = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
+      return `${minutes}:${seconds}.${centiseconds}`;
+    }
+
+    function updateDisplay() {
+      const currentTime = Date.now();
+      elapsedTime = currentTime - startTime;
+      display.textContent = formatTime(elapsedTime);
+    }
+
+    function startStopwatch() {
+      if (isRunning) return;
+      isRunning = true;
+      startTime = Date.now() - elapsedTime;
+      timerInterval = setInterval(updateDisplay, 10);
+
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      startBtn.style.opacity = 0.4;
+    }
+
+    function stopStopwatch() {
+      if (!isRunning) return;
+      isRunning = false;
+      clearInterval(timerInterval);
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      startBtn.style.opacity = 1;
+    }
+
+    function resetStopwatch() {
+      stopStopwatch();
+      elapsedTime = 0;
+      display.textContent = "00:00.00";
+    }
+
+    // Event listeners
+    startBtn.addEventListener('click', startStopwatch);
+    stopBtn.addEventListener('click', stopStopwatch);
+    resetBtn.addEventListener('click', resetStopwatch);
+
+    // Keyboard support (Space = Start/Stop, R = Reset)
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        isRunning ? stopStopwatch() : startStopwatch();
+      }
+      if (e.key.toLowerCase() === 'r') {
+        resetStopwatch();
+      }
+    });
+  </script>
+
+</body>
+
+</html>

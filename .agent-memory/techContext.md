@@ -8,6 +8,7 @@
 
 ## Runtime Path
 - Pocket Option broker ticks are captured through `PocketOptionSession`
+- Ticks are queued and processed asynchronously by `StreamingService` to isolate the FastAPI event loop
 - `StreamingService` enriches and emits `market_data` / `warmup_status` events via Socket.IO
 - Redis is not part of the current runtime streaming path in v3
 
@@ -32,7 +33,8 @@
 - Blocking broker SDK calls must not run directly on the async request path.
 - Trade execution uses REST, while sparklines and live trade results depend on Socket.IO connectivity.
 - **Execution Boundary:** Manual user trades are strictly mapped to the active SSID environment (Live/Demo). Automated simulation is strictly handled by the background Auto-Ghost module.
-- Sparkline and live result paths should be revalidated after the latest Socket.IO client change.
+- **Zustand Selector Hygiene:** Prohibits broad Zustand hook destructuring (`const { x, y } = useStore()`) in high-frequency rendering contexts to avoid global re-render cascades.
+- **requestAnimationFrame Throttling:** Non-critical UI elements (such as historical tick arrays/sparklines) are throttled via requestAnimationFrame (10 FPS active, 2 FPS inactive) to prevent browser main-thread congestion.
 
 ## Coding Standards
 - Strict separation of concerns (one purpose per module/file/class).
@@ -42,3 +44,4 @@
 ## Validation Expectations
 - Incremental testing: test after every single change.
 - Verify everything before proceeding.
+- Run backend compilation checks and frontend production builds (`npm run build`) before signing off.

@@ -16,7 +16,10 @@ export const useToastStore = create((set) => ({
    */
   addToast: ({ type = 'info', message, duration = 4000, onDoubleClick }) => {
     const id = _nextId++;
-    set((state) => ({ toasts: [...state.toasts, { id, type, message, duration, onDoubleClick }] }));
+    set((state) => {
+      const nextToasts = [...state.toasts, { id, type, message, duration, onDoubleClick }];
+      return { toasts: nextToasts.slice(-5) };
+    });
   },
 
   removeToast: (id) =>

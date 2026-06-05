@@ -8,7 +8,8 @@ import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
-import { useTradingStore } from '../../stores/useTradingStore.js';
+import { useOpsStore } from '../../stores/useOpsStore.js';
+import { resolveTradeStake, useTradingStore } from '../../stores/useTradingStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
 import VerticalRiskChart from '../risk/VerticalRiskChart.jsx';
 import MiniTradeRunHistory from '../risk/MiniTradeRunHistory.jsx';
@@ -16,14 +17,49 @@ import MiniTradeRunHistory from '../risk/MiniTradeRunHistory.jsx';
 export default function RightSidebar() {
   const [activeView, setActiveView] = useState('chart');
   const { rightSidebarOpen, toggleRightSidebar } = useLayoutStore();
-  const { sessionPnl, winRate, totalTrades, startBalance, currentBalance, tradeRuns, currentTradeRun, overrideTradeResult } = useRiskStore();
-  const settings = useSettingsStore();
+  const sessionPnl = useRiskStore((s) => s.sessionPnl);
+  const winRate = useRiskStore((s) => s.winRate);
+  const totalTrades = useRiskStore((s) => s.totalTrades);
+  const startBalance = useRiskStore((s) => s.startBalance);
+  const currentBalance = useRiskStore((s) => s.currentBalance);
+  const tradeRuns = useRiskStore((s) => s.tradeRuns);
+  const currentTradeRun = useRiskStore((s) => s.currentTradeRun);
+  const overrideTradeResult = useRiskStore((s) => s.overrideTradeResult);
+  const initialBalance = useSettingsStore((s) => s.initialBalance);
+  const payoutPercentage = useSettingsStore((s) => s.payoutPercentage);
+  const riskPercentPerTrade = useSettingsStore((s) => s.riskPercentPerTrade);
+  const drawdownPercent = useSettingsStore((s) => s.drawdownPercent);
+  const riskRewardRatio = useSettingsStore((s) => s.riskRewardRatio);
+  const useFixedAmount = useSettingsStore((s) => s.useFixedAmount);
+  const fixedRiskAmount = useSettingsStore((s) => s.fixedRiskAmount);
+  const sessionStatus = useOpsStore((s) => s.sessionStatus);
+  const balance = useOpsStore((s) => s.balance);
   const selectedAsset = useAssetStore((s) => s.selectedAsset);
+  const amount = useTradingStore((s) => s.amount);
+  const amountType = useTradingStore((s) => s.amountType);
+  const duration = useTradingStore((s) => s.duration);
+  const isExecuting = useTradingStore((s) => s.isExecuting);
   const executeTrade = useTradingStore((s) => s.executeTrade);
   const setDirection = useTradingStore((s) => s.setDirection);
 
   const pnlPositive = sessionPnl > 0;
   const pnlNegative = sessionPnl < 0;
+
+  const resolvedStake = useMemo(() => {
+    return resolveTradeStake({ amount, amountType, balance });
+  }, [amount, amountType, balance]);
+
+  const canExecuteTrade = sessionStatus === 'connected'
+    && !isExecuting
+    && Boolean(selectedAsset)
+    && resolvedStake > 0
+    && Number(duration) > 0;
+
+  const handleExecute = (direction) => {
+    if (!canExecuteTrade) return;
+    setDirection(direction);
+    void executeTrade('pocket_option', selectedAsset);
+  };
 
   const handleCycleTradeResult = (runId, tradeId, currentOutcome) => {
     const cycleOrder = ['win', 'loss', 'void'];
@@ -33,23 +69,23 @@ export default function RightSidebar() {
   };
 
   const metrics = useMemo(() => computeRiskMetrics({
-    startBalance: startBalance || settings.initialBalance,
-    payoutPercentage: settings.payoutPercentage,
-    riskPercentPerTrade: settings.riskPercentPerTrade,
-    drawdownPercent: settings.drawdownPercent,
-    riskRewardRatio: settings.riskRewardRatio,
-    useFixedAmount: settings.useFixedAmount,
-    fixedRiskAmount: settings.fixedRiskAmount,
+    startBalance: startBalance || initialBalance,
+    payoutPercentage,
+    riskPercentPerTrade,
+    drawdownPercent,
+    riskRewardRatio,
+    useFixedAmount,
+    fixedRiskAmount,
     currentSessionPnl: sessionPnl,
   }), [
     startBalance,
-    settings.initialBalance,
-    settings.payoutPercentage,
-    settings.riskPercentPerTrade,
-    settings.drawdownPercent,
-    settings.riskRewardRatio,
-    settings.useFixedAmount,
-    settings.fixedRiskAmount,
+    initialBalance,
+    payoutPercentage,
+    riskPercentPerTrade,
+    drawdownPercent,
+    riskRewardRatio,
+    useFixedAmount,
+    fixedRiskAmount,
     sessionPnl,
   ]);
 
@@ -115,10 +151,8 @@ export default function RightSidebar() {
               tone="emerald" 
               icon={Target}
               actionLabel="CALL"
-              onAction={() => {
-                setDirection('call');
-                executeTrade('pocket_option', selectedAsset);
-              }}
+              disabled={!canExecuteTrade}
+              onAction={() => handleExecute('call')}
             />
             <ActionMetricCard 
               label="To Limit" 
@@ -126,10 +160,8 @@ export default function RightSidebar() {
               tone="rose" 
               icon={Target}
               actionLabel="PUT"
-              onAction={() => {
-                setDirection('put');
-                executeTrade('pocket_option', selectedAsset);
-              }}
+              disabled={!canExecuteTrade}
+              onAction={() => handleExecute('put')}
             />
           </div>
           <div className="mt-1 mb-2 flex-1 min-h-[200px] flex flex-col overflow-y-auto custom-scrollbar">
@@ -171,25 +203,7 @@ function StatCard({ label, value, valueClass = 'text-[#e3e6e7]' }) {
   );
 }
 
-function MetricCard({ label, value, tone = 'slate', icon: Icon }) {
-  const toneClasses = {
-    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400',
-    rose: 'border-red-400/20 bg-red-400/10 text-red-400',
-    slate: 'border-white/5 bg-white/5 text-[#e3e6e7]',
-  };
-
-  return (
-    <div className={`rounded-xl border px-3 py-2 ${toneClasses[tone]}`}>
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.18em] opacity-70">
-        {Icon && <Icon size={10} />}
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-bold tracking-tight">{value}</div>
-    </div>
-  );
-}
-
-function ActionMetricCard({ label, value, tone = 'slate', icon: Icon, actionLabel, onAction }) {
+function ActionMetricCard({ label, value, tone = 'slate', icon: Icon, actionLabel, onAction, disabled = false }) {
   const toneClasses = {
     emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20 hover:border-emerald-400/40',
     rose: 'border-red-400/20 bg-red-400/10 text-red-400 hover:bg-red-400/20 hover:border-red-400/40',
@@ -197,7 +211,7 @@ function ActionMetricCard({ label, value, tone = 'slate', icon: Icon, actionLabe
   };
 
   return (
-    <button onClick={onAction} className={`flex flex-col text-left rounded-xl border px-3 py-2 transition-colors duration-200 cursor-pointer ${toneClasses[tone]}`}>
+    <button disabled={disabled} onClick={onAction} className={`flex flex-col text-left rounded-xl border px-3 py-2 transition-colors duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-45 ${toneClasses[tone]}`}>
       <div className="flex items-center justify-between w-full text-[10px] uppercase tracking-[0.18em]">
         <div className="flex items-center gap-1.5 opacity-70">
           {Icon && <Icon size={10} />}
