@@ -1,5 +1,6 @@
 /**
  * Sparkline — live tick chart panel used in the Phase 5 trading workspace.
+ * Redesigned to follow the Stitch Design Reference.
  */
 import { useMemo, useCallback } from 'react';
 import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Layers3, Ghost, User, Eraser } from 'lucide-react';
@@ -23,7 +24,7 @@ const EMPTY_MARKERS = Object.freeze([]);
 
 export default function Sparkline({ asset, ticks, signal, warmup = false, className = '' }) {
   const series = useMemo(() => extractNumericSeries(ticks), [ticks]);
-  const points = useMemo(() => buildChartPoints(series), [series]);
+  const points = useMemo(() => buildChartPoints(series, 1000, 360, 28, 180), [series]);
   const path = useMemo(() => pointsToPath(points), [points]);
   const { latest, trend, trendUp, signalConfidence, signalDirection, signalLabel } = useMemo(() => {
     const t = getTrendPercent(series);
@@ -86,80 +87,93 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
   }, [points]);
 
   return (
-    <section className={`relative overflow-hidden rounded-xl border border-white/5 bg-[#212127] shadow-2xl shadow-black/30 backdrop-blur ${className}`}>
-      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[#f5df19]/10 via-transparent to-[#f2892c]/10" />
+    <section className={`relative overflow-hidden rounded-[20px] border border-white/5 bg-[#1a1c22] shadow-xl ${className}`}>
+      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-[#ffb800]/5 via-transparent to-[#f2892c]/5" />
 
-      <div className="relative flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+      <div className="relative flex items-center justify-between gap-3 border-b border-white/5 px-6 py-4 bg-[#25282f]/30">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a1717] text-[#f5df19]">
-            <BarChart3 size={17} />
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#25282f] text-[#ffb800] border border-white/5">
+            <BarChart3 size={20} />
           </div>
 
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-400">Live chart</p>
-            <h2 className="text-lg font-black tracking-tight text-[#e3e6e7]">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">Live Telemetry</p>
+            <h2 className="text-md font-black uppercase tracking-wider text-white">
               {formatAssetLabel(asset)}
             </h2>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-400">
+        <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-gray-500">
           <button 
             onClick={handleToggleGhostMarkers}
             aria-label="Toggle ghost trade markers"
             aria-pressed={showGhostMarkers}
-            className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showGhostMarkers ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19]' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
-            <Ghost size={11} /> Markers
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-all ${
+              showGhostMarkers 
+                ? 'border-[#ffb800]/30 bg-[#ffb800]/10 text-[#ffb800]' 
+                : 'border-white/5 bg-[#25282f]/30 text-gray-500 hover:text-gray-400'
+            }`}
+          >
+            <Ghost size={11} /> Ghost Markers
           </button>
           <button 
             onClick={handleToggleLiveMarkers}
             aria-label="Toggle live trade markers"
             aria-pressed={showLiveMarkers}
-            className={`flex items-center gap-1 rounded-full border px-2 py-1 transition-colors ${showLiveMarkers ? 'border-sky-400/30 bg-sky-400/10 text-sky-400' : 'border-white/5 bg-[#1a1717] text-gray-500'}`}>
-            <User size={11} /> Markers
+            className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-all ${
+              showLiveMarkers 
+                ? 'border-sky-500/30 bg-sky-500/10 text-sky-400' 
+                : 'border-white/5 bg-[#25282f]/30 text-gray-500 hover:text-gray-400'
+            }`}
+          >
+            <User size={11} /> Live Markers
           </button>
           
-          <div className="h-4 w-px bg-white/10 mx-1" />
+          <div className="h-5 w-px bg-white/5 mx-1" />
 
           <button 
             onClick={handleClearMarkers}
             title="Clear all markers for this asset"
-            className="flex items-center gap-1 rounded-full border border-white/5 bg-[#1a1717] px-2 py-1 text-gray-500 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400">
+            className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#25282f] px-3 py-2 text-gray-500 transition-colors hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
+          >
             <Eraser size={11} /> Clear
           </button>
         </div>
       </div>
 
       {series.length === 0 ? (
-        <div className="flex min-h-[390px] flex-col items-center justify-center gap-3 px-6 py-10 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/5 bg-[#1a1717] text-[#f5df19]">
-            <Activity size={22} />
+        <div className="flex min-h-[390px] flex-col items-center justify-center gap-4 px-6 py-12 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#25282f] text-[#ffb800] border border-white/5">
+            <Activity size={24} />
           </div>
           <div>
-            <p className="text-base font-semibold text-[#e3e6e7]">Awaiting tick stream</p>
-            <p className="mt-1 text-sm text-gray-400">
-              {warmup ? 'Warmup is still in progress for this asset.' : 'Select an asset and wait for live market data.'}
+            <p className="text-sm font-black uppercase tracking-widest text-white">Awaiting live telemetry</p>
+            <p className="mt-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              {warmup ? 'Warmup buffer cycle in execution.' : 'priming WebSocket endpoint for tick data.'}
             </p>
           </div>
         </div>
       ) : (
-        <div className="relative min-h-[390px] px-4 pb-4 pt-10">
-          <div className="absolute left-4 top-4 z-10 rounded-2xl border border-white/10 bg-[#1a1717]/90 px-3 py-2 shadow-2xl backdrop-blur-md">
-            <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${signalDirection === 'call' ? 'bg-emerald-400' : signalDirection === 'put' ? 'bg-[#fe7453]' : 'bg-gray-500'}`} />
+        <div className="relative min-h-[390px] px-6 pb-6 pt-10">
+          <div className="absolute left-6 top-4 z-10 rounded-xl border border-white/5 bg-[#1a1c22]/95 px-4 py-3 shadow-xl backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <span className={`h-2.5 w-2.5 rounded-full ${signalDirection === 'call' ? 'bg-emerald-400' : signalDirection === 'put' ? 'bg-[#fe7453]' : 'bg-gray-600'}`} />
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gray-500">Signal</p>
-                <p className="text-xs font-bold text-[#e3e6e7]">{signalLabel}</p>
+                <p className="text-[8px] font-black uppercase tracking-widest text-gray-500">Signal</p>
+                <p className="text-xs font-bold text-white uppercase">{signalLabel}</p>
               </div>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-              <span className={signalDirection === 'put' ? 'text-[#fe7453]' : 'text-emerald-400'}>{signalDirection === 'call' ? 'CALL' : signalDirection === 'put' ? 'PUT' : 'NEUTRAL'}</span>
-              <span className="text-gray-600">•</span>
-              <span className="text-[#f5df19]">{Math.round(signalConfidence)}%</span>
+            <div className="mt-2.5 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest border-t border-white/5 pt-2">
+              <span className={signalDirection === 'put' ? 'text-[#fe7453]' : 'text-emerald-400'}>
+                {signalDirection === 'call' ? 'CALL' : signalDirection === 'put' ? 'PUT' : 'NEUTRAL'}
+              </span>
+              <span className="text-gray-700">•</span>
+              <span className="text-[#ffb800]">{Math.round(signalConfidence)}%</span>
             </div>
           </div>
 
-          <svg className="h-[330px] w-full drop-shadow-[0_0_12px_rgba(255,237,109,0.18)]" viewBox="0 0 1000 360" role="img" aria-label={`${formatAssetLabel(asset)} live sparkline`}>
+          <svg className="h-[330px] w-full drop-shadow-[0_0_12px_rgba(255,184,0,0.08)]" viewBox="0 0 1000 360" role="img" aria-label={`${formatAssetLabel(asset)} live sparkline`}>
             <defs>
               <linearGradient id="sparklineLine" x1="0%" x2="100%" y1="0%" y2="0%">
                 <stop offset="0%" stopColor="#ffed6d" />
@@ -180,16 +194,30 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
                 y1={y}
                 y2={y}
                 stroke="currentColor"
-                strokeOpacity="0.06"
+                strokeOpacity="0.04"
                 className="text-slate-500"
               />
             ))}
 
-            {path && (
+            {path && points.length > 0 && (
               <>
-                <path d={`${path} L 972 332 L 28 332 Z`} fill="url(#sparklineGlow)" opacity="0.9" />
+                <path d={`${path} L ${points[points.length - 1].x} 332 L 28 332 Z`} fill="url(#sparklineGlow)" opacity="0.9" />
                 <path d={path} fill="none" stroke="url(#sparklineLine)" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
               </>
+            )}
+
+            {/* Draw a horizontal tracker line from the latest point to the price label area */}
+            {points.length > 0 && (
+              <line
+                x1={points[points.length - 1].x}
+                x2={1000 - 28}
+                y1={points[points.length - 1].y}
+                y2={points[points.length - 1].y}
+                stroke="#ffed6d"
+                strokeWidth="1.5"
+                strokeDasharray="4 4"
+                strokeOpacity="0.4"
+              />
             )}
 
             {/* Only render the latest point as a circle to reduce DOM overhead (was 300 circles) */}
@@ -207,18 +235,18 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
               const y = priceToY(m.entryPrice);
               const isWin = m.outcome === 'win';
               const isLoss = m.outcome === 'loss';
-              const color = isWin ? '#34d399' : isLoss ? '#f87171' : '#fbbf24'; // emerald-400, red-400, amber-400
+              const color = isWin ? '#34d399' : isLoss ? '#f87171' : '#ffb800';
               const isGhost = m.kind === 'ghost';
               
               return (
                 <g key={m.tradeId}>
                   <line x1="0" x2="1000" y1={y} y2={y} stroke={color} strokeWidth="1.5" strokeDasharray="6 6" strokeOpacity={isWin || isLoss ? "0.4" : "0.8"} />
-                  <text x="12" y={y - 8} fill={color} fontSize="12" fontWeight="bold">
+                  <text x="12" y={y - 8} fill={color} fontSize="11" fontWeight="bold" fontFamily="monospace">
                     {isGhost ? '👻' : '👤'} {(m.direction ?? 'N/A').toUpperCase()}
                   </text>
                   {m.profit != null && (
-                    <text x="988" y={y - 8} textAnchor="end" fill={color} fontSize="12" fontWeight="bold">
-                       {m.profit > 0 ? '+' : ''}${Math.abs(m.profit).toFixed(2)}
+                    <text x="988" y={y - 8} textAnchor="end" fill={color} fontSize="11" fontWeight="bold" fontFamily="monospace">
+                      {m.profit > 0 ? '+' : ''}${Math.abs(m.profit).toFixed(2)}
                     </text>
                   )}
                 </g>
@@ -228,20 +256,20 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
 
           {latest !== null && lastPriceLabelY !== null && (
             <div
-              className="absolute right-4 rounded-xl border border-[#f5df19]/30 bg-[#f5df19] px-3 py-2 text-right shadow-lg shadow-black/30 transition-[top] duration-300 ease-out"
+              className="absolute right-6 rounded-lg border border-[#ffb800]/30 bg-[#ffb800]/90 backdrop-blur-sm px-4 py-2.5 text-right shadow-lg transition-[top] duration-300 ease-out z-10"
               style={{ top: lastPriceLabelY, transform: 'translateY(-50%)' }}
             >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#584f00]/70">Last price</p>
-              <p className="text-lg font-black leading-none text-[#584f00]">{formatPrice(latest)}</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-black/60">Last Price</p>
+              <p className="text-lg font-black leading-none text-black font-mono">{formatPrice(latest)}</p>
             </div>
           )}
 
-          <div className="absolute bottom-4 left-4 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-400">
-            <span className="flex items-center gap-1.5 rounded-full border border-white/5 bg-[#1a1717] px-2.5 py-1 text-[#e3e6e7]">
-              {trendUp ? <ArrowUpRight size={11} className="text-emerald-400" /> : <ArrowDownRight size={11} className="text-[#fe7453]" />}
+          <div className="absolute bottom-6 left-6 flex items-center gap-3 text-[9px] font-black uppercase tracking-widest text-gray-400">
+            <span className="flex items-center gap-1.5 rounded-lg border border-white/5 bg-[#25282f]/30 px-3 py-1.5 text-white">
+              {trendUp ? <ArrowUpRight size={11} className="text-emerald-400" /> : <ArrowDownRight size={11} className="text-rose-400" />}
               {trendUp ? '+' : ''}{trend.toFixed(2)}%
             </span>
-            <span className="flex items-center gap-1.5 rounded-full border border-white/5 bg-[#1a1717] px-2.5 py-1 text-[#e3e6e7]">
+            <span className="flex items-center gap-1.5 rounded-lg border border-white/5 bg-[#25282f]/30 px-3 py-1.5 text-white">
               <Layers3 size={11} />
               {series.length} ticks
             </span>

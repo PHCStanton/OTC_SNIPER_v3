@@ -128,15 +128,15 @@ export default function GhostTradingWidget() {
     >
       {/* The Popup */}
       {isOpen && (
-        <div className="absolute bottom-16 left-0 mb-4 w-[340px] rounded-2xl border border-white/10 bg-[#0f1419]/95 p-5 shadow-2xl backdrop-blur-xl origin-bottom-left animate-in fade-in zoom-in duration-200">
+        <div className="absolute bottom-16 left-0 mb-4 w-[340px] rounded-[20px] border border-white/5 bg-[#1a1c22] p-5 shadow-2xl backdrop-blur-xl origin-bottom-left animate-in fade-in zoom-in duration-200">
           <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-3">
-            <div className="flex items-center gap-2 text-[#f5df19]">
+            <div className="flex items-center gap-2 text-[#ffb800]">
               <Zap size={18} />
-              <h3 className="text-base font-bold tracking-tight text-[#e3e6e7]">Ghost Trader Stats</h3>
+              <h3 className="text-sm font-black uppercase tracking-wider text-white">Ghost Telemetry</h3>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="rounded-full p-1 text-gray-500 hover:bg-white/10 hover:text-white transition-colors"
+              className="rounded-lg p-1 text-gray-500 hover:bg-white/5 hover:text-white transition-colors"
             >
               <X size={16} />
             </button>
@@ -144,23 +144,23 @@ export default function GhostTradingWidget() {
 
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <StatBox label="Simulated P&L" value={formatCurrency(ghostPnl)} tone={ghostPnl >= 0 ? 'emerald' : 'rose'} icon={ghostPnl >= 0 ? TrendingUp : TrendingDown} />
+              <StatBox label="Ghost PnL" value={formatCurrency(ghostPnl)} tone={ghostPnl >= 0 ? 'emerald' : 'rose'} icon={ghostPnl >= 0 ? TrendingUp : TrendingDown} />
               <StatBox label="Win Rate" value={`${Math.round(ghostWinRate)}%`} tone="emerald" icon={Award} />
-              <StatBox label="Total Trades" value={String(ghostTotalTrades)} tone="slate" icon={Target} />
-              <StatBox label="Max Drawdown" value={formatCurrency(-Math.abs(ghostMaxDrawdown))} tone="rose" icon={TrendingDown} />
+              <StatBox label="Ghost Trades" value={String(ghostTotalTrades)} tone="slate" icon={Target} />
+              <StatBox label="Max DD" value={formatCurrency(-Math.abs(ghostMaxDrawdown))} tone="rose" icon={TrendingDown} />
             </div>
 
-            <div className="rounded-xl border border-white/5 bg-[#151a22] p-3 text-xs text-gray-400 leading-relaxed">
+            <div className="rounded-xl border border-white/5 bg-[#25282f]/30 p-3 text-xs font-semibold uppercase tracking-normal leading-relaxed text-gray-500">
               <div className="flex items-start gap-2">
-                <ShieldAlert size={14} className="mt-0.5 text-gray-500 shrink-0" />
+                <ShieldAlert size={14} className="mt-0.5 text-gray-600 shrink-0" />
                 <p>
                   These stats reflect the simulated performance of the ghost trader module. 
                   Live account balances remain completely unaffected.
                 </p>
               </div>
               {autoGhostEnabled && (
-                <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-[#f5df19]">
-                  Auto-Ghost is active on currently streamed assets
+                <p className="mt-2 text-[9px] uppercase tracking-widest font-black text-[#ffb800]">
+                  Auto-Ghost mode is active on streamed nodes
                 </p>
               )}
             </div>
@@ -172,7 +172,11 @@ export default function GhostTradingWidget() {
       <button
         onClick={handleClick}
         onPointerDown={handlePointerDown}
-        className={`relative flex h-14 w-14 items-center justify-center rounded-full border-2 bg-[#1f1a00] shadow-lg shadow-[#f5df19]/20 transition-all ${isDragging ? 'cursor-grabbing scale-110 shadow-[#f5df19]/40' : 'cursor-grab hover:scale-110 hover:shadow-[#f5df19]/40'} ${isOpen ? 'border-[#f5df19]' : 'border-[#f5df19]/30'}`}
+        className={`relative flex h-14 w-14 items-center justify-center rounded-full border-2 bg-[#25282f]/90 shadow-lg shadow-[#ffb800]/10 transition-all ${
+          isDragging 
+            ? 'cursor-grabbing scale-110 shadow-[#ffb800]/30' 
+            : 'cursor-grab hover:scale-110 hover:shadow-[#ffb800]/25'
+        } ${isOpen ? 'border-[#ffb800]' : 'border-[#ffb800]/30 hover:border-[#ffb800]'}`}
         aria-label="Toggle Ghost Stats"
         title="Drag to move, click for Ghost Stats"
       >
@@ -184,8 +188,8 @@ export default function GhostTradingWidget() {
         {/* Pulsing indicator when closed to draw attention */}
         {!isOpen && (
           <span className="absolute top-0 right-0 flex h-3 w-3">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#f5df19] opacity-75"></span>
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-[#f5df19]"></span>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ffb800] opacity-75"></span>
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-[#ffb800]"></span>
           </span>
         )}
       </button>
@@ -202,18 +206,18 @@ function formatCurrency(value) {
 
 function StatBox({ label, value, tone = 'slate', icon: Icon }) {
   const toneClasses = {
-    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400',
-    rose: 'border-red-400/20 bg-red-400/10 text-red-400',
-    slate: 'border-white/5 bg-white/5 text-[#e3e6e7]',
+    emerald: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-400',
+    rose: 'border-red-500/25 bg-red-500/10 text-red-400',
+    slate: 'border-white/5 bg-[#25282f]/30 text-white',
   };
 
   return (
     <div className={`rounded-xl border p-3 ${toneClasses[tone]}`}>
-      <div className="flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[0.2em] opacity-70">
+      <div className="flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest opacity-60">
         {Icon && <Icon size={12} />}
         {label}
       </div>
-      <div className="mt-1 text-base font-black tracking-tight">{value}</div>
+      <div className="mt-1 text-base font-black tracking-tight font-mono leading-none">{value}</div>
     </div>
   );
 }

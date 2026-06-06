@@ -71,25 +71,29 @@ export default function GlobalTimer() {
   };
 
   return (
-    <div className="flex h-12 w-full items-center justify-between border-t border-white/5 bg-[#0b0f13] px-6 shadow-[0_-4px_20px_rgba(0,0,0,0.4)] transition-all">
+    <div className="flex h-12 w-full items-center justify-between border-t border-white/5 bg-[#1a1c22] px-6 shadow-xl shrink-0 z-50">
       {/* Left: Mode Switchers */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button
           onClick={() => setMode('utc')}
-          className={`flex h-8 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest transition-all ${
-            mode === 'utc' ? 'bg-[#f5df19]/10 text-[#f5df19] shadow-[inset_0_0_10px_rgba(245,223,25,0.1)]' : 'text-gray-500 hover:text-gray-300'
+          className={`flex h-8 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+            mode === 'utc' 
+              ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
+              : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
-          <Clock size={14} />
+          <Clock size={12} />
           UTC Clock
         </button>
         <button
           onClick={() => setMode('stopwatch')}
-          className={`flex h-8 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest transition-all ${
-            mode === 'stopwatch' ? 'bg-emerald-500/10 text-emerald-400 shadow-[inset_0_0_10px_rgba(16,185,129,0.1)]' : 'text-gray-500 hover:text-gray-300'
+          className={`flex h-8 items-center gap-2 rounded-lg px-3 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+            mode === 'stopwatch' 
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+              : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
         >
-          <Timer size={14} />
+          <Timer size={12} />
           Stopwatch
         </button>
       </div>
@@ -97,23 +101,23 @@ export default function GlobalTimer() {
       {/* Center: Main Display */}
       <div className="flex items-center gap-8">
         <div className="flex items-center gap-4">
-          <span className={`font-mono text-xl font-black tracking-tighter ${mode === 'utc' ? 'text-[#f5df19]' : 'text-emerald-400'}`}>
+          <span className={`font-mono text-lg font-black tracking-wider ${mode === 'utc' ? 'text-[#ffb800]' : 'text-emerald-400'}`}>
             {mode === 'utc' ? formatUTC(utcTime) : formatStopwatch(elapsedTime)}
           </span>
           
           {mode === 'stopwatch' && (
             <div className="flex items-center gap-1.5">
               {!isRunning ? (
-                <button onClick={startStopwatch} className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-black shadow-lg shadow-emerald-500/20 hover:scale-110 active:scale-95 transition-all">
-                  <Play size={12} fill="currentColor" />
+                <button onClick={startStopwatch} className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-black hover:scale-105 transition-all">
+                  <Play size={10} fill="currentColor" />
                 </button>
               ) : (
-                <button onClick={stopStopwatch} className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg shadow-rose-500/20 hover:scale-110 active:scale-95 transition-all">
-                  <Square size={12} fill="currentColor" />
+                <button onClick={stopStopwatch} className="flex h-6 w-6 items-center justify-center rounded-full bg-rose-500 text-white hover:scale-105 transition-all">
+                  <Square size={10} fill="currentColor" />
                 </button>
               )}
-              <button onClick={resetStopwatch} className="flex h-7 w-7 items-center justify-center rounded-full bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white transition-all">
-                <RotateCcw size={12} />
+              <button onClick={resetStopwatch} className="flex h-6 w-6 items-center justify-center rounded-full bg-[#25282f] text-gray-400 hover:text-white transition-all">
+                <RotateCcw size={10} />
               </button>
             </div>
           )}
@@ -124,7 +128,7 @@ export default function GlobalTimer() {
       <div className="flex items-center gap-4">
         {mode === 'stopwatch' && (
           <>
-            <div className="flex items-center gap-1 rounded-lg bg-white/5 p-0.5">
+            <div className="flex items-center gap-1 rounded-lg bg-[#25282f]/30 p-0.5 border border-white/5">
               {[5, 10, 15].map((m) => (
                 <button
                   key={m}
@@ -132,8 +136,10 @@ export default function GlobalTimer() {
                     setActiveAlertMinutes(m);
                     setAlertTriggered(false);
                   }}
-                  className={`rounded-md px-2 py-1 text-[9px] font-black tracking-widest transition-all ${
-                    activeAlertMinutes === m ? 'bg-[#f5df19] text-black shadow-lg' : 'text-gray-500 hover:text-gray-300'
+                  className={`rounded-md px-2.5 py-1 text-[8px] font-black tracking-widest transition-all ${
+                    activeAlertMinutes === m 
+                      ? 'bg-[#ffb800] text-black shadow-md shadow-[#ffb800]/25' 
+                      : 'text-gray-500 hover:text-gray-300'
                   }`}
                 >
                   {m}M
@@ -147,7 +153,7 @@ export default function GlobalTimer() {
                 placeholder="MIN"
                 value={alertTime}
                 onChange={(e) => setAlertTime(e.target.value)}
-                className="h-7 w-12 rounded-lg bg-white/5 px-2 text-center text-[10px] font-black text-white outline-none focus:bg-white/10"
+                className="h-7 w-12 rounded-lg bg-[#25282f]/50 border border-white/5 px-2 text-center text-[9px] font-black text-white outline-none focus:bg-[#25282f]"
               />
               <button
                 onClick={() => {
@@ -157,9 +163,9 @@ export default function GlobalTimer() {
                     setAlertTriggered(false);
                   }
                 }}
-                className="flex h-7 items-center gap-2 rounded-lg border border-white/5 bg-white/5 px-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:bg-white/10 hover:text-white transition-all"
+                className="flex h-7 items-center gap-2 rounded-lg border border-white/5 bg-[#25282f]/50 px-3 text-[9px] font-black uppercase tracking-widest text-gray-500 hover:bg-[#25282f] hover:text-white transition-all"
               >
-                {activeAlertMinutes && !alertTriggered ? <BellRing size={12} className="text-[#f5df19] animate-pulse" /> : <Bell size={12} />}
+                {activeAlertMinutes && !alertTriggered ? <BellRing size={11} className="text-[#ffb800] animate-pulse" /> : <Bell size={11} />}
                 SET ALERT
               </button>
               
@@ -169,7 +175,7 @@ export default function GlobalTimer() {
                     setActiveAlertMinutes(null);
                     setAlertTriggered(false);
                   }}
-                  className="text-[9px] font-bold text-rose-500 hover:underline"
+                  className="text-[9px] font-black text-rose-500 hover:text-rose-400 uppercase tracking-wider"
                 >
                   CLEAR
                 </button>
@@ -179,9 +185,9 @@ export default function GlobalTimer() {
         )}
         
         {mode === 'utc' && (
-          <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-gray-600">
-            <Clock size={12} />
-            Network Sync Active
+          <div className="flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-gray-600">
+            <Clock size={11} />
+            SYNC ACTIVE
           </div>
         )}
       </div>

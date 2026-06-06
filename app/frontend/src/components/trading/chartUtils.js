@@ -85,7 +85,7 @@ export function extractNumericSeries(ticks) {
   return series;
 }
 
-export function buildChartPoints(series, width = 1000, height = 360, padding = 28) {
+export function buildChartPoints(series, width = 1000, height = 360, padding = 28, paddingRight = null) {
   if (!Array.isArray(series) || series.length === 0) return [];
 
   let min = series[0];
@@ -95,7 +95,8 @@ export function buildChartPoints(series, width = 1000, height = 360, padding = 2
     if (series[i] > max) max = series[i];
   }
   const range = max - min || 1;
-  const usableWidth = Math.max(1, width - padding * 2);
+  const padRight = paddingRight !== null ? paddingRight : padding;
+  const usableWidth = Math.max(1, width - padding - padRight);
   const usableHeight = Math.max(1, height - padding * 2);
 
   return series.map((value, index) => {

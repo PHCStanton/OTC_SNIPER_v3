@@ -1,7 +1,9 @@
-import React from 'react';
-import { History } from 'lucide-react';
+import React, { useState } from 'react';
+import { History, Activity } from 'lucide-react';
+import TradeDetailsModal from '../trading/TradeDetailsModal.jsx';
 
 export default function TradeHistoryTable({ ghostTrades }) {
+  const [selectedTrade, setSelectedTrade] = useState(null);
   const formatTradeTime = (trade) => {
     const timestamp = Number(trade.entryTime ?? trade.exitTime);
     if (Number.isFinite(timestamp) && timestamp > 0) {
@@ -40,12 +42,17 @@ export default function TradeHistoryTable({ ghostTrades }) {
               <th className="px-5 py-3 border-b border-white/5">OTEO</th>
               <th className="px-5 py-3 border-b border-white/5">Outcome</th>
               <th className="px-5 py-3 border-b border-white/5 text-right">Profit</th>
+              <th className="px-5 py-3 border-b border-white/5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {ghostTrades.length > 0 ? (
               ghostTrades.slice(-50).reverse().map((trade, idx) => (
-                <tr key={trade.id || idx} className="hover:bg-white/[0.02] transition-colors group">
+                <tr 
+                  key={trade.id || idx} 
+                  className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
+                  onClick={() => setSelectedTrade({ ...trade, kind: 'ghost' })}
+                >
                   <td className="px-5 py-3 font-bold text-gray-300">{trade.asset || '—'}</td>
                   <td className="px-5 py-3 text-gray-500">
                     {formatTradeTime(trade)}
@@ -68,11 +75,23 @@ export default function TradeHistoryTable({ ghostTrades }) {
                   }`}>
                     {formatProfit(trade.pnl)}
                   </td>
+                  <td className="px-5 py-3 text-right">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTrade({ ...trade, kind: 'ghost' });
+                      }}
+                      className="text-[#ffb800]/60 hover:text-[#ffb800] bg-[#ffb800]/5 hover:bg-[#ffb800]/20 p-1.5 rounded transition-colors" 
+                      title="AI Analysis"
+                    >
+                      <Activity size={12} />
+                    </button>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="5" className="px-5 py-10 text-center text-gray-600 italic">
+                <td colSpan="6" className="px-5 py-10 text-center text-gray-600 italic">
                   No ghost trades recorded in this session yet.
                 </td>
               </tr>
@@ -80,6 +99,10 @@ export default function TradeHistoryTable({ ghostTrades }) {
           </tbody>
         </table>
       </div>
+
+      {selectedTrade && (
+        <TradeDetailsModal trade={selectedTrade} onClose={() => setSelectedTrade(null)} />
+      )}
     </div>
   );
 }

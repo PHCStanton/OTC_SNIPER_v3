@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, Play, Loader2, Activity, AlertTriangle, Layers3, Hash } from 'lucide-react';
+import { X, Play, Loader2, Activity, AlertTriangle, Layers3 } from 'lucide-react';
 import { useAIStore } from '../../stores/useAIStore.js';
 import { formatAssetLabel } from './chartUtils.js';
 
@@ -29,10 +29,10 @@ export default function TradeDetailsModal({ trade, onClose }) {
   const context = trade.entry_context || {};
   const market = context.market_context || {};
 
-  const oteoScore = context.oteo_score || 0;
-  const zScore = context.z_score || 0;
-  const velocity = context.velocity || 0;
-  const adx = market.adx || 0;
+  const oteoScore = context.oteo_score || trade.oteo_score || 0;
+  const zScore = context.z_score || trade.zScore || 0;
+  const velocity = context.velocity || trade.velocity || 0;
+  const adx = market.adx || trade.adx || 0;
 
   const isManualLive = trade.kind === 'live' && oteoScore === 0;
 
@@ -82,113 +82,116 @@ Provide a brief analysis on why this exact momentum and context resulted in a ${
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl shadow-black/50 max-h-[90vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="flex w-full max-w-2xl flex-col overflow-hidden rounded-[20px] border border-white/5 bg-[#1a1c22] shadow-2xl max-h-[90vh]">
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 bg-[#11181c] p-4">
+        <div className="flex items-center justify-between border-b border-white/5 p-6 bg-[#25282f]/30">
           <div>
             <div className="flex items-center gap-2">
-              <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                {trade.kind === 'ghost' ? 'Ghost Trade' : 'Live Trade'}
+              <span className="rounded bg-[#ffb800]/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#ffb800] border border-[#ffb800]/20">
+                {trade.kind === 'ghost' ? 'GHOST PROTOCOL' : 'LIVE PROTOCOL'}
               </span>
-              <span className="text-xs text-gray-400">{time}</span>
+              <span className="text-xs font-medium text-gray-500 font-mono">{time}</span>
             </div>
-            <h2 className="mt-1 text-xl font-black text-[#e3e6e7]">{asset} • {direction}</h2>
+            <h2 className="mt-2 text-lg font-black uppercase tracking-wider text-white">{asset} • {direction}</h2>
           </div>
-          <button onClick={onClose} className="rounded-full bg-white/5 p-2 text-gray-400 transition hover:bg-white/10 hover:text-white">
+          <button onClick={onClose} className="rounded-lg bg-[#25282f] p-2 text-gray-400 transition hover:bg-[#2d3139] hover:text-white border border-white/5">
             <X size={16} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
           
           {/* Main Results */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="rounded-xl border border-white/5 bg-[#1a1717] p-3 text-center">
-              <p className="text-[10px] font-semibold uppercase text-gray-500">Outcome</p>
-              <p className={`mt-1 text-lg font-bold ${outcome === 'WIN' ? 'text-emerald-400' : outcome === 'LOSS' ? 'text-red-400' : 'text-gray-300'}`}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-white/5 bg-[#25282f]/30 p-4 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Outcome</p>
+              <p className={`mt-2 text-md font-black uppercase ${outcome === 'WIN' ? 'text-emerald-400' : outcome === 'LOSS' ? 'text-rose-400' : 'text-gray-300'}`}>
                 {outcome}
               </p>
             </div>
-            <div className="rounded-xl border border-white/5 bg-[#1a1717] p-3 text-center">
-              <p className="text-[10px] font-semibold uppercase text-gray-500">Risked</p>
-              <p className="mt-1 text-lg font-bold text-gray-300">${amount.toFixed(2)}</p>
+            <div className="rounded-xl border border-white/5 bg-[#25282f]/30 p-4 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Risked</p>
+              <p className="mt-2 text-md font-black text-white font-mono">${amount.toFixed(2)}</p>
             </div>
-            <div className="rounded-xl border border-white/5 bg-[#1a1717] p-3 text-center">
-              <p className="text-[10px] font-semibold uppercase text-gray-500">Return</p>
-              <p className={`mt-1 text-lg font-bold ${pnl > 0 ? 'text-emerald-400' : pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+            <div className="rounded-xl border border-white/5 bg-[#25282f]/30 p-4 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Return</p>
+              <p className={`mt-2 text-md font-black font-mono ${pnl > 0 ? 'text-emerald-400' : pnl < 0 ? 'text-rose-400' : 'text-gray-500'}`}>
                 {pnl > 0 ? '+' : ''}${Math.abs(pnl).toFixed(2)}
               </p>
             </div>
-            <div className="rounded-xl border border-white/5 bg-[#1a1717] p-3 text-center">
-              <p className="text-[10px] font-semibold uppercase text-gray-500">OTEO Score</p>
-              <p className="mt-1 text-lg font-bold text-[#f5df19]">
+            <div className="rounded-xl border border-white/5 bg-[#25282f]/30 p-4 text-center">
+              <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">OTEO Score</p>
+              {/* Keeping Canary Yellow for this telemetry value as user requested visual stimulation */}
+              <p className="mt-2 text-md font-black text-[#f5df19]">
                 {isManualLive ? 'N/A' : oteoScore.toFixed(1)}
               </p>
             </div>
           </div>
 
           {/* Deep Metadata */}
-          <div className="rounded-xl border border-white/5 bg-[#1a1717] p-4 text-xs">
-            <h3 className="mb-3 flex items-center gap-1.5 font-bold uppercase tracking-wider text-gray-400 border-b border-white/5 pb-2">
-              <Layers3 size={14} /> Trade Context & Metrics
+          <div className="rounded-xl border border-white/5 bg-[#25282f]/20 p-5">
+            <h3 className="mb-4 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-500 border-b border-white/5 pb-3">
+              <Layers3 size={14} /> telemetry metrics
             </h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
               <div className="flex justify-between">
-                <span className="text-gray-500">Z-Score:</span>
-                <span className="text-gray-300 font-mono">{zScore.toFixed(2)}</span>
+                <span>Z-Score:</span>
+                <span className="text-gray-200 font-mono font-bold">{zScore.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Velocity:</span>
-                <span className="text-gray-300 font-mono">{velocity.toExponential(2)}</span>
+                <span>Velocity:</span>
+                <span className="text-gray-200 font-mono font-bold">{velocity.toExponential(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">ADX:</span>
-                <span className="text-gray-300 font-mono">{adx.toFixed(2)} ({market.adx_regime || 'N/A'})</span>
+                <span>ADX Power:</span>
+                <span className="text-gray-200 font-mono font-bold">{adx.toFixed(2)} ({market.adx_regime || 'N/A'})</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-500">Manipulated:</span>
-                <span className="text-gray-300 font-mono">{context.manipulation?.detected ? 'YES' : 'NO'}</span>
+                <span>Manipulated:</span>
+                <span className="text-gray-200 font-mono font-bold">{context.manipulation?.detected ? 'YES' : 'NO'}</span>
               </div>
-              <div className="flex justify-between col-span-2 mt-2 pt-2 border-t border-white/5">
-                <span className="text-gray-500">Session ID:</span>
-                <span className="text-gray-500 font-mono text-[10px] truncate max-w-[200px]">{trade.session_id}</span>
+              <div className="flex justify-between col-span-2 mt-2 pt-3 border-t border-white/5 text-[9px] tracking-widest text-gray-600">
+                <span>Session Ident:</span>
+                <span className="font-mono text-gray-500 truncate max-w-[280px]">{trade.session_id}</span>
               </div>
             </div>
           </div>
 
           {/* AI Analysis Block */}
-          <div className="rounded-xl border border-[#f5df19]/20 bg-[#11181c] overflow-hidden">
-            <div className="flex items-center justify-between border-b border-[#f5df19]/10 bg-[#1a1717] px-4 py-3">
-              <div className="flex items-center gap-2">
-                <div className="text-[#f5df19]">
+          <div className="rounded-xl border border-[#ffb800]/20 bg-[#ffb800]/5 overflow-hidden">
+            <div className="flex items-center justify-between border-b border-[#ffb800]/10 bg-[#25282f]/30 px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="text-[#f5df19] animate-pulse">
                    <AiChipIcon size={16} />
                 </div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-[#e3e6e7]">AI Analysis</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">AI Analysis insights</h3>
               </div>
               <button
                 onClick={handleAIAnalysis}
                 disabled={aiLoading}
-                className="flex items-center gap-1.5 rounded-full border border-[#f5df19]/30 bg-[#f5df19]/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#f5df19] transition-colors hover:bg-[#f5df19]/20 disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg border border-[#ffb800]/30 bg-[#ffb800]/10 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-[#ffb800] transition hover:bg-[#ffb800]/20 disabled:opacity-40"
               >
-                {aiLoading ? <Loader2 size={12} className="animate-spin" /> : <Activity size={12} />}
-                {aiAnalysisText ? 'Re-Analyze' : 'Run Analysis'}
+                {aiLoading ? <Loader2 size={11} className="animate-spin" /> : <Activity size={11} />}
+                {aiAnalysisText ? 'Re-Analyze' : 'Analyze'}
               </button>
             </div>
             
             {aiAnalysisText && (
-              <div className="flex flex-col gap-2 p-4">
-                <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-gray-300">
+              <div className="flex flex-col gap-2 p-5 border-t border-[#ffb800]/10">
+                <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-gray-300 font-medium uppercase">
                   {aiAnalysisText}
                 </p>
-                <div className="flex justify-end mt-2">
+                <div className="flex justify-end mt-3 border-t border-white/5 pt-3">
                   <button 
                     onClick={handleVoicePlay} 
-                    className={`flex items-center gap-1 rounded bg-[#212127] px-2 py-1 text-[10px] font-bold text-gray-400 hover:text-white ${isSynthesizing ? 'text-[#f5df19]' : ''}`}
+                    className={`flex items-center gap-2 rounded-lg bg-[#25282f] border border-white/5 px-3 py-2 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-white transition ${
+                      isSynthesizing ? 'text-[#ffb800] border-[#ffb800]/30' : ''
+                    }`}
                   >
-                    <Play size={10} className={isSynthesizing ? 'text-[#f5df19]' : ''} />
+                    <Play size={10} className={isSynthesizing ? 'text-[#ffb800] animate-pulse' : ''} />
                     {isSynthesizing ? 'PLAYING...' : 'PLAY AUDIO'}
                   </button>
                 </div>

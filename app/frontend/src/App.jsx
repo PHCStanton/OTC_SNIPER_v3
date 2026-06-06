@@ -31,6 +31,12 @@ export default function App() {
   const autoGhostMaxDrawdownAmount = useSettingsStore((s) => s.autoGhostMaxDrawdownAmount);
   const autoGhostDrawdownCooldownSeconds = useSettingsStore((s) => s.autoGhostDrawdownCooldownSeconds);
   const autoGhostMinimumPayout = useSettingsStore((s) => s.autoGhostMinimumPayout);
+  const ghostMaxTradesPerTimeframe = useSettingsStore((s) => s.ghostMaxTradesPerTimeframe);
+  const ghostTimeframeSeconds = useSettingsStore((s) => s.ghostTimeframeSeconds);
+  const ghostMinConfidence = useSettingsStore((s) => s.ghostMinConfidence);
+  const ghostMinConfidenceEnabled = useSettingsStore((s) => s.ghostMinConfidenceEnabled);
+  const ghostMaxConfidence = useSettingsStore((s) => s.ghostMaxConfidence);
+  const ghostMaxConfidenceEnabled = useSettingsStore((s) => s.ghostMaxConfidenceEnabled);
 
   useStreamConnection();
 
@@ -217,6 +223,12 @@ export default function App() {
           auto_ghost_max_drawdown_amount: autoGhostMaxDrawdownAmount,
           auto_ghost_drawdown_cooldown_seconds: autoGhostDrawdownCooldownSeconds,
           auto_ghost_minimum_payout: autoGhostMinimumPayout / 100,
+          auto_ghost_max_trades_per_timeframe: ghostMaxTradesPerTimeframe,
+          auto_ghost_timeframe_seconds: ghostTimeframeSeconds,
+          auto_ghost_min_confidence: ghostMinConfidenceEnabled ? ghostMinConfidence : null,
+          auto_ghost_min_confidence_enabled: ghostMinConfidenceEnabled,
+          auto_ghost_max_confidence: ghostMaxConfidenceEnabled ? ghostMaxConfidence : null,
+          auto_ghost_max_confidence_enabled: ghostMaxConfidenceEnabled,
         });
       } catch (err) {
         if (isMounted) {
@@ -245,6 +257,12 @@ export default function App() {
     autoGhostMaxDrawdownAmount,
     autoGhostDrawdownCooldownSeconds,
     autoGhostMinimumPayout,
+    ghostMaxTradesPerTimeframe,
+    ghostTimeframeSeconds,
+    ghostMinConfidence,
+    ghostMinConfidenceEnabled,
+    ghostMaxConfidence,
+    ghostMaxConfidenceEnabled,
   ]);
 
   return (

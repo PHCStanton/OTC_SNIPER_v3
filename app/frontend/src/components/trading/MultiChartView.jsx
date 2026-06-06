@@ -1,6 +1,7 @@
 /**
  * MultiChartView — compact asset grid for watching multiple OTC charts.
  * Enhanced with modular components: Gauges, Stats, Regime, and Manipulation Pulse.
+ * Redesigned to follow the Stitch Design Reference.
  */
 import React from 'react';
 import { Plus, X, Layers3, Star, AlertTriangle } from 'lucide-react';
@@ -92,10 +93,10 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
       onDoubleClick={handleDoubleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`group relative rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden p-3 min-h-[160px] flex flex-col justify-between
+      className={`group relative rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden p-4 min-h-[160px] flex flex-col justify-between
         ${isSelected 
-          ? 'border-[#f5df19]/50 bg-[#282d2e] shadow-[0_0_15px_rgba(245,223,25,0.1)]' 
-          : 'border-white/5 bg-[#212127] hover:border-[#f5df19]/40 hover:bg-[#282d2e]'
+          ? 'border-[#ffb800]/40 bg-[#25282f]/50 shadow-[0_0_15px_rgba(255,184,0,0.06)]' 
+          : 'border-white/5 bg-[#25282f]/20 hover:border-[#ffb800]/25 hover:bg-[#25282f]/30'
         }`}
     >
       {/* Manipulation Pulse Overlay */}
@@ -112,32 +113,32 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
 
       {/* TOP ROW */}
       <div className="flex items-start justify-between gap-2 relative z-10">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button 
             type="button"
             onClick={(e) => { e.stopPropagation(); toggleStar(asset); }}
-            className={`transition-colors ${isStarred ? 'text-[#f5df19]' : 'text-gray-600 hover:text-gray-400'}`}
+            className={`transition-colors ${isStarred ? 'text-[#ffb800]' : 'text-gray-600 hover:text-gray-400'}`}
             aria-label={isStarred ? `Unstar ${asset}` : `Star ${asset}`}
           >
-            <Star size={14} fill={isStarred ? "currentColor" : "none"} />
+            <Star size={12} className={isStarred ? "fill-current" : ""} />
           </button>
-          <h4 className={`text-sm font-black uppercase tracking-wider transition-colors ${isSelected ? 'text-[#f5df19]' : 'text-[#e3e6e7]'}`}>
+          <h4 className={`text-xs font-black uppercase tracking-wider transition-colors ${isSelected ? 'text-[#ffb800]' : 'text-white'}`}>
             {formatAssetLabel(asset)}
           </h4>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex flex-col items-end">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.2em] text-gray-500 leading-none mb-1">Payout</span>
-            <span className="text-xs font-bold text-emerald-400 leading-none">{Math.round(payout * 100)}%</span>
+            <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none mb-1">Payout</span>
+            <span className="text-[10px] font-black text-emerald-400 leading-none">{Math.round(payout * 100)}%</span>
           </div>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onRemove(asset); }}
-            className="rounded-full p-1 text-gray-500 transition hover:bg-white/5 hover:text-[#e3e6e7]"
+            className="rounded p-1 text-gray-600 transition hover:bg-white/5 hover:text-white"
             aria-label={`Remove ${asset}`}
           >
-            <X size={14} />
+            <X size={12} />
           </button>
         </div>
       </div>
@@ -147,7 +148,7 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
         {shouldRenderGauge && (
           <div className="relative flex items-center justify-center w-full max-w-[200px]">
             {/* BUY Text */}
-            <div className={`absolute left-0 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-colors ${direction === 'call' ? 'text-emerald-500' : 'text-gray-600/50'}`}>
+            <div className={`absolute left-0 text-[10px] font-black uppercase tracking-widest transition-colors ${direction === 'call' ? 'text-emerald-500' : 'text-gray-600/50'}`}>
               BUY
             </div>
 
@@ -163,19 +164,19 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
                   />
                </svg>
                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-sm font-black text-[#e3e6e7]">{Math.round(confidence)}%</span>
+                  <span className="text-xs font-black text-white">{Math.round(confidence)}%</span>
                </div>
                
                {/* NTRL below */}
                <div className="absolute -bottom-3 left-0 right-0 flex justify-center">
-                 <span className={`text-[9px] font-black uppercase tracking-widest transition-colors ${!direction ? 'text-blue-400' : 'text-gray-600/50'}`}>
+                 <span className={`text-[8px] font-black uppercase tracking-widest transition-colors ${!direction ? 'text-blue-400' : 'text-gray-600/50'}`}>
                    NTRL
                  </span>
                </div>
             </div>
 
             {/* SELL Text */}
-            <div className={`absolute right-0 text-[10px] sm:text-xs font-black uppercase tracking-widest transition-colors ${direction === 'put' ? 'text-[#fe7453]' : 'text-gray-600/50'}`}>
+            <div className={`absolute right-0 text-[10px] font-black uppercase tracking-widest transition-colors ${direction === 'put' ? 'text-[#fe7453]' : 'text-gray-600/50'}`}>
               SELL
             </div>
           </div>
@@ -183,14 +184,14 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
       </div>
 
       {/* BOTTOM ROW */}
-      <div className="flex items-end justify-between relative z-10 mt-2">
+      <div className="flex items-end justify-between relative z-10 mt-2 border-t border-white/5 pt-2">
         {/* Bottom Left: Price & Trend */}
-        <div className="flex flex-col items-start gap-1.5 w-1/3">
+        <div className="flex flex-col items-start gap-1 w-1/3">
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-500 leading-none mb-1">Price</p>
-            <p className="text-[13px] font-black text-[#e3e6e7] leading-none">{formatPrice(latest)}</p>
+            <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none mb-1">Price</p>
+            <p className="text-[11px] font-bold text-white font-mono leading-none">{formatPrice(latest)}</p>
           </div>
-          <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wider ${positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[#fe7453]/10 text-[#fe7453]'}`}>
+          <span className={`rounded px-1.5 py-0.5 text-[8px] font-black tracking-widest ${positive ? 'bg-emerald-500/10 text-emerald-400' : 'bg-[#fe7453]/10 text-[#fe7453]'}`}>
             {positive ? '+' : ''}{trend.toFixed(2)}%
           </span>
         </div>
@@ -198,36 +199,36 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
         {/* Bottom Center: W/L Stats + Manipulation */}
         <div className="flex flex-col items-center justify-end w-1/3 pb-1 gap-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-gray-500 leading-none">W</span>
-            <span className="text-[13px] font-black text-emerald-400 leading-none">
+            <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none">W</span>
+            <span className="text-[11px] font-bold text-emerald-400 leading-none">
               {assetStats?.w ?? 0}
             </span>
             <span className="text-[10px] text-gray-600 leading-none">/</span>
-            <span className="text-[13px] font-black text-[#fe7453] leading-none">
+            <span className="text-[11px] font-bold text-[#fe7453] leading-none">
               {assetStats?.l ?? 0}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-gray-500 leading-none">L</span>
+            <span className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none">L</span>
           </div>
           {config.showManipulation && isManipulated && (
-            <AlertTriangle size={14} className="text-rose-500 animate-pulse" />
+            <AlertTriangle size={12} className="text-rose-500 animate-pulse" />
           )}
         </div>
 
         {/* Bottom Right: Regime & Ticker */}
-        <div className="flex flex-col items-end gap-2 w-1/3">
+        <div className="flex flex-col items-end gap-2.5 w-1/3">
           {config.showRegime && (
             <div className="text-right">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-500 leading-none mb-1">Regime</p>
-              <p className="text-[10px] font-bold text-gray-300 uppercase tracking-tighter leading-none">
+              <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none mb-1">Regime</p>
+              <p className="text-[9px] font-black text-gray-300 uppercase tracking-tighter leading-none truncate max-w-[80px]">
                 {regime ? String(regime).replaceAll('_', ' ') : 'UNAVAIL'}
               </p>
             </div>
           )}
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400">
+          <div className="flex items-center gap-1.5 text-[9px] font-black text-gray-500 uppercase tracking-wider">
             {isWarmup ? (
-              <span className="text-[#ffb800] uppercase tracking-wider text-[9px] font-bold mr-1">Warmup</span>
+              <span className="text-[#ffb800] uppercase tracking-widest text-[8px] font-black mr-1 animate-pulse">Warmup</span>
             ) : null}
-            <Layers3 size={11} />
+            <Layers3 size={10} />
             <span>{series.length}</span>
           </div>
         </div>
@@ -245,25 +246,25 @@ export default function MultiChartView() {
   const canAddSelected = !multiChartAssets.includes(selectedAsset) && multiChartAssets.length < 9;
 
   return (
-    <section className="flex h-full flex-col rounded-xl border border-white/5 bg-[#1a1717] p-4 shadow-2xl shadow-black/30 backdrop-blur">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3 shrink-0">
+    <section className="flex h-full flex-col rounded-[20px] bg-[#1a1c22] p-6 shadow-xl border border-white/5">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-4 shrink-0">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-500">Watchlist</p>
-          <h3 className="text-lg font-black tracking-tight text-[#e3e6e7]">Multi-chart view</h3>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">Asset Watchlist</p>
+          <h3 className="mt-1 text-md font-black uppercase tracking-wider text-white">Multi-Chart Panel</h3>
         </div>
 
         <button
           type="button"
           disabled={!canAddSelected}
           onClick={() => addMultiChartAsset(selectedAsset)}
-          className="flex items-center gap-2 rounded-full border border-white/5 bg-[#212127] px-3 py-1.5 text-xs font-semibold text-[#e3e6e7] transition hover:bg-[#282d2e] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#25282f] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400 transition hover:bg-[#2d3139] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Plus size={12} />
-          Add selected
+          Add Selected
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3 flex-1 custom-scrollbar">
+      <div className="mt-4 grid gap-4 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3 flex-1 custom-scrollbar">
         {multiChartAssets.map((asset) => (
           <MultiChartCard
             key={asset}
@@ -273,10 +274,10 @@ export default function MultiChartView() {
           />
         ))}
         {multiChartAssets.length === 0 && (
-          <div className="col-span-full flex flex-col items-center justify-center py-12 text-center opacity-20">
-            <Layers3 size={48} className="mb-4" />
-            <p className="text-sm font-bold uppercase tracking-widest">No assets in watchlist</p>
-            <p className="text-xs mt-1">Add assets to monitor multiple charts at once.</p>
+          <div className="col-span-full flex flex-col items-center justify-center py-12 text-center opacity-30">
+            <Layers3 size={32} className="mb-3 text-gray-500" />
+            <p className="text-[10px] font-black uppercase tracking-widest text-white">Watchlist Empty</p>
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mt-1">Add assets above to monitor live charts.</p>
           </div>
         )}
       </div>

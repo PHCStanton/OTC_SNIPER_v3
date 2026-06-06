@@ -9,33 +9,35 @@ export default function StreakAnalytics({ autoGhostMetrics }) {
   const currentType = autoGhostMetrics?.auto_ghost_current_streak_type || null;
 
   return (
-    <div className="bg-[#141818] border border-white/5 rounded-xl p-5">
-      <h3 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2 uppercase tracking-wider">
-        <TrendingUp size={16} className="text-[#f5df19]" />
+    <div className="bg-[#1a1c22] border border-white/5 rounded-xl p-5 transition hover:border-white/10">
+      <h3 className="text-[10px] font-black text-gray-500 mb-4 flex items-center gap-2 uppercase tracking-widest">
+        <TrendingUp size={16} className="text-[#ffb800]" />
         Streak Distribution
       </h3>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-center">
-            <p className="text-[10px] text-emerald-500/70 font-bold uppercase tracking-wider">Max Win Streak</p>
-            <p className="text-2xl font-black text-emerald-400 mt-1">{maxWinStreak}</p>
+          <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-lg p-4 text-center">
+            <p className="text-[9px] text-emerald-500 font-black uppercase tracking-widest">Max Win Streak</p>
+            <p className="text-2xl font-black text-emerald-400 mt-2">{maxWinStreak}</p>
           </div>
-          <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 text-center">
-            <p className="text-[10px] text-rose-500/70 font-bold uppercase tracking-wider">Max Loss Streak</p>
-            <p className="text-2xl font-black text-rose-400 mt-1">{maxLossStreak}</p>
+          <div className="bg-rose-500/10 border border-rose-500/25 rounded-lg p-4 text-center">
+            <p className="text-[9px] text-rose-500 font-black uppercase tracking-widest">Max Loss Streak</p>
+            <p className="text-2xl font-black text-rose-400 mt-2">{maxLossStreak}</p>
           </div>
         </div>
         
-        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Current Active Streak</span>
+        <div className="flex items-center justify-between p-4 bg-[#25282f]/30 rounded-lg border border-white/5">
+          <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Current Active Streak</span>
           {currentType ? (
-            <span className={`text-sm font-black px-2 py-0.5 rounded-full ${
-              currentType === 'win' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+            <span className={`text-[9px] font-black px-2.5 py-1 rounded border ${
+              currentType === 'win' 
+                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' 
+                : 'border-rose-500/20 bg-rose-500/10 text-rose-400'
             }`}>
               {currentStreak} {currentType.toUpperCase()}
             </span>
           ) : (
-            <span className="text-xs font-bold text-gray-600">NONE</span>
+            <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">NONE</span>
           )}
         </div>
       </div>

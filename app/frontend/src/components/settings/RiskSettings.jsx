@@ -1,82 +1,28 @@
 /**
  * RiskSettings — capital, payout, sizing, drawdown, and trade-run controls.
+ * Redesigned to follow the Stitch Design Reference.
  */
 import { useMemo } from 'react';
-import { Calculator, CircleDollarSign, Layers3, Target, Trophy, Wallet } from 'lucide-react';
+import { 
+  Calculator, CircleDollarSign, Layers3, Target, Trophy, Wallet,
+  Activity, RefreshCcw
+} from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { computeRiskMetrics } from '../../utils/riskMath.js';
-
-function SectionCard({ title, subtitle, icon: Icon, children }) {
-  return (
-    <section className="rounded-3xl border border-white/5 bg-[#151a22]/95 p-5 shadow-[0_15px_40px_rgba(0,0,0,0.28)]">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold tracking-tight text-[#e3e6e7]">{title}</h3>
-          <p className="mt-1 text-xs text-gray-500">{subtitle}</p>
-        </div>
-        {Icon && (
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#0f1419] text-[#f5df19]">
-            <Icon size={18} />
-          </div>
-        )}
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
-  );
-}
-
-function ToggleRow({ label, description, checked, onChange }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between gap-4 rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-left transition-colors hover:bg-white/5"
-    >
-      <div>
-        <p className="text-sm font-bold text-[#e3e6e7]">{label}</p>
-        <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
-      </div>
-      <span className={`relative inline-flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${checked ? 'bg-[#f5df19]' : 'bg-white/10'}`}>
-        <span className={`h-5 w-5 rounded-full bg-white transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`} />
-      </span>
-    </button>
-  );
-}
-
-function NumberField({ label, description, value, onChange, min, step = 1, suffix }) {
-  return (
-    <label className="block rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold text-[#e3e6e7]">{label}</p>
-          <p className="mt-1 text-xs leading-5 text-gray-500">{description}</p>
-        </div>
-        {suffix && <span className="rounded-full border border-white/5 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-400">{suffix}</span>}
-      </div>
-      <input
-        type="number"
-        min={min}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-3 w-full rounded-xl border border-white/10 bg-white px-4 py-3 text-sm font-bold text-black outline-none transition focus:border-[#f5df19] focus:bg-white"
-      />
-    </label>
-  );
-}
+import { SectionCard, InputGroup, NumberInput, StitchToggle } from '../shared/StitchComponents.jsx';
 
 function MetricTile({ label, value, note, icon: Icon }) {
   return (
-    <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
+    <div className="rounded-xl border border-white/5 bg-[#25282f]/30 p-5 transition hover:border-white/10">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">{label}</p>
-          <p className="mt-1 text-xl font-black tracking-tight text-[#e3e6e7]">{value}</p>
-          <p className="mt-1 text-xs text-gray-500">{note}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">{label}</p>
+          <p className="mt-2 text-xl font-black text-white">{value}</p>
+          <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-600 leading-normal">{note}</p>
         </div>
         {Icon && (
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#151a22] text-[#f5df19]">
-            <Icon size={16} />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#25282f] text-[#ffb800]">
+            <Icon size={18} />
           </div>
         )}
       </div>
@@ -126,129 +72,184 @@ export default function RiskSettings() {
   ]);
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <SectionCard title="Session capital" subtitle="Configure the balance and trade-sizing assumptions for the current session." icon={Wallet}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <NumberField
-            label="Initial balance"
-            description="Starting session balance used by risk math and drawdown calculations."
-            value={initialBalance}
-            onChange={setInitialBalance}
-            min={0}
-            step={0.01}
-            suffix="balance"
-          />
-          <NumberField
-            label="Payout percentage"
-            description="Expected payout percentage for the selected broker / asset class."
-            value={payoutPercentage}
-            onChange={setPayoutPercentage}
-            min={0}
-            step={0.1}
-            suffix="payout"
-          />
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <NumberField
-            label="Risk % per trade"
-            description="Percentage of the starting balance risked on each trade when fixed amount is off."
-            value={riskPercentPerTrade}
-            onChange={setRiskPercentPerTrade}
-            min={0}
-            step={0.1}
-            suffix="risk"
-          />
-          <NumberField
-            label="Drawdown %"
-            description="Maximum tolerated drawdown before the session is considered at limit."
-            value={drawdownPercent}
-            onChange={setDrawdownPercent}
-            min={0}
-            step={0.1}
-            suffix="dd"
-          />
-        </div>
-      </SectionCard>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <div className="space-y-6">
+        <SectionCard 
+          title="Session Capital" 
+          subtitle="Configure base values and trade sizing parameters." 
+          icon={Wallet}
+        >
+          <div className="grid gap-6 md:grid-cols-2">
+            <InputGroup 
+              label="Initial Balance" 
+              description="Base funding for drawdown calculations."
+            >
+              <NumberInput
+                value={initialBalance}
+                onChange={setInitialBalance}
+                min={0}
+                suffix="USD"
+                icon={Wallet}
+              />
+            </InputGroup>
 
-      <SectionCard title="Sizing mode" subtitle="Choose between percentage sizing and a fixed risk amount per trade." icon={CircleDollarSign}>
-        <ToggleRow
-          label="Use fixed amount"
-          description="Override percentage sizing and use the fixed dollar amount below."
-          checked={useFixedAmount}
-          onChange={setUseFixedAmount}
-        />
-        <NumberField
-          label="Fixed risk amount"
-          description="Amount risked per trade when fixed amount mode is enabled."
-          value={fixedRiskAmount}
-          onChange={setFixedRiskAmount}
-          min={0}
-          step={0.1}
-          suffix="risk"
-        />
-        <div className="grid gap-3 md:grid-cols-2">
-          <NumberField
-            label="Risk:reward ratio"
-            description="Take-profit distance relative to drawdown distance."
-            value={riskRewardRatio}
-            onChange={setRiskRewardRatio}
-            min={0}
-            step={0.1}
-            suffix="ratio"
-          />
-          <NumberField
-            label="Trades per run"
-            description="How many trades make up a single focused Trade Run."
-            value={tradesPerRun}
-            onChange={setTradesPerRun}
-            min={1}
-            step={1}
-            suffix="run"
-          />
-        </div>
-        <NumberField
-          label="Max runs per session"
-          description="Hard limit on the number of Trade Runs in one session."
-          value={maxRuns}
-          onChange={setMaxRuns}
-          min={1}
-          step={1}
-          suffix="runs"
-        />
-      </SectionCard>
+            <InputGroup 
+              label="Payout Percentage" 
+              description="Expected payout rate for the asset class."
+            >
+              <NumberInput
+                value={payoutPercentage}
+                onChange={setPayoutPercentage}
+                min={0}
+                suffix="%"
+                icon={Activity}
+              />
+            </InputGroup>
+          </div>
 
-      <SectionCard title="Risk preview" subtitle="Derived values update immediately as you edit the settings." icon={Calculator}>
-        <div className="grid gap-3 md:grid-cols-2">
-          <MetricTile
-            label="Risk / trade"
-            value={`$${metrics.riskPerTrade.toFixed(2)}`}
-            note={useFixedAmount ? 'Using fixed amount mode.' : `Based on ${Number(riskPercentPerTrade).toFixed(2)}% of start balance.`}
-            icon={Trophy}
-          />
-          <MetricTile
-            label="Drawdown cap"
-            value={`$${metrics.maxDrawdownLimit.toFixed(2)}`}
-            note={`Hard stop at ${Number(drawdownPercent).toFixed(2)}% drawdown.`}
-            icon={Layers3}
-          />
-          <MetricTile
-            label="Take-profit target"
-            value={`$${metrics.takeProfitTarget.toFixed(2)}`}
-            note={`Computed from risk:reward ratio ${Number(riskRewardRatio).toFixed(2)}.`}
-            icon={Target}
-          />
-          <MetricTile
-            label="Min win rate"
-            value={`${metrics.minimumWinRate.toFixed(1)}%`}
-            note="Reference benchmark derived from broker payout."
-            icon={Wallet}
-          />
-        </div>
+          <div className="grid gap-6 md:grid-cols-2">
+            <InputGroup 
+              label="Risk % Per Trade" 
+              description="Proportional stake sizing per entry."
+            >
+              <NumberInput
+                value={riskPercentPerTrade}
+                onChange={setRiskPercentPerTrade}
+                min={0}
+                suffix="%"
+                icon={Target}
+              />
+            </InputGroup>
 
-        <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 text-xs leading-6 text-gray-400">
-          The risk manager reads these settings directly. Inputs are sanitized before persistence so the session math never receives invalid ranges.
-        </div>
-      </SectionCard>
+            <InputGroup 
+              label="Drawdown Max" 
+              description="Tolerated loss percentage before session halt."
+            >
+              <NumberInput
+                value={drawdownPercent}
+                onChange={setDrawdownPercent}
+                min={0}
+                suffix="%"
+                icon={RefreshCcw}
+              />
+            </InputGroup>
+          </div>
+        </SectionCard>
+
+        <SectionCard 
+          title="Execution Sizing & Bounds" 
+          subtitle="Choose sizing mode and configure trade cycle targets." 
+          icon={CircleDollarSign}
+        >
+          <div className="rounded-xl border border-white/5 bg-[#25282f]/20 p-5">
+            <InputGroup 
+              label="Fixed Sizing Mode" 
+              description="Override relative percentage sizing with a constant dollar stake."
+              layout="horizontal"
+            >
+              <StitchToggle
+                checked={useFixedAmount}
+                onChange={setUseFixedAmount}
+              />
+            </InputGroup>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <InputGroup 
+              label="Fixed Risk Amount" 
+              description="Stake size applied when fixed mode is active."
+            >
+              <NumberInput
+                value={fixedRiskAmount}
+                onChange={setFixedRiskAmount}
+                min={0}
+                suffix="USD"
+                icon={Wallet}
+              />
+            </InputGroup>
+
+            <InputGroup 
+              label="Risk Reward Ratio" 
+              description="Take profit margin relative to risk distance."
+            >
+              <NumberInput
+                value={riskRewardRatio}
+                onChange={setRiskRewardRatio}
+                min={0}
+                suffix="Ratio"
+                icon={Target}
+              />
+            </InputGroup>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            <InputGroup 
+              label="Trades Per Run" 
+              description="Entries comprising a single trade lifecycle."
+            >
+              <NumberInput
+                value={tradesPerRun}
+                onChange={setTradesPerRun}
+                min={1}
+                suffix="Trades"
+                icon={Activity}
+              />
+            </InputGroup>
+
+            <InputGroup 
+              label="Max Runs Per Session" 
+              description="Upper session limit on consecutive lifecycles."
+            >
+              <NumberInput
+                value={maxRuns}
+                onChange={setMaxRuns}
+                min={1}
+                suffix="Runs"
+                icon={RefreshCcw}
+              />
+            </InputGroup>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="space-y-6">
+        <SectionCard 
+          title="Risk Telemetry Preview" 
+          subtitle="Dynamic computations based on current sizing coefficients." 
+          icon={Calculator}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <MetricTile
+              label="Risk per Trade"
+              value={`$${metrics.riskPerTrade.toFixed(2)}`}
+              note={useFixedAmount ? 'Using absolute fixed staking.' : `Proportional sizing @ ${Number(riskPercentPerTrade).toFixed(2)}% of balance.`}
+              icon={Trophy}
+            />
+            <MetricTile
+              label="Drawdown Threshold"
+              value={`$${metrics.maxDrawdownLimit.toFixed(2)}`}
+              note={`Termination boundary at ${Number(drawdownPercent).toFixed(2)}% drawdown.`}
+              icon={Layers3}
+            />
+            <MetricTile
+              label="Target Take Profit"
+              value={`$${metrics.takeProfitTarget.toFixed(2)}`}
+              note={`Calculated profit trigger based on ${Number(riskRewardRatio).toFixed(2)} ratio.`}
+              icon={Target}
+            />
+            <MetricTile
+              label="Stat Minimum Win Rate"
+              value={`${metrics.minimumWinRate.toFixed(1)}%`}
+              note="Calculated baseline break-even rate based on broker payout."
+              icon={Wallet}
+            />
+          </div>
+
+          <div className="rounded-xl border border-white/5 bg-[#25282f]/20 p-5 text-xs font-medium uppercase tracking-normal leading-relaxed text-gray-500">
+            The mathematical engine synchronizes values in real-time. Input boundaries are evaluated automatically prior to store persistence.
+          </div>
+        </SectionCard>
+      </div>
     </div>
   );
 }

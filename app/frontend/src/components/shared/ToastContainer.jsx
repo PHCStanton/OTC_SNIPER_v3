@@ -1,7 +1,6 @@
 /**
  * ToastContainer — renders the global toast notification queue.
- * Positioned bottom-right, stacks upward.
- * Driven by useToastStore.
+ * Positioned bottom-right, stacks upward. Redesigned for Stitch.
  */
 import { useEffect, useState, useRef } from 'react';
 import { CheckCircle2, XCircle, AlertTriangle, Info, X } from 'lucide-react';
@@ -9,22 +8,22 @@ import { useToastStore } from '../../stores/useToastStore.js';
 
 const TOAST_STYLES = {
   success: {
-    container: 'border-emerald-500/30 bg-[#0d2318] text-emerald-300',
+    container: 'border-emerald-500/25 bg-[#0d2318] text-emerald-400',
     icon: CheckCircle2,
     iconClass: 'text-emerald-400',
   },
   error: {
-    container: 'border-red-500/30 bg-[#2a0d0d] text-red-300',
+    container: 'border-red-500/25 bg-[#2a0d0d] text-red-400',
     icon: XCircle,
     iconClass: 'text-red-400',
   },
   warning: {
-    container: 'border-[#f5df19]/30 bg-[#1f1a00] text-[#f5df19]',
+    container: 'border-[#ffb800]/25 bg-[#ffb800]/5 text-[#ffb800]',
     icon: AlertTriangle,
-    iconClass: 'text-[#f5df19]',
+    iconClass: 'text-[#ffb800]',
   },
   info: {
-    container: 'border-sky-500/30 bg-[#0d1a2a] text-sky-300',
+    container: 'border-sky-500/25 bg-[#0d1a2a] text-sky-400',
     icon: Info,
     iconClass: 'text-sky-400',
   },
@@ -70,10 +69,14 @@ function ToastItem({ toast, onRemove }) {
       onDoubleClick={() => {
         if (toast.onDoubleClick) toast.onDoubleClick();
       }}
-      className={`pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-2xl shadow-black/40 backdrop-blur-sm min-w-[260px] max-w-[380px] animate-in slide-in-from-right-4 fade-in duration-200 transition-all ${toast.onDoubleClick ? 'cursor-pointer hover:border-[#f5df19]/50 hover:shadow-[#f5df19]/10' : ''} ${style.container} ${isHovered ? 'scale-[1.02] border-opacity-60' : ''}`}
+      className={`pointer-events-auto flex items-start gap-3 rounded-lg border px-4.5 py-3.5 shadow-2xl shadow-black/50 backdrop-blur-md min-w-[260px] max-w-[380px] animate-in slide-in-from-right-4 fade-in duration-200 transition-all ${
+        toast.onDoubleClick 
+          ? 'cursor-pointer hover:border-[#ffb800]/50 hover:shadow-[#ffb800]/5' 
+          : ''
+      } ${style.container} ${isHovered ? 'scale-[1.02] border-opacity-60' : ''}`}
     >
-      <Icon size={16} className={`mt-0.5 shrink-0 ${style.iconClass}`} />
-      <p className="flex-1 text-sm font-medium leading-snug">{toast.message}</p>
+      <Icon size={14} className={`mt-0.5 shrink-0 ${style.iconClass}`} />
+      <p className="flex-1 text-[10px] font-black uppercase tracking-wider leading-relaxed">{toast.message}</p>
       <button
         type="button"
         onClick={() => onRemove(toast.id)}
@@ -95,7 +98,7 @@ export default function ToastContainer() {
     <div
       aria-live="polite"
       aria-label="Notifications"
-      className="fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-2 pointer-events-none"
+      className="fixed bottom-6 right-6 z-[9999] flex flex-col-reverse gap-2.5 pointer-events-none"
     >
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />

@@ -1,60 +1,58 @@
 /**
  * AccountSettings — session identity, saved SSIDs, and Auth0-ready boundary.
+ * Redesigned to follow the Stitch Design Reference.
  */
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCcw, Shield, Trash2, UserRound, Wifi, WifiOff } from 'lucide-react';
+import { 
+  AlertTriangle, CheckCircle2, Loader2, RefreshCcw, 
+  Shield, Trash2, UserRound, Wifi, WifiOff 
+} from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { sessionClearSsid, sessionSsidStatus } from '../../api/opsApi.js';
-
-function PanelCard({ title, subtitle, children, className = '' }) {
-  return (
-    <section className={`rounded-3xl border border-white/5 bg-[#151a22]/95 p-5 shadow-[0_15px_40px_rgba(0,0,0,0.28)] ${className}`}>
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-base font-bold tracking-tight text-[#e3e6e7]">{title}</h3>
-          {subtitle && <p className="mt-1 text-xs text-gray-500">{subtitle}</p>}
-        </div>
-        {children && <div className="shrink-0" />}
-      </div>
-      {children}
-    </section>
-  );
-}
+import { SectionCard } from '../shared/StitchComponents.jsx';
 
 function StatusBadge({ tone = 'neutral', children }) {
   const tones = {
-    neutral: 'border-white/5 bg-white/5 text-gray-400',
-    emerald: 'border-emerald-400/20 bg-emerald-400/10 text-emerald-400',
-    amber: 'border-[#f5df19]/20 bg-[#f5df19]/10 text-[#f5df19]',
-    rose: 'border-red-400/20 bg-red-400/10 text-red-400',
+    neutral: 'border-white/5 bg-white/[0.02] text-gray-500',
+    emerald: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
+    amber: 'border-[#ffb800]/20 bg-[#ffb800]/10 text-[#ffb800]',
+    rose: 'border-red-500/20 bg-red-500/10 text-red-400',
   };
 
-  return <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${tones[tone]}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${tones[tone]}`}>
+      {children}
+    </span>
+  );
 }
 
 function SSIDRow({ label, saved, demo, busy, onClear }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4 md:flex-row md:items-center md:justify-between">
-      <div className="flex items-start gap-3">
-        <div className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl ${saved ? 'bg-emerald-400/10 text-emerald-400' : 'bg-white/5 text-gray-500'}`}>
-          {saved ? <CheckCircle2 size={16} /> : <WifiOff size={16} />}
+    <div className="flex flex-col gap-4 rounded-xl border border-white/5 bg-[#25282f]/30 px-5 py-5 md:flex-row md:items-center md:justify-between transition duration-300 hover:border-white/10">
+      <div className="flex items-start gap-4">
+        <div className={`mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${
+          saved ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-white/[0.02] text-gray-600'
+        }`}>
+          {saved ? <CheckCircle2 size={20} /> : <WifiOff size={20} />}
         </div>
         <div>
-          <p className="text-sm font-bold text-[#e3e6e7]">{label}</p>
-          <p className="mt-1 text-xs text-gray-500">{saved ? 'Saved in .env and available for auto-reconnect.' : 'No saved SSID found.'}</p>
+          <p className="text-sm font-black uppercase tracking-wider text-white">{label}</p>
+          <p className="mt-1 text-xs font-medium text-gray-500 uppercase leading-relaxed">
+            {saved ? 'SSID credentials active in .env and primed for auto-reconnect.' : 'No active session token detected.'}
+          </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-        <StatusBadge tone={saved ? 'emerald' : 'neutral'}>{saved ? 'Saved' : 'Empty'}</StatusBadge>
+      <div className="flex flex-wrap items-center gap-3 md:justify-end">
+        <StatusBadge tone={saved ? 'emerald' : 'neutral'}>{saved ? 'Primed' : 'Empty'}</StatusBadge>
         <button
           type="button"
           onClick={onClear}
           disabled={!saved || busy}
-          className="inline-flex items-center gap-1.5 rounded-full border border-red-400/20 bg-red-400/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-red-400 transition-colors hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-red-400 transition hover:bg-red-500/15 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30"
         >
           {busy ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
-          Clear saved SSID
+          Decommit SSID
         </button>
       </div>
     </div>
@@ -109,70 +107,93 @@ export default function AccountSettings() {
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <PanelCard title="Session identity" subtitle="This panel stays focused on broker/session state only.">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Broker</p>
-            <div className="mt-2 flex items-center gap-2">
-              <Shield size={16} className="text-[#f5df19]" />
-              <span className="text-sm font-bold text-[#e3e6e7]">Pocket Option</span>
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+      <SectionCard 
+        title="Session Identity" 
+        subtitle="Active broker configuration and session network state."
+        icon={UserRound}
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-white/5 bg-[#25282f]/30 px-5 py-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Target Broker</p>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ffb800]/10 text-[#ffb800]">
+                <Shield size={18} />
+              </div>
+              <span className="text-base font-black uppercase tracking-wider text-white">Pocket Option</span>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Connection</p>
-            <div className="mt-2 flex items-center gap-2">
-              {sessionConnected ? <Wifi size={16} className="text-emerald-400" /> : <WifiOff size={16} className="text-gray-500" />}
-              <span className="text-sm font-bold text-[#e3e6e7]">{sessionConnected ? 'Connected' : 'Disconnected'}</span>
+          <div className="rounded-xl border border-white/5 bg-[#25282f]/30 px-5 py-5">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Telemetry Status</p>
+            <div className="mt-3 flex items-center gap-3">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                sessionConnected ? 'bg-emerald-500/10 text-emerald-400' : 'bg-white/5 text-gray-500'
+              }`}>
+                {sessionConnected ? <Wifi size={18} /> : <WifiOff size={18} />}
+              </div>
+              <span className="text-base font-black uppercase tracking-wider text-white">
+                {sessionConnected ? 'Online' : 'Offline'}
+              </span>
             </div>
-            <p className="mt-2 text-xs text-gray-500">Chrome: {chromeRunning ? 'running' : 'stopped'} · Account: {accountType ? accountType.toUpperCase() : '—'}</p>
-            <p className="mt-1 text-xs text-gray-500">Balance: ${Number(balance || 0).toFixed(2)}</p>
+            <div className="mt-4 space-y-2 border-t border-white/5 pt-3 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+              <p>Container Engine: <span className={chromeRunning ? 'text-emerald-400' : 'text-gray-400'}>{chromeRunning ? 'Active' : 'Halted'}</span></p>
+              <p>Sizing Profile: <span className="text-white">{accountType ? accountType : 'UNRESOLVED'}</span></p>
+              <p>Margin Balance: <span className="text-[#ffb800]">${Number(balance || 0).toFixed(2)}</span></p>
+            </div>
           </div>
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <StatusBadge tone={chromeRunning ? 'emerald' : 'neutral'}>Chrome {chromeRunning ? 'running' : 'stopped'}</StatusBadge>
-          <StatusBadge tone={sessionConnected ? 'emerald' : 'neutral'}>Session {sessionConnected ? 'active' : 'idle'}</StatusBadge>
-          <StatusBadge tone={accountType === 'real' ? 'emerald' : accountType === 'demo' ? 'amber' : 'neutral'}>{accountType ? `${accountType} account` : 'no account'}</StatusBadge>
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+          <StatusBadge tone={chromeRunning ? 'emerald' : 'neutral'}>Engine {chromeRunning ? 'running' : 'stopped'}</StatusBadge>
+          <StatusBadge tone={sessionConnected ? 'emerald' : 'neutral'}>Socket {sessionConnected ? 'connected' : 'disconnected'}</StatusBadge>
+          <StatusBadge tone={accountType === 'real' ? 'emerald' : accountType === 'demo' ? 'amber' : 'neutral'}>
+            {accountType ? `${accountType} mode` : 'No active run'}
+          </StatusBadge>
         </div>
-      </PanelCard>
+      </SectionCard>
 
-      <PanelCard title="Auth0-ready boundary" subtitle="Future user profile state belongs in useUserStore, not useAuthStore.">
-        <div className="rounded-2xl border border-[#f5df19]/20 bg-[#f5df19]/10 px-4 py-4 text-sm text-[#e3e6e7]">
-          <div className="flex items-center gap-2 font-semibold text-[#f5df19]">
-            <UserRound size={16} />
-            Reserved profile surface
+      <SectionCard 
+        title="Identity Safeguard" 
+        subtitle="Isolated credential boundary reserved for secure sessions."
+        icon={Shield}
+      >
+        <div className="rounded-xl border border-[#ffb800]/25 bg-[#ffb800]/5 px-5 py-5 text-sm text-[#e3e6e7] shadow-[inset_0_0_15px_rgba(255,184,0,0.02)]">
+          <div className="flex items-center gap-3 font-black uppercase tracking-wider text-[#ffb800]">
+            <UserRound size={18} />
+            Secure Profile Boundary
           </div>
-          <p className="mt-2 text-xs leading-6 text-gray-300">
-            Session connect / disconnect stays in the auth store. A future Auth0 profile panel can live beside it without changing SSID session flows.
+          <p className="mt-3 text-xs font-medium uppercase tracking-normal leading-relaxed text-gray-400">
+            Session credentials are held securely in memory. A future Auth0 profile integration will operate adjacent to this container without exposing active SSID tokens.
           </p>
         </div>
 
-        <div className="mt-4 rounded-2xl border border-white/5 bg-[#0f1419] px-4 py-4">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray-500">Saved SSID inventory</p>
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <p className="text-xs text-gray-400">Refresh to re-read saved demo / real frames from .env.</p>
+        <div className="mt-4 rounded-xl border border-white/5 bg-[#25282f]/20 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">SSID Registry</p>
+              <p className="mt-1 text-xs font-medium text-gray-600 uppercase">Synchronize local environment descriptors.</p>
+            </div>
             <button
               type="button"
               onClick={() => void refreshSavedStatus()}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-300 transition-colors hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/5 bg-[#25282f] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-400 transition hover:bg-[#2d3139] hover:text-white"
             >
               {loadingStatus ? <Loader2 size={12} className="animate-spin" /> : <RefreshCcw size={12} />}
-              Refresh
+              Resync
             </button>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-4">
             {error && (
-              <div className="flex items-start gap-2 rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-red-300">
-                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-                <p className="text-xs leading-5">{error}</p>
+              <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-4 text-red-300">
+                <AlertTriangle size={18} className="shrink-0 text-red-400" />
+                <p className="text-xs font-semibold uppercase tracking-wider">{error}</p>
               </div>
             )}
 
             <SSIDRow
-              label="Demo SSID"
+              label="Demo Account SSID"
               saved={savedStatus.has_demo_ssid}
               demo
               busy={actionBusy}
@@ -180,7 +201,7 @@ export default function AccountSettings() {
             />
 
             <SSIDRow
-              label="Real SSID"
+              label="Real Account SSID"
               saved={savedStatus.has_real_ssid}
               demo={false}
               busy={actionBusy}
@@ -188,7 +209,7 @@ export default function AccountSettings() {
             />
           </div>
         </div>
-      </PanelCard>
+      </SectionCard>
     </div>
   );
 }

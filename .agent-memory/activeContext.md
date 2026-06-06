@@ -12,6 +12,16 @@
 
 ## Latest Changes
 
+### Applied on 2026-06-06 — UI Refactoring (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| UI-R0 | Sparkline Dot Visibility | `app/frontend/src/components/trading/chartUtils.js`, `app/frontend/src/components/trading/Sparkline.jsx` | Added a custom `paddingRight` parameter to `buildChartPoints` (set to 180 in Sparkline) to shift the right boundary of the sparkline leftwards. Connected the latest price dot to the right axis with a dashed tracker line and updated the "Last Price" yellow label box with a semi-transparent background and blur backdrop to prevent dot overlap. |
+| UI-R1 | Chart/Runs Toggle | `app/frontend/src/components/layout/RightSidebar.jsx` | Moved the Chart/Runs view toggle from the sidebar top header to a layout position directly below the Call/Put action cards grid, resolving accidental button-clicking. |
+| UI-R2 | Session P&L Header Relocation | `app/frontend/src/components/layout/RightSidebar.jsx` | Relocated Session P&L value and status icon next to the "Session Risk" header title, removing the large dedicated Card element to save vertical space. |
+| UI-R3 | Session P&L Font Size | `app/frontend/src/components/layout/RightSidebar.jsx` | Increased P&L value font-size to text-sm and weight to black (900) in the header for easier reading under trading pressure. |
+| UI-R4 | Session Reset Button Relocation | `app/frontend/src/components/layout/RightSidebar.jsx` | Added a gold refresh-styled session reset button directly to the left of the Chart/Runs toggle, wired to the backend session reset action. |
+
 ### Applied on 2026-06-05 — Lagging and Latency Optimizations (SIGNED OFF & VERIFIED ✅)
 
 | # | Area | File(s) | Outcome |

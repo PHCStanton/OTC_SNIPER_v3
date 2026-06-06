@@ -4,11 +4,11 @@
 import { useState } from 'react';
 import {
   Target, Bot, Ghost, Gauge, Volume2, LayoutGrid,
-  ChevronDown, Info, ShieldAlert, Activity, Zap,
-  BarChart3, Settings2, RefreshCcw, RefreshCw, Save, Timer,
-  TrendingUp, Eye, Layers
+  ChevronDown, ShieldAlert, Activity, Zap,
+  RefreshCcw, Save, Timer, TrendingUp, Eye, Layers
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { SectionCard, InputGroup, NumberInput, MiniModule, Tooltip } from '../shared/StitchComponents.jsx';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
 import bobble from '../../../assets/bobble.gif';
@@ -46,110 +46,6 @@ const GHOST_OPTIONS = [
   { id: 'wobble.gif', name: 'Wobble', src: wobble },
 ];
 
-function SectionCard({ title, subtitle, icon: Icon, children, badge, toggle, onToggle }) {
-  return (
-    <section className="relative overflow-hidden rounded-[20px] bg-[#1a1c22] p-6 shadow-xl border border-white/5">
-      <div className="mb-6 flex items-start justify-between">
-        <div className="flex gap-4">
-          {Icon && (
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#25282f] text-[#ffb800]">
-              <Icon size={24} />
-            </div>
-          )}
-          <div>
-            <div className="flex items-center gap-3">
-              <h3 className="text-lg font-black uppercase tracking-wider text-white">{title}</h3>
-              {badge && (
-                <span className="rounded-md bg-[#ffb800]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#ffb800] border border-[#ffb800]/20">
-                  {badge}
-                </span>
-              )}
-            </div>
-            <p className="mt-1 text-sm text-gray-500 font-medium">{subtitle}</p>
-          </div>
-        </div>
-        {toggle !== undefined && (
-          <button
-            type="button"
-            onClick={() => onToggle(!toggle)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-              toggle ? 'bg-[#ffb800]' : 'bg-[#2d3139]'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                toggle ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
-        )}
-      </div>
-      <div className="space-y-6">{children}</div>
-    </section>
-  );
-}
-
-function InputGroup({ label, description, children, layout = 'vertical' }) {
-  return (
-    <div className={`flex ${layout === 'horizontal' ? 'flex-row items-center justify-between' : 'flex-col space-y-2'}`}>
-      <div className={layout === 'horizontal' ? 'flex-1' : ''}>
-        <p className="text-[11px] font-black uppercase tracking-[0.15em] text-gray-400">{label}</p>
-        {description && <p className="mt-1 text-[11px] font-medium text-gray-600 leading-relaxed uppercase">{description}</p>}
-      </div>
-      <div className={layout === 'horizontal' ? 'ml-4' : 'mt-2'}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function NumberInput({ value, onChange, min, suffix, icon: Icon }) {
-  return (
-    <div className="flex h-14 w-full items-center overflow-hidden rounded-lg bg-white shadow-inner">
-      <div className="flex h-full w-12 items-center justify-center bg-gray-50 text-gray-400">
-        {Icon ? <Icon size={18} /> : <span className="text-lg font-bold">#</span>}
-      </div>
-      <input
-        type="number"
-        min={min}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-full flex-1 px-4 text-xl font-black text-black outline-none"
-      />
-      <div className="flex h-full items-center bg-gray-100 px-4 text-[10px] font-black uppercase tracking-widest text-gray-500 border-l border-gray-200">
-        {suffix}
-      </div>
-    </div>
-  );
-}
-
-function MiniModule({ label, active, onClick, icon: Icon }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`group relative flex flex-col items-center justify-center gap-3 rounded-xl border p-4 transition-all duration-300 ${
-        active
-          ? 'border-[#ffb800]/30 bg-[#ffb800]/5 shadow-[0_0_20px_rgba(255,184,0,0.1)]'
-          : 'border-white/5 bg-white/[0.02] hover:bg-white/[0.05]'
-      }`}
-    >
-      <div className={`flex h-12 w-12 items-center justify-center rounded-lg transition-colors ${
-        active ? 'bg-[#ffb800] text-black' : 'bg-[#25282f] text-gray-500 group-hover:text-gray-300'
-      }`}>
-        {Icon && <Icon size={20} />}
-      </div>
-      <div className="text-center">
-        <p className={`text-[10px] font-black uppercase tracking-widest ${active ? 'text-[#ffb800]' : 'text-gray-500 group-hover:text-gray-400'}`}>
-          {label}
-        </p>
-        <p className={`mt-1 text-[8px] font-bold uppercase tracking-widest ${active ? 'text-[#ffb800]/60' : 'text-gray-600'}`}>
-          {active ? 'Active' : 'Inactive'}
-        </p>
-      </div>
-    </button>
-  );
-}
-
 export default function AppSettings() {
   const {
     oteoLevel2Enabled,
@@ -160,13 +56,8 @@ export default function AppSettings() {
     autoGhostEnabled,
     autoGhostCopyMode,
     autoGhostExpirationSeconds,
-    autoGhostMaxConcurrentTrades,
-    autoGhostPerAssetCooldownSeconds,
     autoGhostMinimumPayout,
     ghostIcon,
-    maxDailyLoss,
-    maxTradesPerSession,
-    stopOnLossStreak,
     aiModel,
     showManipulationAlerts,
     showSignalConfidence,
@@ -179,13 +70,8 @@ export default function AppSettings() {
     setAutoGhostEnabled,
     setAutoGhostCopyMode,
     setAutoGhostExpirationSeconds,
-    setAutoGhostMaxConcurrentTrades,
-    setAutoGhostPerAssetCooldownSeconds,
     setAutoGhostMinimumPayout,
     setGhostIcon,
-    setMaxDailyLoss,
-    setMaxTradesPerSession,
-    setStopOnLossStreak,
     setAiModel,
     setShowManipulationAlerts,
     setShowSignalConfidence,
@@ -202,12 +88,26 @@ export default function AppSettings() {
     setTradingSoundsEnabled,
     showGlobalTimer,
     setShowGlobalTimer,
+
+    // Advanced Ghost Settings
+    ghostMaxTradesPerTimeframe,
+    ghostTimeframeSeconds,
+    ghostMinConfidence,
+    ghostMinConfidenceEnabled,
+    ghostMaxConfidence,
+    ghostMaxConfidenceEnabled,
+    setGhostMaxTradesPerTimeframe,
+    setGhostTimeframeSeconds,
+    setGhostMinConfidence,
+    setGhostMinConfidenceEnabled,
+    setGhostMaxConfidence,
+    setGhostMaxConfidenceEnabled,
   } = useSettingsStore();
 
   const [isGhostSelectorOpen, setIsGhostSelectorOpen] = useState(false);
 
   return (
-    <div className="max-w-[1400px] mx-auto p-8 space-y-10">
+    <div className="max-w-[1400px] mx-auto p-8 space-y-8">
       {/* Header Section */}
       <div className="flex items-end justify-between border-b border-white/5 pb-8">
         <div>
@@ -231,9 +131,9 @@ export default function AppSettings() {
         <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
           <div className="flex items-center gap-4">
             <Volume2 className="text-gray-500" size={20} />
-            <div>
+            <div className="flex items-center gap-1.5">
               <p className="text-[11px] font-black uppercase tracking-widest text-white">Interface Sounds</p>
-              <p className="text-[10px] font-medium text-gray-600 uppercase">Modern click effects for dashboard UI</p>
+              <Tooltip content="Modern click sound effects triggered during user interaction" />
             </div>
           </div>
           <button
@@ -246,9 +146,9 @@ export default function AppSettings() {
         <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
           <div className="flex items-center gap-4">
             <Bot className="text-gray-500" size={20} />
-            <div>
+            <div className="flex items-center gap-1.5">
               <p className="text-[11px] font-black uppercase tracking-widest text-white">Trading Events</p>
-              <p className="text-[10px] font-medium text-gray-600 uppercase">Audible alerts for wins and losses</p>
+              <Tooltip content="Audible alerts triggered on trade wins and losses" />
             </div>
           </div>
           <button
@@ -261,9 +161,9 @@ export default function AppSettings() {
         <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
           <div className="flex items-center gap-4">
             <Timer className="text-gray-500" size={20} />
-            <div>
+            <div className="flex items-center gap-1.5">
               <p className="text-[11px] font-black uppercase tracking-widest text-white">Global Timer Bar</p>
-              <p className="text-[10px] font-medium text-gray-600 uppercase">Universal UTC Clock and Stopwatch footer</p>
+              <Tooltip content="Universal UTC Clock and stopwatch stopwatch tracker shown at the bottom of the layout" />
             </div>
           </div>
           <button
@@ -275,9 +175,9 @@ export default function AppSettings() {
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
-        {/* Left Column - OTEO & Auto-Ghost */}
-        <div className="col-span-12 lg:col-span-7 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - OTEO Engine & AI Model settings */}
+        <div className="space-y-6">
           
           {/* OTEO SIGNAL LAYER */}
           <SectionCard 
@@ -288,7 +188,7 @@ export default function AppSettings() {
             onToggle={setOteoLevel2Enabled}
           >
             <div className="space-y-6">
-              <InputGroup label="Confidence Levels">
+              <InputGroup label="Confidence Levels" tooltip="Set confidence verification thresholds for OTEO signal filtration">
                 <div className="flex gap-3">
                   {['Level 1', 'Level 2', 'Level 3 (AI)'].map((level, idx) => {
                     const isActive = idx === 0 || (idx === 1 && oteoLevel2Enabled) || (idx === 2 && oteoLevel3Enabled);
@@ -314,6 +214,28 @@ export default function AppSettings() {
                 </div>
               </InputGroup>
 
+              {/* Converted Risk Controls to inline parameters under OTEO */}
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
+                <InputGroup label="Warmup Bars" tooltip="Number of historic candle bars required before signal confirmation logic evaluates">
+                  <NumberInput 
+                    value={oteoWarmupBars} 
+                    onChange={setOteoWarmupBars} 
+                    min={0} 
+                    suffix="Units" 
+                    icon={Activity}
+                  />
+                </InputGroup>
+                <InputGroup label="Cooldown Bars" tooltip="Mandatory rest bars required between consecutive signal trades">
+                  <NumberInput 
+                    value={oteoCooldownBars} 
+                    onChange={setOteoCooldownBars} 
+                    min={0} 
+                    suffix="Units" 
+                    icon={RefreshCcw}
+                  />
+                </InputGroup>
+              </div>
+
               <div className="flex items-center justify-between pt-4 border-t border-white/5">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-600">Active_Nodes</p>
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">409 / 512</p>
@@ -321,6 +243,140 @@ export default function AppSettings() {
             </div>
           </SectionCard>
 
+          {/* AI INTEGRATION & CONFIG */}
+          <SectionCard 
+            title="AI Integration & Feeds" 
+            subtitle="Configure machine learning filters and asset catalog options."
+            icon={Zap}
+          >
+            <div className="space-y-6">
+              <InputGroup label="AI Model Select" tooltip="Model selector for signal refinement and trade confirmation">
+                <div className="relative">
+                  <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-xs font-black uppercase tracking-widest text-white outline-none border border-white/5"
+                  >
+                    <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast (Standard)</option>
+                    <option value="grok-4-1-reasoning">Grok 4.1 Reasoning (High Confidence)</option>
+                    <option value="grok-4-agentic">Grok 4 Agentic (Experimental)</option>
+                  </select>
+                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                </div>
+              </InputGroup>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Auto-Focus</p>
+                    <Tooltip content="Auto-switch active chart display tab on new incoming signals" />
+                  </div>
+                  <button
+                    onClick={() => setAutoFocusOnSignal(!autoFocusOnSignal)}
+                    className={`h-5 w-10 rounded-full transition-colors ${autoFocusOnSignal ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                  >
+                    <div className={`h-3 w-3 rounded-full bg-white transition-transform ${autoFocusOnSignal ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Auto-Refresh</p>
+                    <Tooltip content="Automatically poll and refresh asset catalog list payouts in the background" />
+                  </div>
+                  <button
+                    onClick={() => setAssetAutoRefreshEnabled(!assetAutoRefreshEnabled)}
+                    className={`h-5 w-10 rounded-full transition-colors ${assetAutoRefreshEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                  >
+                    <div className={`h-3 w-3 rounded-full bg-white transition-transform ${assetAutoRefreshEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {assetAutoRefreshEnabled && (
+                <InputGroup label="Auto-Refresh Interval" tooltip="Frequency of asset catalog background poll actions">
+                  <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
+                    {[
+                      { value: 15, label: '15 SEC' },
+                      { value: 30, label: '30 SEC' },
+                      { value: 60, label: '1 MIN' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() => setAssetAutoRefreshInterval(preset.value)}
+                        className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                          assetAutoRefreshInterval === preset.value
+                            ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                            : 'text-gray-500 hover:text-white'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </InputGroup>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* MINI-CHART DISPLAY CONFIG */}
+          <SectionCard 
+            title="Mini-Chart Display Config" 
+            subtitle="Configure telemetry overlays for active terminal views."
+            icon={LayoutGrid}
+            badge="Global On"
+          >
+            <div className="grid grid-cols-3 gap-3">
+              <MiniModule 
+                label="Mini-Sparklines" 
+                active={miniChartConfig.showSparkline} 
+                onClick={() => setMiniChartConfig({ showSparkline: !miniChartConfig.showSparkline })}
+                icon={Activity}
+                compact={true}
+              />
+              <MiniModule 
+                label="Gauges" 
+                active={miniChartConfig.showGauge} 
+                onClick={() => setMiniChartConfig({ showGauge: !miniChartConfig.showGauge })}
+                icon={Gauge}
+                compact={true}
+              />
+              <MiniModule 
+                label="Live Stats (W/L)" 
+                active={miniChartConfig.showStats} 
+                onClick={() => setMiniChartConfig({ showStats: !miniChartConfig.showStats })}
+                icon={TrendingUp}
+                compact={true}
+              />
+              <MiniModule 
+                label="Gauge on Hover" 
+                active={miniChartConfig.gaugeOnHover} 
+                onClick={() => setMiniChartConfig({ gaugeOnHover: !miniChartConfig.gaugeOnHover })}
+                icon={Eye}
+                compact={true}
+              />
+              <MiniModule 
+                label="Regime" 
+                active={miniChartConfig.showRegime} 
+                onClick={() => setMiniChartConfig({ showRegime: !miniChartConfig.showRegime })}
+                icon={Layers}
+                compact={true}
+              />
+              <MiniModule 
+                label="Pulse" 
+                active={miniChartConfig.showManipulation} 
+                onClick={() => setMiniChartConfig({ showManipulation: !miniChartConfig.showManipulation })}
+                icon={Zap}
+                compact={true}
+              />
+            </div>
+          </SectionCard>
+        </div>
+
+        {/* Right Column - Simulator Configuration & Dual-Gates */}
+        <div className="space-y-6">
+          
           {/* AUTO-GHOST TRADER */}
           <SectionCard 
             title="Auto-Ghost Trader" 
@@ -329,8 +385,8 @@ export default function AppSettings() {
             toggle={autoGhostEnabled}
             onToggle={setAutoGhostEnabled}
           >
-            <div className="grid grid-cols-2 gap-6">
-              <InputGroup label="Simulated Amount" description="Primary execution unit.">
+            <div className="grid grid-cols-2 gap-4">
+              <InputGroup label="Simulated Amount" tooltip="Fixed simulation stake amount per Ghost entry">
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-[#ffb800]">$</span>
                   <input
@@ -342,12 +398,12 @@ export default function AppSettings() {
                 </div>
               </InputGroup>
 
-              <InputGroup label="Expiry Times" description="Fixed duration per entry.">
+              <InputGroup label="Expiry Times" tooltip="Simulated contract expiration duration">
                 <div className="relative">
                   <select
                     value={autoGhostExpirationSeconds}
                     onChange={(e) => setAutoGhostExpirationSeconds(Number(e.target.value))}
-                    className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-sm font-black uppercase tracking-widest text-white outline-none border border-white/5"
+                    className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-xs font-black uppercase tracking-widest text-white outline-none border border-white/5"
                   >
                     <option value={15}>S15 (15 Seconds)</option>
                     <option value={30}>S30 (30 Seconds)</option>
@@ -360,17 +416,38 @@ export default function AppSettings() {
               </InputGroup>
             </div>
 
-            <div className="space-y-4">
-              <InputGroup label="Max Concurrent Trades" layout="horizontal" description="Simultaneous active ghost positions.">
-                <span className="text-xl font-black text-white">{String(autoGhostMaxConcurrentTrades).padStart(2, '0')}</span>
-              </InputGroup>
-              <InputGroup label="Cooldown Per Asset" layout="horizontal" description="Rest period for individual asset identifiers.">
-                <span className="text-xl font-black text-white">{autoGhostPerAssetCooldownSeconds}s</span>
+            {/* Timeframe Trade Limit Controls */}
+            <div className="pt-4 border-t border-white/5">
+              <InputGroup label="Timeframe Limit" tooltip="Set the maximum amount of simulator trades to execute within a specific timeframe (e.g. 2 max trades per 60s)">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-lg h-14 px-3">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Max Trades</span>
+                    <input 
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={ghostMaxTradesPerTimeframe}
+                      onChange={(e) => setGhostMaxTradesPerTimeframe(Number(e.target.value))}
+                      className="w-full bg-transparent text-right text-lg font-black text-white outline-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3 bg-white/[0.02] border border-white/5 rounded-lg h-14 px-3">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Seconds</span>
+                    <input 
+                      type="number"
+                      min={5}
+                      max={3600}
+                      value={ghostTimeframeSeconds}
+                      onChange={(e) => setGhostTimeframeSeconds(Number(e.target.value))}
+                      className="w-full bg-transparent text-right text-lg font-black text-white outline-none"
+                    />
+                  </div>
+                </div>
               </InputGroup>
             </div>
 
             {/* Ghost Trade Copy Mode */}
-            <InputGroup label="Copy Ghost Trades" description="Double-click Ghost toast to execute.">
+            <InputGroup label="Copy Ghost Trades" tooltip="Copy simulation outcomes or automatically copy-execute live entries on live broker API">
               <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
                 <button
                   type="button"
@@ -401,7 +478,7 @@ export default function AppSettings() {
             <div className="pt-2 border-t border-white/5">
               <button
                 onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
-                className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-6 border border-white/5 transition hover:bg-[#25282f]"
+                className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-4 border border-white/5 transition hover:bg-[#25282f]"
               >
                 <div className="flex items-center gap-4">
                   <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1c22] border border-white/10 group-hover:border-[#ffb800]/30 transition-colors">
@@ -409,7 +486,7 @@ export default function AppSettings() {
                   </div>
                   <div className="text-left">
                     <p className="text-[11px] font-black uppercase tracking-widest text-white">Ghost Widget Avatar</p>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Select visual style for ghost mode</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Visual sprite indicator selection</p>
                   </div>
                 </div>
                 <div className={`h-6 w-6 rounded-full border-2 transition-all ${isGhostSelectorOpen ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/10'}`} />
@@ -432,52 +509,83 @@ export default function AppSettings() {
               )}
             </div>
           </SectionCard>
-        </div>
 
-        {/* Right Column - Risk & UI Config */}
-        <div className="col-span-12 lg:col-span-5 space-y-6">
-          
-          {/* RISK CONTROLS */}
+          {/* CONFIDENCE GATES & METRICS */}
           <SectionCard 
-            title="Risk Controls" 
-            subtitle="Guardrail protocols for automated execution cycles."
-            icon={ShieldAlert}
-            toggle={true} // Visual only for now as per design
-            onToggle={() => {}}
-          >
-            <div className="grid grid-cols-2 gap-4">
-              <InputGroup label="Warmup Bars" description="Bars required before signal confirmation.">
-                <NumberInput 
-                  value={oteoWarmupBars} 
-                  onChange={setOteoWarmupBars} 
-                  min={0} 
-                  suffix="Units" 
-                  icon={Activity}
-                />
-              </InputGroup>
-              <InputGroup label="Cooldown Bars" description="Bars mandatory between consecutive trades.">
-                <NumberInput 
-                  value={oteoCooldownBars} 
-                  onChange={setOteoCooldownBars} 
-                  min={0} 
-                  suffix="Units" 
-                  icon={RefreshCcw}
-                />
-              </InputGroup>
-            </div>
-          </SectionCard>
-
-          {/* CONFIDENCE & ALERTS */}
-          <SectionCard 
-            title="Confidence & Alerts" 
+            title="Confidence Gates & Alerts" 
             subtitle="Real-time telemetry and validation parameters."
-            icon={Zap}
+            icon={ShieldAlert}
           >
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <ShieldAlert size={16} className="text-[#ffb800]" />
-                  <p className="text-[11px] font-black uppercase tracking-widest text-white">Manipulation Alerts</p>
+              
+              {/* Dual Bounded Confidence Threshold Sliders */}
+              <InputGroup label="Confidence Execution Window" tooltip="Specify the exact minimum and maximum confidence bounds for simulation execution entries. Enable bounds independently.">
+                <div className="space-y-4 rounded-xl bg-white/[0.02] p-4 border border-white/5">
+                  
+                  {/* Minimum Gate */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={ghostMinConfidenceEnabled}
+                          onChange={(e) => setGhostMinConfidenceEnabled(e.target.checked)}
+                          className="accent-[#ffb800] rounded"
+                        />
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${ghostMinConfidenceEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                          Min Confidence Bound
+                        </span>
+                      </label>
+                      <span className={`text-xs font-black ${ghostMinConfidenceEnabled ? 'text-white' : 'text-gray-600'}`}>
+                        {ghostMinConfidence}%
+                      </span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="50"
+                      max="100"
+                      disabled={!ghostMinConfidenceEnabled}
+                      value={ghostMinConfidence}
+                      onChange={(e) => setGhostMinConfidence(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* Maximum Gate */}
+                  <div className="space-y-2 pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={ghostMaxConfidenceEnabled}
+                          onChange={(e) => setGhostMaxConfidenceEnabled(e.target.checked)}
+                          className="accent-[#ffb800] rounded"
+                        />
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${ghostMaxConfidenceEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                          Max Confidence Bound
+                        </span>
+                      </label>
+                      <span className={`text-xs font-black ${ghostMaxConfidenceEnabled ? 'text-white' : 'text-gray-600'}`}>
+                        {ghostMaxConfidence}%
+                      </span>
+                    </div>
+                    <input 
+                      type="range"
+                      min="50"
+                      max="100"
+                      disabled={!ghostMaxConfidenceEnabled}
+                      value={ghostMaxConfidence}
+                      onChange={(e) => setGhostMaxConfidence(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+              </InputGroup>
+
+              <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-white">Manipulation Alerts</p>
+                  <Tooltip content="Enable system notifications and sound alerts when volatile spikes or market manipulation index triggers" />
                 </div>
                 <button
                   onClick={() => setShowManipulationAlerts(!showManipulationAlerts)}
@@ -486,68 +594,6 @@ export default function AppSettings() {
                   <div className={`h-3 w-3 rounded-full bg-white transition-transform ${showManipulationAlerts ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
-
-              <InputGroup label="Confidence Threshold">
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="range" 
-                    min="50" 
-                    max="100" 
-                    className="flex-1 accent-[#ffb800]"
-                  />
-                  <span className="text-2xl font-black text-white">85%</span>
-                </div>
-                <div className="mt-2 flex justify-between text-[8px] font-black uppercase tracking-widest text-gray-600">
-                  <span>Low_Risk</span>
-                  <span>Aggressive</span>
-                </div>
-              </InputGroup>
-
-              <div className="flex items-center justify-between">
-                <p className="text-[11px] font-black uppercase tracking-widest text-white">Auto-Focus on Signal</p>
-                <button
-                  onClick={() => setAutoFocusOnSignal(!autoFocusOnSignal)}
-                  className={`h-5 w-10 rounded-full transition-colors ${autoFocusOnSignal ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-                >
-                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${autoFocusOnSignal ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <RefreshCw size={16} className="text-[#ffb800]" />
-                  <p className="text-[11px] font-black uppercase tracking-widest text-white">Auto-Refresh Interval</p>
-                </div>
-                <button
-                  onClick={() => setAssetAutoRefreshEnabled(!assetAutoRefreshEnabled)}
-                  className={`h-5 w-10 rounded-full transition-colors ${assetAutoRefreshEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-                >
-                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${assetAutoRefreshEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-
-              <InputGroup description="Background polling for live payouts.">
-                <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
-                  {[
-                    { value: 15, label: '15 SEC' },
-                    { value: 30, label: '30 SEC' },
-                    { value: 60, label: '1 MIN' },
-                  ].map((preset) => (
-                    <button
-                      key={preset.value}
-                      type="button"
-                      onClick={() => setAssetAutoRefreshInterval(preset.value)}
-                      className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
-                        assetAutoRefreshInterval === preset.value
-                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                          : 'text-gray-500 hover:text-white'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </InputGroup>
 
               <div className="rounded-xl bg-white/[0.02] p-6 text-center border border-white/5">
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Signal Integrity</p>
@@ -565,67 +611,7 @@ export default function AppSettings() {
             </div>
           </SectionCard>
         </div>
-
-        {/* Bottom - MINI-CHART DISPLAY CONFIG */}
-        <div className="col-span-12">
-          <SectionCard 
-            title="Mini-Chart Display Config" 
-            subtitle="Configure telemetry overlays for active terminal views."
-            icon={LayoutGrid}
-          >
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center gap-3">
-                <Info size={14} className="text-gray-500" />
-                <p className="text-xs font-medium text-gray-500">Enable or disable visual modules across the multi-chart dashboard.</p>
-              </div>
-              <div className="flex items-center gap-3 bg-[#25282f] px-4 py-2 rounded-lg border border-white/5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Global Visibility</p>
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">On</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <MiniModule 
-                label="Mini-Sparklines" 
-                active={miniChartConfig.showSparkline} 
-                onClick={() => setMiniChartConfig({ showSparkline: !miniChartConfig.showSparkline })}
-                icon={Activity}
-              />
-              <MiniModule 
-                label="Gauges" 
-                active={miniChartConfig.showGauge} 
-                onClick={() => setMiniChartConfig({ showGauge: !miniChartConfig.showGauge })}
-                icon={Gauge}
-              />
-              <MiniModule 
-                label="Live Stats (W/L)" 
-                active={miniChartConfig.showStats} 
-                onClick={() => setMiniChartConfig({ showStats: !miniChartConfig.showStats })}
-                icon={TrendingUp}
-              />
-              <MiniModule 
-                label="Gauge on Hover" 
-                active={miniChartConfig.gaugeOnHover} 
-                onClick={() => setMiniChartConfig({ gaugeOnHover: !miniChartConfig.gaugeOnHover })}
-                icon={Eye}
-              />
-              <MiniModule 
-                label="Regime" 
-                active={miniChartConfig.showRegime} 
-                onClick={() => setMiniChartConfig({ showRegime: !miniChartConfig.showRegime })}
-                icon={Layers}
-              />
-              <MiniModule 
-                label="Pulse" 
-                active={miniChartConfig.showManipulation} 
-                onClick={() => setMiniChartConfig({ showManipulation: !miniChartConfig.showManipulation })}
-                icon={Zap}
-              />
-            </div>
-          </SectionCard>
-        </div>
       </div>
-
 
     </div>
   );

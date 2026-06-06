@@ -26,6 +26,12 @@ export const SETTINGS_DEFAULTS = {
   autoGhostMinimumPayout: 88,
   ghostWidgetPosition: { x: 0, y: 0 },
   ghostIcon: 'drift.gif',
+  ghostMaxTradesPerTimeframe: 2,
+  ghostTimeframeSeconds: 60,
+  ghostMinConfidence: 75,
+  ghostMinConfidenceEnabled: true,
+  ghostMaxConfidence: 95,
+  ghostMaxConfidenceEnabled: false,
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -122,6 +128,12 @@ export function validateSettings(input = {}) {
     ghostIcon: typeof input.ghostIcon === 'string' && input.ghostIcon.trim()
       ? input.ghostIcon.trim()
       : SETTINGS_DEFAULTS.ghostIcon,
+    ghostMaxTradesPerTimeframe: toNumber(input.ghostMaxTradesPerTimeframe, SETTINGS_DEFAULTS.ghostMaxTradesPerTimeframe, { min: 1, max: 100, integer: true }),
+    ghostTimeframeSeconds: toNumber(input.ghostTimeframeSeconds, SETTINGS_DEFAULTS.ghostTimeframeSeconds, { min: 5, max: 3600, integer: true }),
+    ghostMinConfidence: toNumber(input.ghostMinConfidence, SETTINGS_DEFAULTS.ghostMinConfidence, { min: 50, max: 100, integer: true }),
+    ghostMinConfidenceEnabled: toBoolean(input.ghostMinConfidenceEnabled, SETTINGS_DEFAULTS.ghostMinConfidenceEnabled),
+    ghostMaxConfidence: toNumber(input.ghostMaxConfidence, SETTINGS_DEFAULTS.ghostMaxConfidence, { min: 50, max: 100, integer: true }),
+    ghostMaxConfidenceEnabled: toBoolean(input.ghostMaxConfidenceEnabled, SETTINGS_DEFAULTS.ghostMaxConfidenceEnabled),
       
     showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
     showLiveEntryMarkers: toBoolean(input.showLiveEntryMarkers, SETTINGS_DEFAULTS.showLiveEntryMarkers),
@@ -213,6 +225,12 @@ export const useSettingsStore = create()(
       setAutoGhostMinimumPayout: (val) => commitSettingsPatch(set, { autoGhostMinimumPayout: val }),
       setGhostWidgetPosition: (val) => commitSettingsPatch(set, { ghostWidgetPosition: val }),
       setGhostIcon: (val) => commitSettingsPatch(set, { ghostIcon: val }),
+      setGhostMaxTradesPerTimeframe: (val) => commitSettingsPatch(set, { ghostMaxTradesPerTimeframe: val }),
+      setGhostTimeframeSeconds: (val) => commitSettingsPatch(set, { ghostTimeframeSeconds: val }),
+      setGhostMinConfidence: (val) => commitSettingsPatch(set, { ghostMinConfidence: val }),
+      setGhostMinConfidenceEnabled: (val) => commitSettingsPatch(set, { ghostMinConfidenceEnabled: val }),
+      setGhostMaxConfidence: (val) => commitSettingsPatch(set, { ghostMaxConfidence: val }),
+      setGhostMaxConfidenceEnabled: (val) => commitSettingsPatch(set, { ghostMaxConfidenceEnabled: val }),
       setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),
       setShowLiveEntryMarkers: (val) => commitSettingsPatch(set, { showLiveEntryMarkers: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),

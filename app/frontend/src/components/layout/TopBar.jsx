@@ -65,51 +65,65 @@ export default function TopBar() {
 
   return (
     <>
-      <header className="flex h-16 items-center justify-between border-b border-white/10 bg-[#1a1717] px-6 shadow-2xl shadow-black/30 shrink-0 z-50">
+      <header className="flex h-16 items-center justify-between border-b border-white/5 bg-[#1a1c22] px-6 shadow-xl shrink-0 z-50">
         {/* ── Left: Logo + Connections ── */}
         <div className="flex items-center gap-1">
           <img src={logoImg} alt="OTC SNIPER" className="h-15 w-auto select-none" draggable={false} />
-          <div className="flex items-center gap-2 ml-4">
+          <div className="flex items-center gap-3 ml-4">
             <button
               onClick={handleChromeToggle}
               disabled={chromeLoading}
               title={chromeRunning ? 'Chrome running — click to stop' : 'Chrome stopped — click to start'}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium select-none transition-colors ${chromeRunning ? 'border-[#f5df19]/30 bg-[#f5df19]/10 text-[#f5df19] hover:bg-[#f5df19]/20' : 'border-white/10 bg-[#212127] text-gray-500 hover:bg-[#282d2e]'}`}
+              className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-[10px] font-black uppercase tracking-widest select-none transition-all duration-300 ${
+                chromeRunning 
+                  ? 'border-[#ffb800]/30 bg-[#ffb800]/10 text-[#ffb800] hover:bg-[#ffb800]/20' 
+                  : 'border-white/5 bg-[#25282f]/30 text-gray-500 hover:bg-[#25282f]'
+              }`}
             >
               {chromeLoading ? <Loader2 size={12} className="animate-spin" /> : <Chrome size={12} />}
               <span>Chrome</span>
-              <span className={`h-1.5 w-1.5 rounded-full ${chromeRunning ? 'bg-[#f5df19]' : 'bg-gray-500'}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${chromeRunning ? 'bg-[#ffb800]' : 'bg-gray-600'}`} />
             </button>
-
+ 
             <button
               onClick={() => setShowConnect(true)}
               title={sessionConnected ? 'Session connected — click to manage' : 'No session — click to connect'}
-              className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium select-none transition-colors ${sessionConnected ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20' : 'border-white/10 bg-[#212127] text-gray-500 hover:bg-[#282d2e]'}`}
+              className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-[10px] font-black uppercase tracking-widest select-none transition-all duration-300 ${
+                sessionConnected 
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
+                  : 'border-white/5 bg-[#25282f]/30 text-gray-500 hover:bg-[#25282f]'
+              }`}
             >
               {sessionConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-              <span>{sessionConnected ? 'Connected' : 'Disconnected'}</span>
+              <span>{sessionConnected ? 'Online' : 'Offline'}</span>
               {sessionConnected && accountType && (
-                <span className={`inline-flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-bold leading-none ${accountType === 'demo' ? 'bg-[#f5df19]/20 text-[#f5df19]' : 'bg-emerald-400/20 text-emerald-400'}`}>
+                <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-black tracking-widest ${
+                  accountType === 'demo' ? 'bg-[#ffb800]/20 text-[#ffb800]' : 'bg-emerald-500/20 text-emerald-400'
+                }`}>
                   {accountType === 'demo' ? <Ghost size={9} /> : <DollarSign size={9} />}
                   {accountType.toUpperCase()}
                 </span>
               )}
               {sessionConnected && balance != null && (
-                <span className="font-normal text-gray-400">${balance.toFixed(2)}</span>
+                <span className="font-bold text-gray-400">${balance.toFixed(2)}</span>
               )}
               <ChevronDown size={10} className="text-gray-500" />
             </button>
           </div>
         </div>
-
+ 
         {/* ── Right: Tabs menu + Settings + Profile ── */}
         <div className="flex items-center gap-5">
-          <div className="flex items-center gap-1 rounded-lg p-0.5">
+          <div className="flex items-center gap-2 rounded-lg p-0.5">
             <button
               onClick={() => setActiveView('journal')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${isJournal ? 'border-b-2 border-[#f5df19] text-[#f5df19]' : 'text-gray-500 hover:text-gray-300'}`}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                isJournal 
+                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-[#25282f]/20'
+              }`}
             >
-              <BookOpen size={13} />
+              <BookOpen size={12} />
               Journal
             </button>
             <button
@@ -117,76 +131,88 @@ export default function TopBar() {
                 setActiveView('risk');
                 setDashboardMode('risk');
               }}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${isRisk ? 'border-b-2 border-[#f5df19] text-[#f5df19]' : 'text-gray-500 hover:text-gray-300'}`}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                isRisk 
+                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-[#25282f]/20'
+              }`}
             >
-              <ShieldAlert size={13} />
-              Risk Manager
+              <ShieldAlert size={12} />
+              Risk
             </button>
             <button
               onClick={() => {
                 setActiveView('trading');
                 setDashboardMode('trading');
               }}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${isTrading ? 'border-b-2 border-[#f5df19] text-[#f5df19]' : 'text-gray-500 hover:text-gray-300'}`}
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                isTrading 
+                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-[#25282f]/20'
+              }`}
             >
-              <TrendingUp size={13} />
+              <TrendingUp size={12} />
               Trading
             </button>
-
+ 
             <button
               onClick={() => setActiveView('ai')}
               title="AI Assistant"
-              className={`ml-2 flex items-center justify-center rounded-lg border transition-all duration-200 ${isAI ? 'border-[#f5df19]/40 bg-[#f5df19]/10 shadow-[0_0_15px_rgba(245,223,25,0.15)] scale-110' : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'}`}
+              className={`ml-2 flex items-center justify-center rounded-lg border transition-all duration-350 ${
+                isAI 
+                  ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
+                  : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'
+              }`}
             >
               <AiChipIcon size={38} />
             </button>
           </div>
-
-          <div className="flex items-center gap-2 border-l border-white/10 pl-4">
+ 
+          <div className="flex items-center gap-2 border-l border-white/5 pl-4">
             <TopBarIconButton
               onClick={() => setActiveView('settings')}
               title="Settings"
               ariaLabel="Open settings"
               active={isSettings}
             >
-              <Settings size={28} strokeWidth={1.8} />
+              <Settings size={22} strokeWidth={2} />
             </TopBarIconButton>
-
+ 
             <button
               type="button"
-              className="flex h-12 w-12 items-center justify-center rounded-full border border-[#f5df19]/35 bg-[#1b2428] p-1 transition-colors hover:border-[#f5df19]/60 hover:bg-[#202b31]"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/5 bg-[#25282f]/50 p-0.5 transition hover:border-[#ffb800]/30 hover:bg-[#2d3139]"
               title="Profile"
             >
               <img
                 src="/Sci-fi_GUY.jpg"
                 alt="Profile"
-                className="h-10 w-10 rounded-full object-cover"
+                className="h-9 w-9 rounded-full object-cover"
               />
             </button>
-
-            <div className="flex h-14 min-w-[200px] items-center gap-3 rounded-lg border border-white/10 bg-[#11181c] px-4 shadow-[0_0_0_1px_rgba(245,223,25,0.03)]">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-[#f5df19]/20 bg-[#f5df19]/10 text-[#f5df19]">
-                <DollarSign size={14} />
+ 
+            <div className="flex h-11 min-w-[170px] items-center gap-3 rounded-lg border border-white/5 bg-[#25282f]/30 px-4">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#ffb800]/10 text-[#ffb800]">
+                <DollarSign size={12} />
               </div>
-              <span className="text-lg font-black tracking-tight text-[#f3f1eb]">{balanceLabel}</span>
+              <span className="text-md font-black tracking-tight text-white">{balanceLabel}</span>
             </div>
-
+ 
             <TopBarIconButton
               onClick={handleNotificationsPlaceholder}
               title="Notifications placeholder"
               ariaLabel="Notifications placeholder"
             >
-              <Bell size={26} strokeWidth={1.8} />
+              <Bell size={20} strokeWidth={2} />
             </TopBarIconButton>
           </div>
         </div>
       </header>
-
+ 
       {showConnect && <ConnectDialog onClose={() => setShowConnect(false)} />}
     </>
   );
 }
-
+ 
 function TopBarIconButton({ active = false, onClick, title, ariaLabel, children }) {
   return (
     <button
@@ -194,7 +220,11 @@ function TopBarIconButton({ active = false, onClick, title, ariaLabel, children 
       onClick={onClick}
       title={title}
       aria-label={ariaLabel}
-      className={`flex h-14 w-14 items-center justify-center rounded-lg border transition-colors ${active ? 'border-[#f5df19]/35 bg-[#202429] text-[#f5df19]' : 'border-transparent bg-transparent text-gray-400 hover:border-white/10 hover:bg-white/5 hover:text-[#e3e6e7]'}`}
+      className={`flex h-11 w-11 items-center justify-center rounded-lg border transition-all duration-300 ${
+        active 
+          ? 'border-[#ffb800]/30 bg-[#ffb800]/10 text-[#ffb800] shadow-[0_0_10px_rgba(255,184,0,0.05)]' 
+          : 'border-transparent bg-transparent text-gray-500 hover:border-white/5 hover:bg-[#25282f]/45 hover:text-white'
+      }`}
     >
       {children}
     </button>

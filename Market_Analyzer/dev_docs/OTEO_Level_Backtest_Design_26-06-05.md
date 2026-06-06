@@ -1,7 +1,7 @@
 # OTEO Level Backtest Design — Multi-Expiry Analysis
 
 **Version:** 1.0.0  
-**Date:** 2026-05-15  
+**Date:** 2026-06-15-05  
 **Status:** Design proposal — not yet implemented  
 **Scope:** Backtest the actual OTC SNIPER Level 1, Level 2, and Level 3 trading stack against historical tick data and ghost trade records, with a 7-way expiry sweep  
 **Author:** @Investigator / @Architect synthesis

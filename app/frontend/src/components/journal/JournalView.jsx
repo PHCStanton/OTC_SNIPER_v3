@@ -41,24 +41,24 @@ export default function JournalView() {
   return (
     <div className="flex flex-col flex-1 h-full bg-[#0c0f0f] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#141818]/50">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#1a1c22]">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-[#f5df19]/10 text-[#f5df19]">
+          <div className="p-2.5 rounded-lg bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20">
             <BookOpen size={20} />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight text-gray-100">Trading Journal</h1>
-            <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold">Ghost Session Analysis</p>
+            <h1 className="text-md font-black uppercase tracking-wider text-white">Trading Journal</h1>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">Ghost Session Analysis</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-white/5 border border-white/10 text-xs font-medium text-gray-400 hover:bg-white/10 hover:text-white transition-all">
-            <Filter size={14} />
+        <div className="flex items-center gap-3">
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#25282f] border border-white/5 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:bg-[#2d3139] hover:text-white transition-all">
+            <Filter size={12} />
             Filter
           </button>
-          <button className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#f5df19]/10 border border-[#f5df19]/20 text-xs font-medium text-[#f5df19] hover:bg-[#f5df19]/20 transition-all">
-            <Download size={14} />
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ffb800]/10 border border-[#ffb800]/25 text-[10px] font-black uppercase tracking-widest text-[#ffb800] hover:bg-[#ffb800]/20 transition-all">
+            <Download size={12} />
             Export Report
           </button>
         </div>

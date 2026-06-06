@@ -32,19 +32,19 @@ export default function EquityCurve({ ghostTrades }) {
   const zeroLineY = height - padding - ((0 - minPnl) / (maxPnl - minPnl || 1)) * (height - 2 * padding);
 
   return (
-    <div className="bg-[#141818] border border-white/5 rounded-xl p-5 lg:col-span-2">
+    <div className="bg-[#1a1c22] border border-white/5 rounded-xl p-5 lg:col-span-2 transition hover:border-white/10">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-sm font-bold text-gray-400 flex items-center gap-2 uppercase tracking-wider">
-          <LineChart size={16} className="text-[#f5df19]" />
+        <h3 className="text-[10px] font-black text-gray-500 flex items-center gap-2 uppercase tracking-widest">
+          <LineChart size={16} className="text-[#ffb800]" />
           Equity Curve
         </h3>
-        <span className="text-[10px] font-bold text-gray-500 bg-white/5 px-2 py-0.5 rounded-full">
+        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 bg-[#25282f]/30 border border-white/5 px-2.5 py-1 rounded">
           Current Session PnL
         </span>
       </div>
       
       {ghostTrades.length === 0 ? (
-        <div className="h-[150px] flex items-center justify-center text-gray-600 italic text-xs">
+        <div className="h-[150px] flex items-center justify-center text-gray-600 italic text-xs uppercase tracking-wide">
           Not enough data to plot equity curve.
         </div>
       ) : (

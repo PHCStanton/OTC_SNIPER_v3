@@ -1,18 +1,45 @@
 /**
  * TradeHistory — recent trade table for the Phase 5 trading workspace.
+ * Redesigned to follow the Stitch Design Reference.
  */
-import { useEffect, useState } from 'react';
-import { ArrowDownRight, ArrowUpRight, RotateCcw, Activity, Ghost, User } from 'lucide-react';
+import { useEffect } from 'react';
+import { ArrowDownRight, ArrowUpRight, RotateCcw, Ghost, User } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useTradingStore } from '../../stores/useTradingStore.js';
-import { formatAssetLabel, formatPrice } from './chartUtils.js';
-import TradeDetailsModal from './TradeDetailsModal.jsx';
+import { useAssetStore } from '../../stores/useAssetStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useToastStore } from '../../stores/useToastStore.js';
+import { formatAssetLabel } from './chartUtils.js';
 
 export default function TradeHistory() {
   const { sessionStatus } = useOpsStore();
   const { trades, isLoadingTrades, tradeError, loadTrades, tradeHistoryMode, setTradeHistoryMode } = useTradingStore();
   
-  const [selectedTrade, setSelectedTrade] = useState(null);
+  const handleSelectOrExecuteTrade = (trade) => {
+    const asset = trade.asset || trade.symbol;
+    if (!asset) return;
+
+    const { autoGhostCopyMode } = useSettingsStore.getState();
+    const assetLabel = asset.replace(/_otc$/i, ' OTC').replace(/_/g, '/').toUpperCase();
+
+    // Select the asset
+    useAssetStore.getState().setSelectedAsset(asset);
+
+    useToastStore.getState().addToast({
+      type: 'success',
+      message: `Selected Asset: ${assetLabel}`,
+      duration: 3000
+    });
+
+    if (autoGhostCopyMode === 'execute') {
+      const direction = (trade.direction || 'call').toLowerCase();
+      const rawDuration = Number(trade.expirationSeconds || trade.expiration_seconds || trade.duration || 60);
+
+      useTradingStore.getState().setDirection(direction);
+      useTradingStore.getState().setDuration(rawDuration);
+      void useTradingStore.getState().executeTrade('pocket_option', asset);
+    }
+  };
 
   useEffect(() => {
     if (sessionStatus === 'connected') {
@@ -23,24 +50,32 @@ export default function TradeHistory() {
   const recentTrades = [...trades].reverse().slice(0, 8);
 
   return (
-    <section className="rounded-xl border border-white/5 bg-[#1a1717] p-4 shadow-2xl shadow-black/30 backdrop-blur">
-      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
+    <section className="rounded-[20px] border border-white/5 bg-[#1a1c22] p-6 shadow-xl">
+      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-gray-500">Logs</p>
-          <h3 className="text-lg font-black tracking-tight text-[#e3e6e7]">Recent trades</h3>
+          <p className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">Audits & Logs</p>
+          <h3 className="mt-1 text-md font-black uppercase tracking-wider text-white">Recent Transactions</h3>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex bg-[#212127] rounded-full p-0.5 border border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="flex bg-[#25282f]/50 rounded-lg p-0.5 border border-white/5">
             <button
               onClick={() => setTradeHistoryMode('live')}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${tradeHistoryMode === 'live' ? 'bg-[#f5df19]/10 text-[#f5df19]' : 'text-gray-500 hover:text-gray-300'}`}
+              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${
+                tradeHistoryMode === 'live' 
+                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/25 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
             >
               <User size={10} /> Live
             </button>
             <button
               onClick={() => setTradeHistoryMode('ghost')}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider transition-colors ${tradeHistoryMode === 'ghost' ? 'bg-indigo-500/10 text-indigo-400' : 'text-gray-500 hover:text-gray-300'}`}
+              className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all duration-300 ${
+                tradeHistoryMode === 'ghost' 
+                  ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 shadow-sm' 
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
             >
               <Ghost size={10} /> Ghost
             </button>
@@ -50,7 +85,7 @@ export default function TradeHistory() {
             type="button"
             onClick={() => void loadTrades('pocket_option')}
             disabled={isLoadingTrades}
-            className="flex items-center gap-2 rounded-full border border-white/5 bg-[#212127] px-3 py-1.5 text-xs font-semibold text-[#e3e6e7] transition hover:bg-[#282d2e] disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#25282f] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-gray-400 transition hover:bg-[#2d3139] hover:text-white disabled:opacity-40"
           >
             <RotateCcw size={12} className={isLoadingTrades ? 'animate-spin' : ''} />
             Refresh
@@ -59,36 +94,36 @@ export default function TradeHistory() {
       </div>
 
       {tradeError && (
-        <div className="mt-3 rounded-xl border border-[#fe7453]/30 bg-[#3f1d00] px-3 py-2 text-sm text-[#ff9b82]">
+        <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-red-300">
           {tradeError}
         </div>
       )}
 
-      <div className="mt-3 overflow-hidden rounded-xl border border-white/5">
-        <table className="min-w-full divide-y divide-white/5 text-left text-sm">
-          <thead className="bg-[#212127] text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500">
+      <div className="mt-4 overflow-hidden rounded-xl border border-white/5">
+        <table className="min-w-full divide-y divide-white/5 text-left text-xs">
+          <thead className="bg-[#25282f]/30 text-[9px] font-black uppercase tracking-widest text-gray-500">
             <tr>
-              <th className="px-3 py-2">Time (UTC)</th>
-              <th className="px-3 py-2">Asset</th>
-              <th className="px-3 py-2">Direction</th>
-              <th className="px-3 py-2 text-right">Amount</th>
-              <th className="px-3 py-2 text-right">Payout</th>
-              <th className="px-3 py-2 text-right">Status</th>
+              <th className="px-4 py-3">Timestamp (UTC)</th>
+              <th className="px-4 py-3">Asset</th>
+              <th className="px-4 py-3">Direction</th>
+              <th className="px-4 py-3 text-right">Stake</th>
+              <th className="px-4 py-3 text-right">Payout / PNL</th>
+              <th className="px-4 py-3 text-right">Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5 bg-[#1a1717]">
+          <tbody className="divide-y divide-white/5 bg-[#1a1c22]/10">
             {isLoadingTrades && trades.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={6}>
-                  <RotateCcw className="inline animate-spin mb-1 mr-2" size={14} /> Loading trade history…
+                <td className="px-4 py-8 text-center text-[10px] font-black uppercase tracking-widest text-gray-500" colSpan={6}>
+                  <RotateCcw className="inline animate-spin mr-2" size={12} /> Syncing records...
                 </td>
               </tr>
             )}
 
             {!isLoadingTrades && trades.length === 0 && (
               <tr>
-                <td className="px-3 py-6 text-center text-gray-500" colSpan={6}>
-                  No trades recorded for {tradeHistoryMode} session yet.
+                <td className="px-4 py-8 text-center text-[10px] font-black uppercase tracking-widest text-gray-500" colSpan={6}>
+                  No active logs for {tradeHistoryMode} session.
                 </td>
               </tr>
             )}
@@ -108,32 +143,45 @@ export default function TradeHistory() {
               return (
                 <tr 
                   key={`${asset}-${time}-${index}`} 
-                  className="transition hover:bg-white/5 cursor-pointer"
-                  onClick={() => setSelectedTrade({ ...trade, kind: tradeHistoryMode })}
+                  className="transition hover:bg-white/[0.02] cursor-pointer"
+                  onClick={() => handleSelectOrExecuteTrade(trade)}
                 >
-                  <td className="whitespace-nowrap px-3 py-2 text-xs text-gray-500 font-mono">{time}</td>
-                  <td className="whitespace-nowrap px-3 py-2 font-semibold text-[#e3e6e7]">
+                  <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500 font-mono">{time}</td>
+                  <td className="whitespace-nowrap px-4 py-3 font-black text-white uppercase tracking-wider">
                     {formatAssetLabel(asset)}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${direction === 'put' || direction === 'sell' ? 'bg-[#fe7453]/10 text-[#fe7453]' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                      direction === 'put' || direction === 'sell' 
+                        ? 'bg-rose-500/10 text-rose-400' 
+                        : 'bg-emerald-500/10 text-emerald-400'
+                    }`}>
                       {direction === 'put' || direction === 'sell' ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />}
                       {direction || '—'}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right text-gray-300">
+                  <td className="whitespace-nowrap px-4 py-3 text-right text-gray-400 font-bold font-mono">
                     {Number.isFinite(amount) ? `$${amount.toFixed(2)}` : '—'}
                   </td>
-                  <td className={`whitespace-nowrap px-3 py-2 text-right font-semibold ${Number.isFinite(payout) && payout > 0 ? 'text-emerald-400' : Number.isFinite(payout) && payout < 0 ? 'text-[#fe7453]' : 'text-gray-500'}`}>
+                  <td className={`whitespace-nowrap px-4 py-3 text-right font-bold font-mono ${
+                    Number.isFinite(payout) && payout > 0 
+                      ? 'text-emerald-400' 
+                      : Number.isFinite(payout) && payout < 0 
+                        ? 'text-rose-400' 
+                        : 'text-gray-500'
+                  }`}>
                     {Number.isFinite(payout) ? `${payout > 0 ? '+' : ''}$${Math.abs(payout).toFixed(2)}` : '—'}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-right flex items-center justify-end gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] ${outcome === 'win' ? 'text-emerald-400 bg-emerald-400/10 border border-emerald-400/20' : outcome === 'loss' ? 'text-red-400 bg-red-400/10 border border-red-400/20' : 'bg-[#212127] text-gray-400'}`}>
+                  <td className="whitespace-nowrap px-4 py-3 text-right flex items-center justify-end">
+                    <span className={`rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-widest ${
+                      outcome === 'win' 
+                        ? 'text-emerald-400 bg-emerald-400/10 border border-emerald-400/20' 
+                        : outcome === 'loss' 
+                          ? 'text-rose-400 bg-rose-400/10 border border-rose-400/20' 
+                          : 'bg-[#25282f] text-gray-400'
+                    }`}>
                       {status}
                     </span>
-                    <button className="text-[#f5df19]/60 hover:text-[#f5df19] bg-[#f5df19]/5 hover:bg-[#f5df19]/20 p-1 rounded transition-colors" title="AI Analysis">
-                       <Activity size={12} />
-                    </button>
                   </td>
                 </tr>
               );
@@ -141,10 +189,6 @@ export default function TradeHistory() {
           </tbody>
         </table>
       </div>
-
-      {selectedTrade && (
-        <TradeDetailsModal trade={selectedTrade} onClose={() => setSelectedTrade(null)} />
-      )}
     </section>
   );
 }
