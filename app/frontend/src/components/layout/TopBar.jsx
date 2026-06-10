@@ -218,7 +218,7 @@ export default function TopBar() {
 
                     <button
                       onClick={() => {
-                        useToastStore.getState().addToast({ type: 'info', message: '[AI Advisor] Analyzing trade results (placeholder)' });
+                        setActiveView('analysis');
                         setShowAiDropdown(false);
                       }}
                       className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"

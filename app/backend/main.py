@@ -26,6 +26,7 @@ from .api.ai import router as ai_router
 from .api.session import router as session_router
 from .api.strategy import router as strategy_router
 from .api.trading import router as trading_router
+from .api.analysis import router as analysis_router
 from .brokers.base import BrokerType
 from .brokers.pocket_option.adapter import PocketOptionAdapter  # noqa: F401 — triggers registration
 from .brokers.registry import BrokerRegistry
@@ -189,6 +190,7 @@ fastapi_app.include_router(ai_router)       # Phase 8: /api/ai/*
 fastapi_app.include_router(session_router)  # Phase 0: /api/session/*
 fastapi_app.include_router(strategy_router) # Phase 10: /api/strategy/*
 fastapi_app.include_router(trading_router)  # Phase 2: /api/trading/*
+fastapi_app.include_router(analysis_router) # AI Results Analysis: /api/analysis/*
 
 # Expose the Socket.IO-wrapped ASGI app for uvicorn
 app = socketio.ASGIApp(sio, fastapi_app)

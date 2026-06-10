@@ -13,6 +13,7 @@ import SettingsView from '../settings/SettingsView.jsx';
 import JournalView from '../journal/JournalView.jsx';
 import TradingPlaceholder from '../shared/TradingPlaceholder.jsx';
 import RiskPlaceholder from '../shared/RiskPlaceholder.jsx';
+import AnalysisView from '../analysis/AnalysisView.jsx';
 import ErrorBoundary from '../shared/ErrorBoundary.jsx';
 import ToastContainer from '../shared/ToastContainer.jsx';
 import GhostTradingWidget from '../shared/GhostTradingWidget.jsx';
@@ -67,6 +68,7 @@ function ActiveView({ view, mode }) {
   if (view === 'ai') return <AiSessionPanel />;
   if (view === 'settings') return <SettingsView />;
   if (view === 'journal') return <JournalView />;
+  if (view === 'analysis') return <AnalysisView />;
 
   if (mode === 'risk') return <RiskPlaceholder />;
   return <TradingPlaceholder />;
