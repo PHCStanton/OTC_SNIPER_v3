@@ -533,6 +533,7 @@ export const useRiskStore = create((set, get) => ({
     entryTime,
     expirationSeconds,
     amount,
+    oteoScore,
   }) => {
     set((state) => {
       const nextTrade = createTrade({
@@ -547,6 +548,7 @@ export const useRiskStore = create((set, get) => ({
         expirationSeconds,
         entryPrice,
         entryTime,
+        oteoScore,
       });
 
       // Avoid duplicates

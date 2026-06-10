@@ -223,6 +223,7 @@ class TradeService:
                 "trigger_mode": getattr(trade, "trigger_mode", None),
                 "z_score": entry_context.get("z_score"),
                 "manipulation": entry_context.get("manipulation"),
+                "oteo_score": trade.oteo_score,
             },
         )
 

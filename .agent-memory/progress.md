@@ -21,6 +21,7 @@
 - Frontend Signal Explainability — Main OTEO gauge enriched with manipulation detail, confluence badges, and neutral-state styling.
 - Modular Multi-Chart UX — Configurable mini-chart cards with star/focus controls, larger gauges, regime/manipulation overlays, and per-asset W/L tracking.
 - **Lagging and Latency Optimizations (2026-06-05, SIGNED OFF & CLOSED ✅)** — Implemented performance telemetry, thread-safe broker tick enqueueing, async bounded queue processing, memory-buffered tick logging, Zustand store splitting, requestAnimationFrame FPS throttling, lazy rendering, and narrow Zustand selectors. Fixed a critical cleanup animation frame leak that caused sparklines/gauges to freeze.
+- **Independent AI Toggle (2026-06-10, SIGNED OFF & CLOSED ✅)** — Decoupled the OTEO AI layer from Level 3. Added a dedicated AI toggle button next to Level 1, 2, and 3 buttons in the settings panel card, syncing it to the backend and tracking it in logs/payloads.
 - **Level 3 Phase 0 (2026-05-01, SIGNED OFF)** — 5 pre-implementation fixes completed across 3 backend files.
 - **Level 3 Phase 1 (2026-05-01, SIGNED OFF)** — Added `regime_classifier.py`, exposed `candle_closed`, wired persisted regime state into `streaming.py`.
 - **Level 3 Phase 2 (2026-05-01, SIGNED OFF)** — Added `Level3PolicyConfig` + `apply_level3_policy()`, wired Level 3 policy into `streaming.py`.
@@ -31,18 +32,23 @@
 - **L1/L2/L3 Optimization and AI Knowledge Base Plan (2026-05-16, PLANNED)** — New historical analyzer and knowledge base plan documented.
 
 ## Recent Delivery Snapshot
+- **Independent AI Toggle (2026-06-10):**
+  - **decoupled AI config:** Added `oteoAiEnabled` to the Zustand settings store, updating validators and adding a toggle action.
+  - **Settings Panel UI:** Exported the `AiChipIcon` SVG from TopBar and wired it into a brand new independent AI toggle button right next to Level 1/2/3 indicators, while renaming Level 3 (AI) to Level 3.
+  - **FastAPI Routing:** Upgraded `strategy.py` router and models to support the new `oteo_ai_enabled` setting.
+  - **Streaming & Auto-Ghost:** Hooked up the state into the Socket.IO tick payloads, signal log files, and auto-ghost execution context.
 - **Lagging and Latency Optimizations (2026-06-05):**
-  - **Thread-safe Hotpath:** `PocketOptionSession` uses `loop.call_soon_threadsafe` to hand off ticks to `StreamingService` to prevent blocking the async broker loop.
-  - **Async Queueing:** `StreamingService` enqueues ticks into an `asyncio.Queue` (size 500) processed by a background worker task. Drops oldest ticks under extreme load. Emits websocket payloads before writing disk logs.
+  - **Thread-safe Hotpath:** `PocketOptionSession` uses `loop.call_soon_threadsafe` to hand off ticks to `StreamingService`.
+  - **Async Queueing:** enqueues ticks into an `asyncio.Queue` (size 500) processed by a background worker task.
   - **Memory-Buffered Logging:** `TickLogger` buffers tick writes and flushes them to disk every 5 seconds or 100 ticks.
-  - **Store Splitting & Throttling:** `useStreamStore.js` splits ticks history from current values. `useStreamConnection.js` throttles ticks updates to 10 FPS (focused) / 2 FPS (watchlist) using `requestAnimationFrame`.
-  - **Zustand Selector Refactoring:** Switched all hooks in `RightSidebar`, `GhostTradingWidget`, `SessionRiskPanel`, and `JournalView` to target narrow fields rather than destructuring entire stores.
-  - **Gauges & Sparkline Optimizations:** Lazy-renders mini gauges on hover to avoid layout recalculations. Bypasses sparkline subscriptions when disabled in configs.
-  - **Animation Frame Leak Fix:** Reset `rafIdRef.current = null` in the `useStreamConnection` socket clean-up callback, resolving the issue where charts/gauges froze after switching assets or re-registering.
+  - **Store Splitting & Throttling:** `useStreamStore.js` splits ticks history from current values.
+  - **Zustand Selector Refactoring:** Switched all hooks in `RightSidebar`, `GhostTradingWidget`, `SessionRiskPanel`, and `JournalView` to target narrow fields.
+  - **Gauges & Sparkline Optimizations:** Lazy-renders mini gauges on hover.
+  - **Animation Frame Leak Fix:** Reset `rafIdRef.current = null` in the socket clean-up callback, resolving sparkline freezing.
 
 ## Verification Status
 - `conda run -n QuFLX-v2 python -m py_compile app/backend/services/streaming.py app/backend/services/tick_logger.py app/backend/services/perf_monitor.py app/backend/session/pocket_option_session.py` -> ✅ passed
-- `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build` -> ✅ passed (built successfully in 5.09s)
+- `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build` -> ✅ passed (built successfully in 10.52s)
 - `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` -> ✅ passed (39/39 tests clean)
 
 ## Open Validation

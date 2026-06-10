@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { SectionCard, InputGroup, NumberInput, MiniModule, Tooltip } from '../shared/StitchComponents.jsx';
+import { AiChipIcon } from '../layout/TopBar.jsx';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
 import bobble from '../../../assets/bobble.gif';
@@ -50,6 +51,7 @@ export default function AppSettings() {
   const {
     oteoLevel2Enabled,
     oteoLevel3Enabled,
+    oteoAiEnabled,
     oteoWarmupBars,
     oteoCooldownBars,
     ghostAmount,
@@ -66,6 +68,7 @@ export default function AppSettings() {
     autoFocusOnSignal,
     setOteoLevel2Enabled,
     setOteoLevel3Enabled,
+    setOteoAiEnabled,
     setOteoWarmupBars,
     setOteoCooldownBars,
     setGhostAmount,
@@ -193,28 +196,43 @@ export default function AppSettings() {
           >
             <div className="space-y-6">
               <InputGroup label="Confidence Levels" tooltip="Set confidence verification thresholds for OTEO signal filtration">
-                <div className="flex gap-3">
-                  {['Level 1', 'Level 2', 'Level 3 (AI)'].map((level, idx) => {
-                    const isActive = idx === 0 || (idx === 1 && oteoLevel2Enabled) || (idx === 2 && oteoLevel3Enabled);
-                    const isSelectable = idx > 0;
-                    return (
-                      <button
-                        key={level}
-                        onClick={() => {
-                          if (idx === 1) setOteoLevel2Enabled(!oteoLevel2Enabled);
-                          if (idx === 2) setOteoLevel3Enabled(!oteoLevel3Enabled);
-                        }}
-                        disabled={!isSelectable}
-                        className={`flex-1 rounded-lg border py-4 text-[10px] font-black uppercase tracking-widest transition-all ${
-                          isActive 
-                            ? 'border-[#ffb800] bg-[#ffb800]/10 text-[#ffb800] shadow-[0_0_15px_rgba(255,184,0,0.1)]' 
-                            : 'border-white/5 bg-white/[0.02] text-gray-600 hover:border-white/10 hover:text-gray-400'
-                        }`}
-                      >
-                        {level}
-                      </button>
-                    );
-                  })}
+                <div className="flex items-stretch gap-3">
+                  <div className="flex flex-1 gap-3">
+                    {['Level 1', 'Level 2', 'Level 3'].map((level, idx) => {
+                      const isActive = idx === 0 || (idx === 1 && oteoLevel2Enabled) || (idx === 2 && oteoLevel3Enabled);
+                      const isSelectable = idx > 0;
+                      return (
+                        <button
+                          key={level}
+                          onClick={() => {
+                            if (idx === 1) setOteoLevel2Enabled(!oteoLevel2Enabled);
+                            if (idx === 2) setOteoLevel3Enabled(!oteoLevel3Enabled);
+                          }}
+                          disabled={!isSelectable}
+                          className={`flex-1 rounded-lg border py-4 text-[10px] font-black uppercase tracking-widest transition-all ${
+                            isActive 
+                              ? 'border-[#ffb800] bg-[#ffb800]/10 text-[#ffb800] shadow-[0_0_15px_rgba(255,184,0,0.1)]' 
+                              : 'border-white/5 bg-white/[0.02] text-gray-600 hover:border-white/10 hover:text-gray-400'
+                          }`}
+                        >
+                          {level}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    onClick={() => setOteoAiEnabled(!oteoAiEnabled)}
+                    title={oteoAiEnabled ? 'AI Layer enabled — click to disable' : 'AI Layer disabled — click to enable'}
+                    className={`flex w-14 items-center justify-center rounded-lg border transition-all duration-350 ${
+                      oteoAiEnabled 
+                        ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
+                        : 'border-white/5 bg-[#25282f]/30 hover:border-white/10 hover:bg-[#25282f]/50'
+                    }`}
+                  >
+                    <div className={oteoAiEnabled ? '' : 'grayscale opacity-40'}>
+                      <AiChipIcon size={34} />
+                    </div>
+                  </button>
                 </div>
               </InputGroup>
 

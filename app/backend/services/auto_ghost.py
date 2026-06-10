@@ -423,6 +423,7 @@ class AutoGhostService:
             "level3_enabled": oteo_result.get("level3_enabled"),
             "level3_score_adjustment": oteo_result.get("level3_score_adjustment"),
             "level3_suppressed_reason": oteo_result.get("level3_suppressed_reason"),
+            "oteo_ai_enabled": oteo_result.get("oteo_ai_enabled"),
             "regime_label": oteo_result.get("regime_label"),
             "regime_confidence": oteo_result.get("regime_confidence"),
             "regime_stable": oteo_result.get("regime_stable"),

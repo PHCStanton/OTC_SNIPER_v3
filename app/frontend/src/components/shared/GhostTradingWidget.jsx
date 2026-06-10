@@ -274,13 +274,21 @@ export default function GhostTradingWidget() {
                           className="flex w-full items-center justify-between rounded-xl bg-[#25282f]/30 border border-white/5 p-2.5 transition hover:bg-[#25282f]/60 hover:border-[#ffb800]/20 text-left"
                           title={autoGhostCopyMode === 'execute' ? 'Click to Copy & Execute on Live' : 'Click to Select Asset'}
                         >
-                          <div className="flex flex-col">
+                          <div className="flex flex-col w-[110px] shrink-0">
                             <span className="text-[10px] font-black uppercase text-white tracking-wide">{assetLabel}</span>
                             <span className={`text-[8.5px] font-black uppercase ${directionColor} mt-0.5`}>
                               {directionLabel}
                             </span>
                           </div>
-                          <div className="flex items-center gap-2">
+
+                          <div className="flex flex-col items-center justify-center shrink-0">
+                            <span className="text-[7.5px] font-black uppercase tracking-widest text-gray-500">OTEO Score</span>
+                            <span className="text-[11px] font-black text-[#ffb800] font-mono leading-none mt-0.5">
+                              {trade.oteo_score != null ? `${Math.round(trade.oteo_score)}%` : '—'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 w-[110px] shrink-0">
                             <span className={`rounded-md border px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider ${outcomeColor}`}>
                               {outcomeLabel}
                             </span>

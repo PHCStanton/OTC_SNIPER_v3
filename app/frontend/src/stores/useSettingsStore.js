@@ -10,6 +10,7 @@ export const SETTINGS_DEFAULTS = {
   oteoEnabled: true,
   oteoLevel2Enabled: false,
   oteoLevel3Enabled: false,
+  oteoAiEnabled: false,
   oteoWarmupBars: 20,
   oteoCooldownBars: 3,
 
@@ -113,6 +114,7 @@ export function validateSettings(input = {}) {
     oteoEnabled: true,
     oteoLevel2Enabled,
     oteoLevel3Enabled,
+    oteoAiEnabled: toBoolean(input.oteoAiEnabled, SETTINGS_DEFAULTS.oteoAiEnabled),
     oteoWarmupBars: toNumber(input.oteoWarmupBars, SETTINGS_DEFAULTS.oteoWarmupBars, { min: 0, max: 500, integer: true }),
     oteoCooldownBars: toNumber(input.oteoCooldownBars, SETTINGS_DEFAULTS.oteoCooldownBars, { min: 0, max: 500, integer: true }),
 
@@ -215,6 +217,7 @@ export const useSettingsStore = create()(
             oteoLevel3Enabled: val,
           }),
         })),
+      setOteoAiEnabled: (val) => commitSettingsPatch(set, { oteoAiEnabled: val }),
       setOteoWarmupBars: (val) => commitSettingsPatch(set, { oteoWarmupBars: val }),
       setOteoCooldownBars: (val) => commitSettingsPatch(set, { oteoCooldownBars: val }),
       setGhostAmount: (val) => commitSettingsPatch(set, { ghostAmount: val }),

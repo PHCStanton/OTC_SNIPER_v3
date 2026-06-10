@@ -40,6 +40,7 @@ class StreamingService:
         self.level2_config = Level2Config()
         self.level2_enabled = False
         self.level3_enabled = False
+        self.oteo_ai_enabled = False
         self.trade_service = TradeService(repository=get_data_repository(), sio=sio_server)
         self.auto_ghost = AutoGhostService(self.trade_service)
         self.trade_service.set_auto_ghost(self.auto_ghost)
@@ -72,6 +73,7 @@ class StreamingService:
         *,
         level2_enabled: bool | None = None,
         level3_enabled: bool | None = None,
+        oteo_ai_enabled: bool | None = None,
         auto_ghost_enabled: bool | None = None,
         auto_ghost_amount: float | None = None,
         auto_ghost_expiration_seconds: int | None = None,
@@ -95,10 +97,14 @@ class StreamingService:
             self.level2_enabled = bool(level2_enabled)
         if level3_enabled is not None:
             self.level3_enabled = bool(level3_enabled) and self.level2_enabled
-            if previous_level3_enabled and not self.level3_enabled:
-                self._clear_level3_state(reset_classifiers=False)
-            elif not previous_level3_enabled and self.level3_enabled:
-                self._clear_level3_state(reset_classifiers=True)
+        if oteo_ai_enabled is not None:
+            self.oteo_ai_enabled = bool(oteo_ai_enabled)
+        elif not hasattr(self, "oteo_ai_enabled"):
+            self.oteo_ai_enabled = False
+        if previous_level3_enabled and not self.level3_enabled:
+            self._clear_level3_state(reset_classifiers=False)
+        elif not previous_level3_enabled and self.level3_enabled:
+            self._clear_level3_state(reset_classifiers=True)
         auto_ghost_status = self.auto_ghost.update_config(
             enabled=auto_ghost_enabled,
             amount=auto_ghost_amount,
@@ -121,6 +127,7 @@ class StreamingService:
         return {
             "oteo_level2_enabled": self.level2_enabled,
             "oteo_level3_enabled": self.level3_enabled,
+            "oteo_ai_enabled": self.oteo_ai_enabled,
             **auto_ghost_status,
         }
 
@@ -298,6 +305,7 @@ class StreamingService:
             enriched_result = apply_level2_policy(oteo_result, market_context, self.level2_enabled)
             enriched_result["level2_enabled"] = self.level2_enabled
             enriched_result["level3_enabled"] = self.level3_enabled
+            enriched_result["oteo_ai_enabled"] = self.oteo_ai_enabled
             if self.level3_enabled and regime is not None:
                 enriched_result["regime"] = regime
                 enriched_result = apply_level3_policy(enriched_result, market_context, regime)
@@ -335,6 +343,7 @@ class StreamingService:
                 "base_actionable": enriched_result["base_actionable"],
                 "level2_enabled": enriched_result["level2_enabled"],
                 "level3_enabled": enriched_result["level3_enabled"],
+                "oteo_ai_enabled": enriched_result["oteo_ai_enabled"],
                 "level2_score_adjustment": enriched_result["level2_score_adjustment"],
                 "level2_suppressed_reason": enriched_result["level2_suppressed_reason"],
                 "level3_score_adjustment": enriched_result.get("level3_score_adjustment", 0.0),
@@ -351,6 +360,7 @@ class StreamingService:
                 "maturity": 0.0,
                 "level2_enabled": self.level2_enabled,
                 "level3_enabled": self.level3_enabled,
+                "oteo_ai_enabled": self.oteo_ai_enabled,
                 "level3_score_adjustment": 0.0,
                 "level3_suppressed_reason": None,
                 "market_context": market_context,
@@ -403,6 +413,7 @@ class StreamingService:
                 "level2_suppressed_reason": oteo_result["level2_suppressed_reason"],
                 "level3_score_adjustment": oteo_result.get("level3_score_adjustment"),
                 "level3_suppressed_reason": oteo_result.get("level3_suppressed_reason"),
+                "oteo_ai_enabled": oteo_result.get("oteo_ai_enabled", False),
                 "regime_label": oteo_result.get("regime_label"),
                 "regime_confidence": oteo_result.get("regime_confidence"),
                 "regime_stable": oteo_result.get("regime_stable"),

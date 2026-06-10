@@ -22,6 +22,7 @@ export default function App() {
   const { setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType } = useOpsStore();
   const oteoLevel2Enabled = useSettingsStore((s) => s.oteoLevel2Enabled);
   const oteoLevel3Enabled = useSettingsStore((s) => s.oteoLevel3Enabled);
+  const oteoAiEnabled = useSettingsStore((s) => s.oteoAiEnabled);
   const ghostAmount = useSettingsStore((s) => s.ghostAmount);
   const autoGhostEnabled = useSettingsStore((s) => s.autoGhostEnabled);
   const autoGhostExpirationSeconds = useSettingsStore((s) => s.autoGhostExpirationSeconds);
@@ -94,6 +95,7 @@ export default function App() {
           entryTime: data.entry_time,
           expirationSeconds: data.expiration_seconds,
           amount: data.amount,
+          oteoScore: data.oteo_score,
         });
       }
 
@@ -228,6 +230,7 @@ export default function App() {
         await updateRuntimeStrategyConfig({
           oteo_level2_enabled: oteoLevel2Enabled,
           oteo_level3_enabled: oteoLevel3Enabled,
+          oteo_ai_enabled: oteoAiEnabled,
           auto_ghost_enabled: autoGhostEnabled,
           auto_ghost_amount: ghostAmount,
           auto_ghost_expiration_seconds: autoGhostExpirationSeconds,
@@ -264,6 +267,7 @@ export default function App() {
   }, [
     oteoLevel2Enabled,
     oteoLevel3Enabled,
+    oteoAiEnabled,
     ghostAmount,
     autoGhostEnabled,
     autoGhostExpirationSeconds,
