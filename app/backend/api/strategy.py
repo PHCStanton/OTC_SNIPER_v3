@@ -22,6 +22,14 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_max_drawdown_amount: float = Field(default=0.0, ge=0)
     auto_ghost_drawdown_cooldown_seconds: int = Field(default=300, ge=0, le=36000)
     auto_ghost_minimum_payout: float = Field(default=0.88, ge=0.0, le=1.0)
+    auto_ghost_manipulation_severity_threshold: float = Field(default=0.0, ge=0.0, le=1.0)
+    auto_ghost_block_on_manipulation: bool = Field(default=True)
+    auto_ghost_min_confidence_enabled: bool = Field(default=False)
+    auto_ghost_min_confidence: float | None = Field(default=None)
+    auto_ghost_max_confidence_enabled: bool = Field(default=False)
+    auto_ghost_max_confidence: float | None = Field(default=None)
+    auto_ghost_max_trades_per_timeframe: int = Field(default=0, ge=0, le=100)
+    auto_ghost_timeframe_seconds: int = Field(default=0, ge=0, le=3600)
 
 
 @router.get("/runtime-config")
@@ -53,6 +61,14 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             auto_ghost_max_drawdown_amount=body.auto_ghost_max_drawdown_amount,
             auto_ghost_drawdown_cooldown_seconds=body.auto_ghost_drawdown_cooldown_seconds,
             auto_ghost_minimum_payout_pct=body.auto_ghost_minimum_payout * 100.0,
+            auto_ghost_manipulation_severity_threshold=body.auto_ghost_manipulation_severity_threshold,
+            auto_ghost_block_on_manipulation=body.auto_ghost_block_on_manipulation,
+            auto_ghost_min_confidence_enabled=body.auto_ghost_min_confidence_enabled,
+            auto_ghost_min_confidence=body.auto_ghost_min_confidence,
+            auto_ghost_max_confidence_enabled=body.auto_ghost_max_confidence_enabled,
+            auto_ghost_max_confidence=body.auto_ghost_max_confidence,
+            auto_ghost_max_trades_per_timeframe=body.auto_ghost_max_trades_per_timeframe,
+            auto_ghost_timeframe_seconds=body.auto_ghost_timeframe_seconds,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:

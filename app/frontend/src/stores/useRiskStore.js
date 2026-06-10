@@ -211,29 +211,52 @@ function summarizeSession(startBalance, tradeRuns, currentTradeRun) {
 }
 
 function updateGhostTradeStats(state, newTrade) {
-  const outcome = VALID_OUTCOMES.has(newTrade.outcome) ? newTrade.outcome : 'void';
-  const tradePnl = normalizeNumber(newTrade.pnl, 0);
+  let exists = false;
+  const nextTrades = state.ghostTrades.map((t) => {
+    if (t.tradeId === newTrade.tradeId || t.id === newTrade.tradeId) {
+      exists = true;
+      return newTrade;
+    }
+    return t;
+  });
 
-  const wins = outcome === 'win' ? state.ghostWins + 1 : state.ghostWins;
-  const losses = outcome === 'loss' ? state.ghostLosses + 1 : state.ghostLosses;
-  const total = state.ghostTotalTrades + 1;
-  const pnl = state.ghostPnl + tradePnl;
+  if (!exists) {
+    nextTrades.push(newTrade);
+  }
 
-  const nextTrades = [...state.ghostTrades, newTrade].slice(-200);
-
+  let wins = 0;
+  let losses = 0;
+  let total = 0;
+  let pnl = 0;
   let peak = 0;
   let running = 0;
   let maxDrawdown = 0;
+
   nextTrades.forEach((t) => {
-    running += t.pnl;
-    peak = Math.max(peak, running);
-    maxDrawdown = Math.max(maxDrawdown, peak - running);
+    if (t.outcome === 'win') {
+      wins += 1;
+      pnl += t.pnl;
+      total += 1;
+    } else if (t.outcome === 'loss') {
+      losses += 1;
+      pnl += t.pnl;
+      total += 1;
+    } else if (t.outcome === 'void') {
+      pnl += t.pnl;
+      total += 1;
+    }
+
+    if (t.outcome !== 'pending') {
+      running += t.pnl;
+      peak = Math.max(peak, running);
+      maxDrawdown = Math.max(maxDrawdown, peak - running);
+    }
   });
 
   const resolvedTrades = wins + losses;
 
   return {
-    ghostTrades: nextTrades,
+    ghostTrades: nextTrades.slice(-200),
     ghostWins: wins,
     ghostLosses: losses,
     ghostPnl: pnl,
@@ -501,6 +524,41 @@ export const useRiskStore = create((set, get) => ({
       ghostMaxDrawdown: 0,
       assetStats: {},
     }),
+
+  recordGhostTradeEntry: ({
+    tradeId,
+    asset,
+    direction,
+    entryPrice,
+    entryTime,
+    expirationSeconds,
+    amount,
+  }) => {
+    set((state) => {
+      const nextTrade = createTrade({
+        outcome: 'pending',
+        pnl: 0,
+        stake: amount || 0,
+        payoutPercentage: 0,
+        source: 'ghost',
+        tradeId,
+        asset,
+        direction,
+        expirationSeconds,
+        entryPrice,
+        entryTime,
+      });
+
+      // Avoid duplicates
+      if (state.ghostTrades.some((t) => t.tradeId === tradeId)) {
+        return {};
+      }
+
+      return {
+        ghostTrades: [...state.ghostTrades, nextTrade].slice(-200),
+      };
+    });
+  },
 
   recordAssetTrade: (asset, outcome) => {
     if (!asset || !['win', 'loss'].includes(outcome)) return;

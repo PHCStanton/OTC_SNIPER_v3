@@ -22,9 +22,16 @@ class AutoGhostConfig:
     per_asset_cooldown_seconds: int = 30
     minimum_payout_pct: float = 88.0
     block_on_manipulation: bool = True
+    manipulation_severity_threshold: float = 0.0  # 0.0 to 1.0 (default 0.0 is block on any)
     max_session_trades: int = 100
     max_drawdown_amount: float = 0.0
     drawdown_cooldown_seconds: int = 300
+    min_confidence_enabled: bool = False
+    min_confidence: float | None = None
+    max_confidence_enabled: bool = False
+    max_confidence: float | None = None
+    max_trades_per_timeframe: int = 0
+    timeframe_seconds: int = 0
 
 
 class AutoGhostService:
@@ -52,6 +59,7 @@ class AutoGhostService:
         self._last_streak_start_time: float = 0.0
         self._avg_recovery_time: float = 0.0
         self._total_recovery_sessions: int = 0
+        self._trade_timestamps: list[float] = []
 
     def update_config(
         self,
@@ -65,6 +73,14 @@ class AutoGhostService:
         max_session_trades: int | None = None,
         max_drawdown_amount: float | None = None,
         drawdown_cooldown_seconds: int | None = None,
+        manipulation_severity_threshold: float | None = None,
+        block_on_manipulation: bool | None = None,
+        min_confidence_enabled: bool | None = None,
+        min_confidence: float | None = None,
+        max_confidence_enabled: bool | None = None,
+        max_confidence: float | None = None,
+        max_trades_per_timeframe: int | None = None,
+        timeframe_seconds: int | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         self.config = AutoGhostConfig(
@@ -82,10 +98,49 @@ class AutoGhostService:
                 if minimum_payout_pct is None
                 else max(0.0, min(100.0, float(minimum_payout_pct)))
             ),
-            block_on_manipulation=self.config.block_on_manipulation,
+            block_on_manipulation=(
+                self.config.block_on_manipulation
+                if block_on_manipulation is None
+                else bool(block_on_manipulation)
+            ),
+            manipulation_severity_threshold=(
+                self.config.manipulation_severity_threshold
+                if manipulation_severity_threshold is None
+                else max(0.0, min(1.0, float(manipulation_severity_threshold)))
+            ),
             max_session_trades=self.config.max_session_trades if max_session_trades is None else max(1, int(max_session_trades)),
             max_drawdown_amount=self.config.max_drawdown_amount if max_drawdown_amount is None else max(0.0, float(max_drawdown_amount)),
             drawdown_cooldown_seconds=self.config.drawdown_cooldown_seconds if drawdown_cooldown_seconds is None else max(0, int(drawdown_cooldown_seconds)),
+            min_confidence_enabled=(
+                self.config.min_confidence_enabled
+                if min_confidence_enabled is None
+                else bool(min_confidence_enabled)
+            ),
+            min_confidence=(
+                self.config.min_confidence
+                if min_confidence is None
+                else (float(min_confidence) if min_confidence is not None else None)
+            ),
+            max_confidence_enabled=(
+                self.config.max_confidence_enabled
+                if max_confidence_enabled is None
+                else bool(max_confidence_enabled)
+            ),
+            max_confidence=(
+                self.config.max_confidence
+                if max_confidence is None
+                else (float(max_confidence) if max_confidence is not None else None)
+            ),
+            max_trades_per_timeframe=(
+                self.config.max_trades_per_timeframe
+                if max_trades_per_timeframe is None
+                else max(0, int(max_trades_per_timeframe))
+            ),
+            timeframe_seconds=(
+                self.config.timeframe_seconds
+                if timeframe_seconds is None
+                else max(0, int(timeframe_seconds))
+            ),
         )
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
@@ -104,6 +159,7 @@ class AutoGhostService:
             self._last_streak_start_time = unix_time()
             self._avg_recovery_time = 0.0
             self._total_recovery_sessions = 0
+            self._trade_timestamps.clear()
             logger.info("Started Auto-Ghost session %s", self._session_id)
         elif not self.config.enabled and previous_enabled:
             self._pending_signals.clear()
@@ -118,6 +174,14 @@ class AutoGhostService:
             "auto_ghost_max_concurrent_trades": self.config.max_concurrent_trades,
             "auto_ghost_per_asset_cooldown_seconds": self.config.per_asset_cooldown_seconds,
             "auto_ghost_minimum_payout_pct": self.config.minimum_payout_pct,
+            "auto_ghost_manipulation_severity_threshold": self.config.manipulation_severity_threshold,
+            "auto_ghost_block_on_manipulation": self.config.block_on_manipulation,
+            "auto_ghost_min_confidence_enabled": self.config.min_confidence_enabled,
+            "auto_ghost_min_confidence": self.config.min_confidence,
+            "auto_ghost_max_confidence_enabled": self.config.max_confidence_enabled,
+            "auto_ghost_max_confidence": self.config.max_confidence,
+            "auto_ghost_max_trades_per_timeframe": self.config.max_trades_per_timeframe,
+            "auto_ghost_timeframe_seconds": self.config.timeframe_seconds,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -250,10 +314,45 @@ class AutoGhostService:
             return self._reject(asset)
         if now < self._drawdown_cooldown_until:
             return self._reject(asset)
+
+        # Timeframe limit gate check
+        if self.config.max_trades_per_timeframe > 0 and self.config.timeframe_seconds > 0:
+            self._trade_timestamps = [t for t in self._trade_timestamps if timestamp - t < self.config.timeframe_seconds]
+            if len(self._trade_timestamps) >= self.config.max_trades_per_timeframe:
+                logger.info(
+                    "Auto-Ghost skipped %s: timeframe limit reached (%d trades in last %ds, limit: %d)",
+                    asset,
+                    len(self._trade_timestamps),
+                    self.config.timeframe_seconds,
+                    self.config.max_trades_per_timeframe
+                )
+                return self._reject(asset)
+
         if oteo_result.get("recommended") not in {"CALL", "PUT"}:
             return self._reject(asset)
         if not oteo_result.get("actionable"):
             return self._reject(asset)
+
+        # Numeric confidence gate bounds checks
+        score = float(oteo_result.get("oteo_score", 0.0))
+        if self.config.min_confidence_enabled and self.config.min_confidence is not None:
+            if score < self.config.min_confidence:
+                logger.debug(
+                    "Auto-Ghost skipped %s: score %.1f < min confidence bounds %.1f",
+                    asset,
+                    score,
+                    self.config.min_confidence
+                )
+                return self._reject(asset)
+        if self.config.max_confidence_enabled and self.config.max_confidence is not None:
+            if score > self.config.max_confidence:
+                logger.debug(
+                    "Auto-Ghost skipped %s: score %.1f > max confidence bounds %.1f",
+                    asset,
+                    score,
+                    self.config.max_confidence
+                )
+                return self._reject(asset)
         if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
             logger.debug(
                 "Auto-Ghost skipped %s: payout %.1f%% < minimum %.1f%%",
@@ -263,7 +362,22 @@ class AutoGhostService:
             )
             return self._reject(asset)
         if self.config.block_on_manipulation and manipulation:
-            return self._reject(asset)
+            def _get_severity(val: Any) -> float:
+                if isinstance(val, bool):
+                    return 1.0 if val else 0.0
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return 1.0 if val else 0.0
+
+            if any(_get_severity(score) >= self.config.manipulation_severity_threshold for score in manipulation.values()):
+                logger.info(
+                    "Auto-Ghost skipped %s due to active manipulation severity: %s (threshold: %.2f)",
+                    asset,
+                    manipulation,
+                    self.config.manipulation_severity_threshold
+                )
+                return self._reject(asset)
         if asset in self._active_assets:
             return self._reject(asset)
         if len(self._active_assets) >= self.config.max_concurrent_trades:
@@ -271,22 +385,23 @@ class AutoGhostService:
         if unix_time() < self._cooldown_until.get(asset, 0):
             return self._reject(asset)
 
-        direction = str(oteo_result.get("recommended"))
-        pending = self._pending_signals.get(asset)
-        if pending is None:
-            self._pending_signals[asset] = (dict(oteo_result), 1)
-            return None
+        if self.CONFIRMATION_TICKS > 1:
+            direction = str(oteo_result.get("recommended"))
+            pending = self._pending_signals.get(asset)
+            if pending is None:
+                self._pending_signals[asset] = (dict(oteo_result), 1)
+                return None
 
-        pending_signal, pending_count = pending
-        if pending_signal.get("recommended") != direction:
-            return self._reject(asset)
+            pending_signal, pending_count = pending
+            if pending_signal.get("recommended") != direction:
+                return self._reject(asset)
 
-        pending_count += 1
-        if pending_count < self.CONFIRMATION_TICKS:
-            self._pending_signals[asset] = (dict(oteo_result), pending_count)
-            return None
+            pending_count += 1
+            if pending_count < self.CONFIRMATION_TICKS:
+                self._pending_signals[asset] = (dict(oteo_result), pending_count)
+                return None
 
-        self._pending_signals.pop(asset, None)
+            self._pending_signals.pop(asset, None)
 
         entry_context = {
             "asset": asset,
@@ -339,6 +454,9 @@ class AutoGhostService:
         if not result.get("success"):
             logger.warning("Auto-Ghost failed for %s: %s", asset, result.get("message"))
             return result
+
+        # Record trade execution timestamp for timeframe gating
+        self._trade_timestamps.append(timestamp)
 
         self._active_assets.add(asset)
         self._cooldown_until[asset] = unix_time() + self.config.expiration_seconds + self.config.per_asset_cooldown_seconds

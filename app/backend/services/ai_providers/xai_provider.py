@@ -18,11 +18,12 @@ class XAIProvider(AIProvider):
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout_s
 
-    async def complete(self, *, model: str, input_items: list[dict[str, Any]]) -> AIResult:
+    async def complete(self, *, model: str, input_items: list[dict[str, Any]], **kwargs: Any) -> AIResult:
         if not self._api_key:
             raise ValueError("GROK_API_KEY is required to call the xAI provider.")
 
         payload = {"model": model, "input": input_items}
+        payload.update(kwargs)
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",

@@ -16,11 +16,12 @@ class ManipulationDetector:
         self.velocities: deque = deque(maxlen=300)
         self.price_history: deque = deque(maxlen=300)
         self._last_timestamp: float = 0.0
-        self._push_snap_until: float = 0.0
+        self._push_snap_trigger_time: float = 0.0
+        self._push_snap_initial_severity: float = 0.0
 
-    def update(self, timestamp: float, price: float) -> Dict[str, Any]:
+    def update(self, timestamp: float, price: float) -> Dict[str, float]:
         """
-        Update detection state with new tick and return active flags.
+        Update detection state with new tick and return active severity scores.
         """
         # Guard against NaN / Inf prices
         if not np.isfinite(price):
@@ -37,25 +38,35 @@ class ManipulationDetector:
         self._last_timestamp = timestamp
         self.velocities.append(vel)
 
-        avg_vel = np.mean(self.velocities) if self.velocities else 0.0
+        # MAV calculation (average of absolute values) to prevent cancellation
+        mav = np.mean([abs(v) for v in self.velocities]) if self.velocities else 0.0
         flags = {}
 
-        # 1. Push & Snap: velocity spike vs rolling average
-        # Memory added: if a massive spike happens, block for 15 seconds to let shock absorb
-        if abs(vel) > 3 * max(abs(avg_vel), 0.0001):
-            self._push_snap_until = timestamp + 15.0
-            
-        if timestamp < self._push_snap_until:
-            flags["push_snap"] = True
+        # 1. Push & Snap: velocity spike vs MAV with exponential decay
+        ratio = abs(vel) / max(mav, 0.0001)
+        if ratio > 3.0:
+            self._push_snap_trigger_time = timestamp
+            # Scale severity: spike of 3.0 -> 0.3 severity, spike of 10.0+ -> 1.0 severity
+            self._push_snap_initial_severity = max(0.3, min(1.0, ratio / 10.0))
+
+        # Check decay window (exponential decay over time with tau = 5.0 seconds)
+        time_elapsed = timestamp - self._push_snap_trigger_time
+        if time_elapsed >= 0.0:
+            severity = self._push_snap_initial_severity * np.exp(-time_elapsed / 5.0)
+            if severity > 0.01:
+                flags["push_snap"] = round(float(severity), 3)
 
         # 2. Pinning: price clustering at a tight level Over recent 20 ticks
-        # Loosened: Check if the entire range (max - min) of the last 20 ticks is abnormally small
         recent_prices = list(self.price_history)[-20:]
         if len(recent_prices) >= 20:
             price_range = max(recent_prices) - min(recent_prices)
             avg_price = np.mean(recent_prices)
-            # If the price hasn't moved more than 0.005% of its value in 20 ticks, it's pinned
-            if price_range < (avg_price * 0.00005):
-                flags["pinning"] = True
+            threshold = avg_price * 0.00005
+            
+            # Continuous severity from 0.0 (at threshold border) to 1.0 (perfect flatline)
+            if price_range < threshold:
+                pinning_severity = 1.0 - (price_range / threshold)
+                if pinning_severity > 0.01:
+                    flags["pinning"] = round(float(pinning_severity), 3)
 
         return flags

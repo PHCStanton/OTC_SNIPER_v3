@@ -116,7 +116,7 @@ class RuntimeSettings:
             chrome_executable=os.getenv("CHROME_PATH", ""),
             enable_ops=_parse_bool(os.getenv("QFLX_ENABLE_OPS"), False),
             grok_api_key=os.getenv("GROK_API_KEY", "").strip(),
-            ai_model=os.getenv("AI_MODEL", "grok-4-1-fast-non-reasoning").strip() or "grok-4-1-fast-non-reasoning",
+            ai_model=os.getenv("AI_MODEL", "grok-4.3").strip() or "grok-4.3",
             ai_enabled=_parse_bool(os.getenv("AI_ENABLED"), True) and bool(os.getenv("GROK_API_KEY", "").strip()),
             app_root=app_root,
             data_dir=data_dir,

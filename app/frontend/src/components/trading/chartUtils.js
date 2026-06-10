@@ -14,10 +14,11 @@ export function getManipulationLabels(manipulation) {
 
   const labels = Object.entries(flags)
     .filter(([, active]) => Boolean(active))
-    .map(([key]) => {
-      if (key === 'push_snap') return 'Push & Snap';
-      if (key === 'pinning') return 'Pinning';
-      return toTitleCase(key);
+    .map(([key, val]) => {
+      const severity = typeof val === 'number' ? ` (${Math.round(val * 100)}%)` : '';
+      if (key === 'push_snap') return `Push & Snap${severity}`;
+      if (key === 'pinning') return `Pinning${severity}`;
+      return `${toTitleCase(key)}${severity}`;
     });
 
   if (labels.length > 0) return labels;

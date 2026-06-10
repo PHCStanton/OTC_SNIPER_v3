@@ -81,6 +81,14 @@ class StreamingService:
         auto_ghost_max_drawdown_amount: float | None = None,
         auto_ghost_drawdown_cooldown_seconds: int | None = None,
         auto_ghost_minimum_payout_pct: float | None = None,
+        auto_ghost_manipulation_severity_threshold: float | None = None,
+        auto_ghost_block_on_manipulation: bool | None = None,
+        auto_ghost_min_confidence_enabled: bool | None = None,
+        auto_ghost_min_confidence: float | None = None,
+        auto_ghost_max_confidence_enabled: bool | None = None,
+        auto_ghost_max_confidence: float | None = None,
+        auto_ghost_max_trades_per_timeframe: int | None = None,
+        auto_ghost_timeframe_seconds: int | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -101,6 +109,14 @@ class StreamingService:
             max_session_trades=auto_ghost_max_session_trades,
             max_drawdown_amount=auto_ghost_max_drawdown_amount,
             drawdown_cooldown_seconds=auto_ghost_drawdown_cooldown_seconds,
+            manipulation_severity_threshold=auto_ghost_manipulation_severity_threshold,
+            block_on_manipulation=auto_ghost_block_on_manipulation,
+            min_confidence_enabled=auto_ghost_min_confidence_enabled,
+            min_confidence=auto_ghost_min_confidence,
+            max_confidence_enabled=auto_ghost_max_confidence_enabled,
+            max_confidence=auto_ghost_max_confidence,
+            max_trades_per_timeframe=auto_ghost_max_trades_per_timeframe,
+            timeframe_seconds=auto_ghost_timeframe_seconds,
         )
         return {
             "oteo_level2_enabled": self.level2_enabled,
@@ -285,6 +301,23 @@ class StreamingService:
             if self.level3_enabled and regime is not None:
                 enriched_result["regime"] = regime
                 enriched_result = apply_level3_policy(enriched_result, market_context, regime)
+            
+            # Apply manipulation severity penalty to OTEO score
+            if manipulation:
+                max_severity = max(manipulation.values()) if manipulation.values() else 0.0
+                if max_severity > 0.0:
+                    penalty = max_severity * 20.0
+                    enriched_result["oteo_score"] = round(max(0.0, enriched_result["oteo_score"] - penalty), 1)
+                    
+                    # Dynamic confidence / actionability downgrade
+                    if enriched_result["oteo_score"] <= 55.0:  # min actionable floor
+                        enriched_result["confidence"] = "LOW"
+                        enriched_result["actionable"] = False
+                    elif enriched_result["oteo_score"] < 70.0 and enriched_result["confidence"] == "HIGH":
+                        enriched_result["confidence"] = "MEDIUM"
+                        
+                    enriched_result["manipulation_penalty"] = round(penalty, 1)
+
             payload.update({
                 "oteo_score": enriched_result["oteo_score"],
                 "recommended": enriched_result["recommended"],
@@ -306,6 +339,7 @@ class StreamingService:
                 "level2_suppressed_reason": enriched_result["level2_suppressed_reason"],
                 "level3_score_adjustment": enriched_result.get("level3_score_adjustment", 0.0),
                 "level3_suppressed_reason": enriched_result.get("level3_suppressed_reason"),
+                "manipulation_penalty": enriched_result.get("manipulation_penalty", 0.0),
                 "market_context": enriched_result["market_context"],
             })
             oteo_result = enriched_result
@@ -374,6 +408,7 @@ class StreamingService:
                 "regime_stable": oteo_result.get("regime_stable"),
                 "market_context": oteo_result["market_context"],
                 "manip": bool(manipulation),
+                "manipulation_penalty": oteo_result.get("manipulation_penalty", 0.0),
                 "broker": source
             })
             payout_pct = self._resolve_asset_payout_pct(asset)

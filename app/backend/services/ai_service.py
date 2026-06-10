@@ -13,7 +13,38 @@ from ..models.ai_models import AIChatRequest, AIContext, AIImageRequest, AIStatu
 from .ai_providers import AIProvider, AIResult, get_provider
 
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
-DEFAULT_AI_MODEL = "grok-4-1-fast-non-reasoning"
+DEFAULT_AI_MODEL = "grok-4.3"
+
+# Registry mapping user-facing model keys to physical API models and their options
+MODEL_REGISTRY: dict[str, dict[str, Any]] = {
+    "grok-4.3": {
+        "api_model": "grok-4.3",
+        "params": {"reasoning_effort": "none"},  # default to fast, cost-efficient non-reasoning
+    },
+    "grok-4-1-fast-non-reasoning": {
+        "api_model": "grok-4.3",
+        "params": {"reasoning_effort": "none"},  # legacy mapping
+    },
+    "grok-4-1-fast-reasoning": {
+        "api_model": "grok-4.3",
+        "params": {"reasoning_effort": "low"},   # legacy mapping
+    },
+    "grok-4": {
+        "api_model": "grok-4.3",
+        "params": {"reasoning_effort": "none"},  # legacy mapping
+    },
+}
+
+VOICE_OVER_SYSTEM_PROMPT = """
+You are OTC SNIPER's voice-over script generator.
+Your goal is to produce engaging, professional, and natural-sounding scripts for project updates, reviews, and documentation.
+
+Formatting Guidelines:
+- Write exactly what the speaker should say. Do not include slide numbers, stage directions, or cues in the spoken text unless enclosed in square brackets like [cue: transition].
+- Maintain a confident, clear, and steady pacing. Use short sentences for readability.
+- Highlight key metrics, milestones, and technical achievements clearly but conversationally.
+- The tone should be authoritative yet accessible.
+""".strip()
 
 SYSTEM_PROMPT = """
 You are OTC SNIPER's advisory-only AI trading assistant.
@@ -60,10 +91,11 @@ class AIService:
         elif not self._settings.ai_enabled:
             reason = "AI is disabled via AI_ENABLED=false."
 
+        resolved_model, _ = self._resolve_model_config()
         return AIStatusResponse(
             enabled=enabled,
             provider="xai",
-            model=self._settings.ai_model or DEFAULT_AI_MODEL,
+            model=resolved_model,
             has_api_key=has_api_key,
             reason=reason,
         )
@@ -71,21 +103,59 @@ class AIService:
     async def chat(self, request: AIChatRequest) -> AIResult:
         self._ensure_enabled()
         input_items = self._build_chat_input(request.messages, request.context)
-        return await self.provider.complete(model=self._resolve_model(request.model), input_items=input_items)
+        model, params = self._resolve_model_config(request.model)
+        return await self.provider.complete(model=model, input_items=input_items, **params)
 
     async def analyze_image(self, request: AIImageRequest) -> AIResult:
         self._ensure_enabled()
         image = self._prepare_image(request.image_base64, request.mime_type)
         input_items = self._build_image_input(request.prompt, request.context, image)
-        return await self.provider.complete(model=self._resolve_model(request.model), input_items=input_items)
+        model, params = self._resolve_model_config(request.model)
+        return await self.provider.complete(model=model, input_items=input_items, **params)
+
+    async def generate_voice_over(
+        self,
+        content: str,
+        tone: str = "professional",
+        model: str | None = None,
+    ) -> AIResult:
+        """
+        Generates a structured, natural-sounding voice-over script from project updates or documentation.
+
+        This method serves as a lightweight foundation for future text-to-speech or voice generation pipelines.
+        """
+        self._ensure_enabled()
+
+        system_msg = {
+            "role": "system",
+            "content": [
+                {"type": "input_text", "text": f"{VOICE_OVER_SYSTEM_PROMPT}\nTone: {tone}"}
+            ]
+        }
+        user_msg = {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": f"Please generate a voice-over script for the following content:\n\n{content}"}
+            ]
+        }
+
+        input_items = [system_msg, user_msg]
+        resolved_model, params = self._resolve_model_config(model)
+        return await self.provider.complete(model=resolved_model, input_items=input_items, **params)
 
     def _ensure_enabled(self) -> None:
         if not self.status().enabled:
             raise RuntimeError(self.status().reason or "AI is disabled.")
 
-    def _resolve_model(self, override: str | None = None) -> str:
-        model = (override or self._settings.ai_model or DEFAULT_AI_MODEL).strip()
-        return model or DEFAULT_AI_MODEL
+    def _resolve_model_config(self, override: str | None = None) -> tuple[str, dict[str, Any]]:
+        """Resolves the active model name and its extra API parameters (e.g. reasoning_effort)."""
+        requested = (override or self._settings.ai_model or DEFAULT_AI_MODEL).strip()
+        if not requested:
+            requested = DEFAULT_AI_MODEL
+        config = MODEL_REGISTRY.get(requested)
+        if config:
+            return config["api_model"], config["params"]
+        return requested, {}
 
     def _build_chat_input(self, messages: list[Any], context: AIContext | None) -> list[dict[str, Any]]:
         input_items: list[dict[str, Any]] = [self._build_system_message(context)]

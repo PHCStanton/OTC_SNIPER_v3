@@ -31,6 +31,8 @@ export default function App() {
   const autoGhostMaxDrawdownAmount = useSettingsStore((s) => s.autoGhostMaxDrawdownAmount);
   const autoGhostDrawdownCooldownSeconds = useSettingsStore((s) => s.autoGhostDrawdownCooldownSeconds);
   const autoGhostMinimumPayout = useSettingsStore((s) => s.autoGhostMinimumPayout);
+  const autoGhostManipulationSeverityThreshold = useSettingsStore((s) => s.autoGhostManipulationSeverityThreshold);
+  const autoGhostBlockOnManipulation = useSettingsStore((s) => s.autoGhostBlockOnManipulation);
   const ghostMaxTradesPerTimeframe = useSettingsStore((s) => s.ghostMaxTradesPerTimeframe);
   const ghostTimeframeSeconds = useSettingsStore((s) => s.ghostTimeframeSeconds);
   const ghostMinConfidence = useSettingsStore((s) => s.ghostMinConfidence);
@@ -82,6 +84,18 @@ export default function App() {
         outcome: null,
         profit: null,
       });
+
+      if (data.kind === 'ghost') {
+        useRiskStore.getState().recordGhostTradeEntry({
+          tradeId: data.trade_id,
+          asset: data.asset,
+          direction: data.direction,
+          entryPrice: data.entry_price,
+          entryTime: data.entry_time,
+          expirationSeconds: data.expiration_seconds,
+          amount: data.amount,
+        });
+      }
 
       if (data.trigger_mode === 'auto_ghost' || data.trigger_mode === 'auto') {
         const assetLabel = typeof data.asset === 'string' ? data.asset.replace(/_otc$/i, ' OTC').replace(/_/g, '/') : String(data.asset);
@@ -223,6 +237,8 @@ export default function App() {
           auto_ghost_max_drawdown_amount: autoGhostMaxDrawdownAmount,
           auto_ghost_drawdown_cooldown_seconds: autoGhostDrawdownCooldownSeconds,
           auto_ghost_minimum_payout: autoGhostMinimumPayout / 100,
+          auto_ghost_manipulation_severity_threshold: autoGhostManipulationSeverityThreshold,
+          auto_ghost_block_on_manipulation: autoGhostBlockOnManipulation,
           auto_ghost_max_trades_per_timeframe: ghostMaxTradesPerTimeframe,
           auto_ghost_timeframe_seconds: ghostTimeframeSeconds,
           auto_ghost_min_confidence: ghostMinConfidenceEnabled ? ghostMinConfidence : null,
@@ -257,6 +273,8 @@ export default function App() {
     autoGhostMaxDrawdownAmount,
     autoGhostDrawdownCooldownSeconds,
     autoGhostMinimumPayout,
+    autoGhostManipulationSeverityThreshold,
+    autoGhostBlockOnManipulation,
     ghostMaxTradesPerTimeframe,
     ghostTimeframeSeconds,
     ghostMinConfidence,

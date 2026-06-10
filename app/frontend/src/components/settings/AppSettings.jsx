@@ -57,6 +57,8 @@ export default function AppSettings() {
     autoGhostCopyMode,
     autoGhostExpirationSeconds,
     autoGhostMinimumPayout,
+    autoGhostManipulationSeverityThreshold,
+    autoGhostBlockOnManipulation,
     ghostIcon,
     aiModel,
     showManipulationAlerts,
@@ -71,6 +73,8 @@ export default function AppSettings() {
     setAutoGhostCopyMode,
     setAutoGhostExpirationSeconds,
     setAutoGhostMinimumPayout,
+    setAutoGhostManipulationSeverityThreshold,
+    setAutoGhostBlockOnManipulation,
     setGhostIcon,
     setAiModel,
     setShowManipulationAlerts,
@@ -385,7 +389,42 @@ export default function AppSettings() {
             toggle={autoGhostEnabled}
             onToggle={setAutoGhostEnabled}
           >
-            <div className="grid grid-cols-2 gap-4">
+            {/* Ghost Avatar Selection */}
+            <div className="mb-4">
+              <button
+                onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
+                className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-4 border border-white/5 transition hover:bg-[#25282f]"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1c22] border border-white/10 group-hover:border-[#ffb800]/30 transition-colors">
+                    <img src={GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic} alt="Ghost" className="h-8 w-8 object-contain mix-blend-screen" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-white">Ghost Widget Avatar</p>
+                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Visual sprite indicator selection</p>
+                  </div>
+                </div>
+                <div className={`h-6 w-6 rounded-full border-2 transition-all ${isGhostSelectorOpen ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/10'}`} />
+              </button>
+
+              {isGhostSelectorOpen && (
+                <div className="grid grid-cols-8 gap-3 mt-3 p-4 bg-[#1a1c22] rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
+                  {GHOST_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => setGhostIcon(option.id)}
+                      className={`aspect-square rounded-lg border flex items-center justify-center transition-all ${
+                        ghostIcon === option.id ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/5 bg-white/5 hover:bg-white/10'
+                      }`}
+                    >
+                      <img src={option.src} alt={option.name} className="h-6 w-6 object-contain mix-blend-screen" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/5">
               <InputGroup label="Simulated Amount" tooltip="Fixed simulation stake amount per Ghost entry">
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-[#ffb800]">$</span>
@@ -473,41 +512,6 @@ export default function AppSettings() {
                 </button>
               </div>
             </InputGroup>
-
-            {/* Ghost Avatar Selection */}
-            <div className="pt-2 border-t border-white/5">
-              <button
-                onClick={() => setIsGhostSelectorOpen(!isGhostSelectorOpen)}
-                className="group flex w-full items-center justify-between rounded-xl bg-[#25282f]/50 p-4 border border-white/5 transition hover:bg-[#25282f]"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1c22] border border-white/10 group-hover:border-[#ffb800]/30 transition-colors">
-                    <img src={GHOST_OPTIONS.find(o => o.id === ghostIcon)?.src || ghostStatic} alt="Ghost" className="h-8 w-8 object-contain mix-blend-screen" />
-                  </div>
-                  <div className="text-left">
-                    <p className="text-[11px] font-black uppercase tracking-widest text-white">Ghost Widget Avatar</p>
-                    <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-gray-600">Visual sprite indicator selection</p>
-                  </div>
-                </div>
-                <div className={`h-6 w-6 rounded-full border-2 transition-all ${isGhostSelectorOpen ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/10'}`} />
-              </button>
-
-              {isGhostSelectorOpen && (
-                <div className="grid grid-cols-8 gap-3 mt-3 p-4 bg-[#1a1c22] rounded-xl border border-white/5 animate-in fade-in slide-in-from-top-2">
-                  {GHOST_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      onClick={() => setGhostIcon(option.id)}
-                      className={`aspect-square rounded-lg border flex items-center justify-center transition-all ${
-                        ghostIcon === option.id ? 'border-[#ffb800] bg-[#ffb800]/10' : 'border-white/5 bg-white/5 hover:bg-white/10'
-                      }`}
-                    >
-                      <img src={option.src} alt={option.name} className="h-6 w-6 object-contain mix-blend-screen" />
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </SectionCard>
 
           {/* CONFIDENCE GATES & METRICS */}
@@ -582,17 +586,56 @@ export default function AppSettings() {
                 </div>
               </InputGroup>
 
-              <div className="flex items-center justify-between border-t border-white/5 pt-4">
-                <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-white">Manipulation Alerts</p>
-                  <Tooltip content="Enable system notifications and sound alerts when volatile spikes or market manipulation index triggers" />
+              {/* Manipulation Severity Threshold Slider */}
+              <InputGroup label="Manipulation Severity Gate" tooltip="Specify the maximum allowed severity score (0.0 to 1.0) before Auto-Ghost blocks the trade. Enable bounds to apply the threshold gate.">
+                <div className="space-y-2 rounded-xl bg-white/[0.02] p-4 border border-white/5">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={autoGhostBlockOnManipulation}
+                        onChange={(e) => setAutoGhostBlockOnManipulation(e.target.checked)}
+                        className="accent-[#ffb800] rounded"
+                      />
+                      <span className={`text-[10px] font-black uppercase tracking-wider ${autoGhostBlockOnManipulation ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                        Max Allowed Severity
+                      </span>
+                    </label>
+                    <span className={`text-xs font-black font-mono ${autoGhostBlockOnManipulation ? 'text-white' : 'text-gray-600'}`}>
+                      {autoGhostManipulationSeverityThreshold.toFixed(2)}
+                    </span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="0.0"
+                    max="1.0"
+                    step="0.05"
+                    disabled={!autoGhostBlockOnManipulation}
+                    value={autoGhostManipulationSeverityThreshold}
+                    onChange={(e) => setAutoGhostManipulationSeverityThreshold(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                  />
+                  <div className="text-[10px] font-medium text-gray-500 leading-normal">
+                    Trades will execute if the current market manipulation severity is strictly below this threshold. Set to 0.0 to block on any manipulation.
+                  </div>
                 </div>
-                <button
-                  onClick={() => setShowManipulationAlerts(!showManipulationAlerts)}
-                  className={`h-5 w-10 rounded-full transition-colors ${showManipulationAlerts ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-                >
-                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${showManipulationAlerts ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
+              </InputGroup>
+
+              <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input 
+                    type="checkbox"
+                    checked={showManipulationAlerts}
+                    onChange={(e) => setShowManipulationAlerts(e.target.checked)}
+                    className="accent-[#ffb800] rounded"
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${showManipulationAlerts ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      Manipulation Alerts
+                    </span>
+                    <Tooltip content="Enable system notifications and sound alerts when volatile spikes or market manipulation index triggers" />
+                  </div>
+                </label>
               </div>
 
               <div className="rounded-xl bg-white/[0.02] p-6 text-center border border-white/5">

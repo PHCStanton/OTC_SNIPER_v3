@@ -132,7 +132,7 @@ export function useStreamConnection() {
       const manipulationPayload = payload.manipulation;
       let manipulation = null;
       if (manipulationPayload && typeof manipulationPayload === 'object') {
-        const keys = Object.keys(manipulationPayload);
+        const keys = Object.keys(manipulationPayload).filter((k) => Number(manipulationPayload[k]) > 0);
         manipulation = {
           detected: keys.length > 0,
           type: keys[0] ?? null,

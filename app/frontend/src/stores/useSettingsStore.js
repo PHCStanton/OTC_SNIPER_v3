@@ -24,6 +24,8 @@ export const SETTINGS_DEFAULTS = {
   autoGhostMaxDrawdownAmount: 100,
   autoGhostDrawdownCooldownSeconds: 300,
   autoGhostMinimumPayout: 88,
+  autoGhostManipulationSeverityThreshold: 0.0,
+  autoGhostBlockOnManipulation: true,
   ghostWidgetPosition: { x: 0, y: 0 },
   ghostIcon: 'drift.gif',
   ghostMaxTradesPerTimeframe: 2,
@@ -124,6 +126,8 @@ export function validateSettings(input = {}) {
     autoGhostMaxDrawdownAmount: toNumber(input.autoGhostMaxDrawdownAmount, SETTINGS_DEFAULTS.autoGhostMaxDrawdownAmount, { min: 0, max: 100000, integer: false }),
     autoGhostDrawdownCooldownSeconds: toNumber(input.autoGhostDrawdownCooldownSeconds, SETTINGS_DEFAULTS.autoGhostDrawdownCooldownSeconds, { min: 0, max: 36000, integer: true }),
     autoGhostMinimumPayout: toNumber(input.autoGhostMinimumPayout, SETTINGS_DEFAULTS.autoGhostMinimumPayout, { min: 0, max: 100, integer: false }),
+    autoGhostManipulationSeverityThreshold: toNumber(input.autoGhostManipulationSeverityThreshold, SETTINGS_DEFAULTS.autoGhostManipulationSeverityThreshold, { min: 0.0, max: 1.0, integer: false }),
+    autoGhostBlockOnManipulation: toBoolean(input.autoGhostBlockOnManipulation, SETTINGS_DEFAULTS.autoGhostBlockOnManipulation),
     ghostWidgetPosition: toPosition(input.ghostWidgetPosition, SETTINGS_DEFAULTS.ghostWidgetPosition),
     ghostIcon: typeof input.ghostIcon === 'string' && input.ghostIcon.trim()
       ? input.ghostIcon.trim()
@@ -223,6 +227,8 @@ export const useSettingsStore = create()(
       setAutoGhostMaxDrawdownAmount: (val) => commitSettingsPatch(set, { autoGhostMaxDrawdownAmount: val }),
       setAutoGhostDrawdownCooldownSeconds: (val) => commitSettingsPatch(set, { autoGhostDrawdownCooldownSeconds: val }),
       setAutoGhostMinimumPayout: (val) => commitSettingsPatch(set, { autoGhostMinimumPayout: val }),
+      setAutoGhostManipulationSeverityThreshold: (val) => commitSettingsPatch(set, { autoGhostManipulationSeverityThreshold: val }),
+      setAutoGhostBlockOnManipulation: (val) => commitSettingsPatch(set, { autoGhostBlockOnManipulation: val }),
       setGhostWidgetPosition: (val) => commitSettingsPatch(set, { ghostWidgetPosition: val }),
       setGhostIcon: (val) => commitSettingsPatch(set, { ghostIcon: val }),
       setGhostMaxTradesPerTimeframe: (val) => commitSettingsPatch(set, { ghostMaxTradesPerTimeframe: val }),

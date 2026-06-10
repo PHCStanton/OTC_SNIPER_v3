@@ -20,7 +20,7 @@ class AIProvider(ABC):
     name: str
 
     @abstractmethod
-    async def complete(self, *, model: str, input_items: list[dict[str, Any]]) -> AIResult:
+    async def complete(self, *, model: str, input_items: list[dict[str, Any]], **kwargs: Any) -> AIResult:
         raise NotImplementedError
 
 
