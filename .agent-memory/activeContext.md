@@ -2,6 +2,8 @@
 
 ## Summary
 - This file tracks the immediate working state of the project.
+- **We are currently working on the Git branch `feature/ai-developer-mode-paste`.**
+- **AI Developer Mode and Copy-Paste Uploads (2026-06-10) are fully implemented, verified, and closed.** Added a Developer Mode toggle to AppSettings and TopBar dropdown, enabled direct clipboard paste image uploads in the AITab, persisted pasted image files on the backend temporary path, and added visual status indicators and platform insights options.
 - **Independent AI Layer Toggle (2026-06-10) is fully implemented, verified, and closed.** Decoupled the AI advisory/model logic from Level 3. Added a dedicated AI toggle button next to Level 1, 2, and 3 buttons in the settings panel card, syncing it to the backend and tracking it in logs/payloads.
 - **Lagging and Latency Optimizations (2026-06-05) are fully implemented, verified, and closed.**
 - The Auto-Ghost trader's 401-trade evidence set already drove the Level 2 hardening and tuning work; that foundation remains stable.
@@ -13,6 +15,19 @@
 
 ## Latest Changes
 
+### Applied on 2026-06-10 — AI Developer Mode & Paste Uploads (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| AI-D0 | Git Branch | N/A | Switched to and isolated features in the `feature/ai-developer-mode-paste` branch. |
+| AI-D1 | Settings Store | `useSettingsStore.js`, `useAIStore.js` | Added `aiDevMode` setting and updated the AI store context builder to pass `developerMode: settings.aiDevMode` to the backend. |
+| AI-D2 | AppSettings UI | `AppSettings.jsx` | Added a Developer Mode toggle inside the AI Integration & Feeds section card. |
+| AI-D3 | Clipboard Paste UI | `AITab.jsx` | Added clipboard paste image listeners in the textarea. Paste operations read the file as a Data URL, set the preview, and notify via toast. Rendered a `DEVELOPER MODE ACTIVE` status label when enabled. |
+| AI-D4 | TopBar Menu | `TopBar.jsx` | Replaced the AI icon button with a relative dropdown menu containing toggles for Dev Mode, navigation shortcuts, placeholder actions, and a functional developer prompt injector. |
+| AI-D5 | Temp Directories | `config.py` | Automatically creates `data/tmp/uploaded_images` on app startup. |
+| AI-D6 | Models & Prompts | `ai_models.py`, `ai_service.py` | Updated `AIContext` model schema and system prompt compiler to insert platform-development instructions if `developer_mode` is `True`. |
+| AI-D7 | Image Persistence | `ai_service.py` | Automatically decodes base64 pasted/uploaded screenshots and writes raw binary files to `data/tmp/uploaded_images` for offline inspection. |
+
 ### Applied on 2026-06-10 — Independent AI Layer Toggle (VERIFIED ✅)
 
 | # | Area | File(s) | Outcome |
@@ -22,40 +37,16 @@
 | AI-T2 | Backend Router & Streaming | `app/backend/api/strategy.py`, `app/backend/services/streaming.py` | Updated FastAPI routes and the streaming service configuration to receive `oteo_ai_enabled`. Added a defensive check to prevent AttributeError on test stubs. Passed the setting to Socket.IO ticks payload, signal loggers, and AutoGhost signals. |
 | AI-T3 | Auto-Ghost Logger | `app/backend/services/auto_ghost.py` | Appended the status of `oteo_ai_enabled` inside the Auto-Ghost trade entry context for better analytical reporting. |
 
-### Applied on 2026-06-06 — UI Refactoring (VERIFIED ✅)
-
-| # | Area | File(s) | Outcome |
-|---|------|---------|---------|
-| UI-R0 | Sparkline Dot Visibility | `app/frontend/src/components/trading/chartUtils.js`, `app/frontend/src/components/trading/Sparkline.jsx` | Added a custom `paddingRight` parameter to `buildChartPoints` (set to 180 in Sparkline) to shift the right boundary of the sparkline leftwards. Connected the latest price dot to the right axis with a dashed tracker line and updated the "Last Price" yellow label box with a semi-transparent background and blur backdrop to prevent dot overlap. |
-| UI-R1 | Chart/Runs Toggle | `app/frontend/src/components/layout/RightSidebar.jsx` | Moved the Chart/Runs view toggle from the sidebar top header to a layout position directly below the Call/Put action cards grid, resolving accidental button-clicking. |
-| UI-R2 | Session P&L Header Relocation | `app/frontend/src/components/layout/RightSidebar.jsx` | Relocated Session P&L value and status icon next to the "Session Risk" header title, removing the large dedicated Card element to save vertical space. |
-| UI-R3 | Session P&L Font Size | `app/frontend/src/components/layout/RightSidebar.jsx` | Increased P&L value font-size to text-sm and weight to black (900) in the header for easier reading under trading pressure. |
-| UI-R4 | Session Reset Button Relocation | `app/frontend/src/components/layout/RightSidebar.jsx` | Added a gold refresh-styled session reset button directly to the left of the Chart/Runs toggle, wired to the backend session reset action. |
-
 ## Current State
-- **Performance:** Event-loop blocking has been completely eliminated. Broker ticks are queued thread-safely and written to disk in background memory-buffered cycles.
-- **Frontend Optimization:** Zustand store state is split; components only render on target changes. Throttled ticks render at a stable 10 FPS max, and lazy-rendered gauges avoid DOM/layout recalculations.
-- **Independent AI Toggle:** Users can now enable/disable the AI Layer independently in the Settings panel OTEO Signal card. Selecting/deselecting the AI button lights it up using a golden glow effect, mirroring the TopBar.
-- The Level 2 OTEO backend foundation remains operational, performant, and tuned for stricter exhaustion reversals.
+- **Performance:** Event-loop blocking has been completely eliminated.
+- **Frontend Optimization:** Zustand store state is split; components only render on target changes.
+- **Independent AI Toggle:** Users can now enable/disable the AI Layer independently in the Settings panel OTEO Signal card.
+- **Developer Mode & Dropdown:** TopBar AI button opens a dropdown menu containing navigation commands, placeholder actions, and Developer Mode switches. System prompt changes in Dev Mode to support software construction discussions.
+- **Pasting screenshots:** Direct clipboard screenshot paste operations are fully functional in AITab, and the backend writes temporary image files to `app/data/tmp/uploaded_images/` automatically.
 - The Level 3 implementation plan is active with **Phases 0, 1, 2, and 3 completed and signed off**.
 - Phase 4 (AI Advisory Review Loop) has not started.
 
 ## Validation
-- **Backend Compilation:** `conda run -n QuFLX-v2 python -m py_compile app/backend/services/streaming.py app/backend/services/tick_logger.py app/backend/services/perf_monitor.py app/backend/session/pocket_option_session.py` -> ✅ passed.
-- **Frontend Production Build:** `npm run build` inside `app/frontend` -> ✅ passed (built successfully in 10.52s).
+- **Backend Compilation:** `conda run -n QuFLX-v2 python -m py_compile app/backend/config.py app/backend/models/ai_models.py app/backend/services/ai_service.py` -> ✅ passed.
+- **Frontend Production Build:** `npm run build` inside `app/frontend` -> ✅ passed (built successfully in 21.63s).
 - **Backend Unit Tests:** `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` -> ✅ passed (39/39).
-
-## Active Risks
-- Runtime validation is needed in a live trading session to verify the performance telemetry metrics (lag, queue lengths, processing percentiles) are stable under high market volatility.
-- Auto-Ghost execution cooldowns and win-rate condition stats need tracking during the next active session.
-
-## Next Steps
-- Begin **Phase 4** of `Dev_Docs/Level3_Implementation_Plan_26-04-29.md` (AI Advisory Review Loop) when explicitly approved.
-- Start a live or ghost session to observe telemetry stats and verify the new `PerformanceMonitor` outputs in the console / explainability UI.
-- If explicitly approved, begin `Phase 1 - Analyzer Core and Join Validation` from `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`.
-
-## Environment Notes
-- Backend start: `conda run -n QuFLX-v2 python -m uvicorn app.backend.main:app --host 0.0.0.0 --port 8000 --reload`
-- Frontend dev: `cd C:\v3\OTC_SNIPER\app\frontend; npm run dev`
-- Frontend build: `npm --prefix C:\v3\OTC_SNIPER\app\frontend run build`
-- Conda environment: `QuFLX-v2`

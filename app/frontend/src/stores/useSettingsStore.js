@@ -58,6 +58,7 @@ export const SETTINGS_DEFAULTS = {
 
   // AI integration
   aiModel: 'grok-4-1-fast-non-reasoning',
+  aiDevMode: false,
 
   // UI preferences
   showManipulationAlerts: true,
@@ -140,7 +141,7 @@ export function validateSettings(input = {}) {
     ghostMinConfidenceEnabled: toBoolean(input.ghostMinConfidenceEnabled, SETTINGS_DEFAULTS.ghostMinConfidenceEnabled),
     ghostMaxConfidence: toNumber(input.ghostMaxConfidence, SETTINGS_DEFAULTS.ghostMaxConfidence, { min: 50, max: 100, integer: true }),
     ghostMaxConfidenceEnabled: toBoolean(input.ghostMaxConfidenceEnabled, SETTINGS_DEFAULTS.ghostMaxConfidenceEnabled),
-      
+
     showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
     showLiveEntryMarkers: toBoolean(input.showLiveEntryMarkers, SETTINGS_DEFAULTS.showLiveEntryMarkers),
 
@@ -161,11 +162,12 @@ export function validateSettings(input = {}) {
     aiModel: typeof input.aiModel === 'string' && input.aiModel.trim()
       ? input.aiModel.trim()
       : SETTINGS_DEFAULTS.aiModel,
+    aiDevMode: toBoolean(input.aiDevMode, SETTINGS_DEFAULTS.aiDevMode),
 
     showManipulationAlerts: toBoolean(input.showManipulationAlerts, SETTINGS_DEFAULTS.showManipulationAlerts),
     showSignalConfidence: toBoolean(input.showSignalConfidence, SETTINGS_DEFAULTS.showSignalConfidence),
     autoFocusOnSignal: toBoolean(input.autoFocusOnSignal, SETTINGS_DEFAULTS.autoFocusOnSignal),
-    
+
     assetAutoRefreshEnabled: toBoolean(input.assetAutoRefreshEnabled, SETTINGS_DEFAULTS.assetAutoRefreshEnabled),
     assetAutoRefreshInterval: toNumber(input.assetAutoRefreshInterval, SETTINGS_DEFAULTS.assetAutoRefreshInterval, { min: 10, max: 3600, integer: true }),
 
@@ -255,6 +257,7 @@ export const useSettingsStore = create()(
       setMaxTradesPerSession: (val) => commitSettingsPatch(set, { maxTradesPerSession: val }),
       setStopOnLossStreak: (val) => commitSettingsPatch(set, { stopOnLossStreak: val }),
       setAiModel: (val) => commitSettingsPatch(set, { aiModel: val }),
+      setAiDevMode: (val) => commitSettingsPatch(set, { aiDevMode: val }),
       setShowManipulationAlerts: (val) => commitSettingsPatch(set, { showManipulationAlerts: val }),
       setShowSignalConfidence: (val) => commitSettingsPatch(set, { showSignalConfidence: val }),
       setAutoFocusOnSignal: (val) => commitSettingsPatch(set, { autoFocusOnSignal: val }),

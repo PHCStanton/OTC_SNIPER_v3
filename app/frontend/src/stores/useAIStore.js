@@ -27,6 +27,7 @@ function trimMessages(messages) {
 function buildContext() {
   const risk = useRiskStore.getState();
   const ops = useOpsStore.getState();
+  const settings = useSettingsStore.getState();
 
   return {
     balance: ops.balance || risk.currentBalance || null,
@@ -36,6 +37,7 @@ function buildContext() {
     currentStreak: risk.currentStreak,
     totalTrades: risk.totalTrades,
     asset: null,
+    developerMode: settings.aiDevMode,
   };
 }
 

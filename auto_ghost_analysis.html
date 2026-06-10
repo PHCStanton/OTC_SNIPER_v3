@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,23 +13,23 @@
             box-sizing: border-box;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        
+
         body {
             background-color: #f5f7fa;
             color: #333;
             line-height: 1.6;
             padding: 20px;
         }
-        
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 8px;
             padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        
+
         h1 {
             text-align: center;
             color: #2c3e50;
@@ -36,44 +37,44 @@
             padding-bottom: 10px;
             border-bottom: 2px solid #3498db;
         }
-        
+
         .section {
             margin-bottom: 40px;
         }
-        
+
         h2 {
             color: #34495e;
             margin-bottom: 20px;
             padding-left: 10px;
             border-left: 4px solid #3498db;
         }
-        
+
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
-        
+
         .stat-card {
             background: #ecf0f1;
             padding: 20px;
             border-radius: 8px;
             text-align: center;
         }
-        
+
         .stat-value {
             font-size: 2rem;
             font-weight: bold;
             color: #3498db;
         }
-        
+
         .stat-label {
             font-size: 0.9rem;
             color: #7f8c8d;
             margin-top: 5px;
         }
-        
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -81,48 +82,50 @@
             overflow-x: auto;
             display: block;
         }
-        
-        th, td {
+
+        th,
+        td {
             padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }
-        
+
         th {
             background-color: #3498db;
             color: white;
         }
-        
+
         tr:hover {
             background-color: #f5f7fa;
         }
-        
+
         .profit-positive {
             color: #27ae60;
             font-weight: bold;
         }
-        
+
         .profit-negative {
             color: #e74c3c;
             font-weight: bold;
         }
-        
+
         .chart-container {
             position: relative;
             height: 400px;
             margin: 20px 0;
         }
-        
+
         .asset-list {
             max-height: 500px;
             overflow-y: auto;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Auto-Ghost Trader Exclusive Analysis Report</h1>
-        
+
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-value">52</div>
@@ -141,7 +144,7 @@
                 <div class="stat-label">Average Profit Per Trade ($)</div>
             </div>
         </div>
-        
+
         <div class="section">
             <h2>Top 10 Most Profitable Assets with Least Trades</h2>
             <div class="asset-list">
@@ -157,23 +160,24 @@
                     </thead>
                     <tbody>
                         <tr>
-            <td>#FB_otc</td>
-            <td>1</td>
-            <td class="profit-negative">-25.00</td>
-            <td class="profit-negative">-25.00</td>
-            <td>0</td>
-        </tr><tr>
-            <td>VIX_otc</td>
-            <td>1</td>
-            <td class="profit-negative">-25.00</td>
-            <td class="profit-negative">-25.00</td>
-            <td>0</td>
-        </tr>
+                            <td>#FB_otc</td>
+                            <td>1</td>
+                            <td class="profit-negative">-25.00</td>
+                            <td class="profit-negative">-25.00</td>
+                            <td>0</td>
+                        </tr>
+                        <tr>
+                            <td>VIX_otc</td>
+                            <td>1</td>
+                            <td class="profit-negative">-25.00</td>
+                            <td class="profit-negative">-25.00</td>
+                            <td>0</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
         </div>
-        
+
         <div class="section">
             <h2>Assets with Least Manipulation Flags</h2>
             <div class="asset-list">
@@ -189,71 +193,80 @@
                     </thead>
                     <tbody>
                         <tr>
-            <td>AUDCHF_otc</td>
-            <td>523</td>
-            <td>0</td>
-            <td class="profit-negative">-181.07</td>
-            <td class="profit-negative">-0.35</td>
-        </tr><tr>
-            <td>AUDCAD_otc</td>
-            <td>576</td>
-            <td>0</td>
-            <td class="profit-negative">-696.89</td>
-            <td class="profit-negative">-1.21</td>
-        </tr><tr>
-            <td>MADUSD_otc</td>
-            <td>50</td>
-            <td>0</td>
-            <td class="profit-positive">142.00</td>
-            <td class="profit-positive">2.84</td>
-        </tr><tr>
-            <td>EURTRY_otc</td>
-            <td>47</td>
-            <td>0</td>
-            <td class="profit-negative">-89.75</td>
-            <td class="profit-negative">-1.91</td>
-        </tr><tr>
-            <td>GBPJPY_otc</td>
-            <td>6</td>
-            <td>0</td>
-            <td class="profit-positive">4.40</td>
-            <td class="profit-positive">0.73</td>
-        </tr><tr>
-            <td>#MSFT_otc</td>
-            <td>2</td>
-            <td>0</td>
-            <td class="profit-negative">-50.00</td>
-            <td class="profit-negative">-25.00</td>
-        </tr><tr>
-            <td>DOTUSD_otc</td>
-            <td>3</td>
-            <td>0</td>
-            <td class="profit-negative">-27.00</td>
-            <td class="profit-negative">-9.00</td>
-        </tr><tr>
-            <td>ADA-USD_otc</td>
-            <td>140</td>
-            <td>0</td>
-            <td class="profit-negative">-762.90</td>
-            <td class="profit-negative">-5.45</td>
-        </tr><tr>
-            <td>#AXP_otc</td>
-            <td>30</td>
-            <td>0</td>
-            <td class="profit-negative">-109.95</td>
-            <td class="profit-negative">-3.67</td>
-        </tr><tr>
-            <td>USDCAD_otc</td>
-            <td>72</td>
-            <td>0</td>
-            <td class="profit-negative">-366.85</td>
-            <td class="profit-negative">-5.10</td>
-        </tr>
+                            <td>AUDCHF_otc</td>
+                            <td>523</td>
+                            <td>0</td>
+                            <td class="profit-negative">-181.07</td>
+                            <td class="profit-negative">-0.35</td>
+                        </tr>
+                        <tr>
+                            <td>AUDCAD_otc</td>
+                            <td>576</td>
+                            <td>0</td>
+                            <td class="profit-negative">-696.89</td>
+                            <td class="profit-negative">-1.21</td>
+                        </tr>
+                        <tr>
+                            <td>MADUSD_otc</td>
+                            <td>50</td>
+                            <td>0</td>
+                            <td class="profit-positive">142.00</td>
+                            <td class="profit-positive">2.84</td>
+                        </tr>
+                        <tr>
+                            <td>EURTRY_otc</td>
+                            <td>47</td>
+                            <td>0</td>
+                            <td class="profit-negative">-89.75</td>
+                            <td class="profit-negative">-1.91</td>
+                        </tr>
+                        <tr>
+                            <td>GBPJPY_otc</td>
+                            <td>6</td>
+                            <td>0</td>
+                            <td class="profit-positive">4.40</td>
+                            <td class="profit-positive">0.73</td>
+                        </tr>
+                        <tr>
+                            <td>#MSFT_otc</td>
+                            <td>2</td>
+                            <td>0</td>
+                            <td class="profit-negative">-50.00</td>
+                            <td class="profit-negative">-25.00</td>
+                        </tr>
+                        <tr>
+                            <td>DOTUSD_otc</td>
+                            <td>3</td>
+                            <td>0</td>
+                            <td class="profit-negative">-27.00</td>
+                            <td class="profit-negative">-9.00</td>
+                        </tr>
+                        <tr>
+                            <td>ADA-USD_otc</td>
+                            <td>140</td>
+                            <td>0</td>
+                            <td class="profit-negative">-762.90</td>
+                            <td class="profit-negative">-5.45</td>
+                        </tr>
+                        <tr>
+                            <td>#AXP_otc</td>
+                            <td>30</td>
+                            <td>0</td>
+                            <td class="profit-negative">-109.95</td>
+                            <td class="profit-negative">-3.67</td>
+                        </tr>
+                        <tr>
+                            <td>USDCAD_otc</td>
+                            <td>72</td>
+                            <td>0</td>
+                            <td class="profit-negative">-366.85</td>
+                            <td class="profit-negative">-5.10</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
         </div>
-        
+
         <div class="section">
             <h2>Profit Distribution Chart</h2>
             <div class="chart-container">
@@ -297,4 +310,5 @@
         });
     </script>
 </body>
+
 </html>

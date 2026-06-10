@@ -109,6 +109,25 @@ class AIService:
     async def analyze_image(self, request: AIImageRequest) -> AIResult:
         self._ensure_enabled()
         image = self._prepare_image(request.image_base64, request.mime_type)
+
+        # Save image to temporary directory for review (Copy/Paste or Upload)
+        try:
+            import time
+            tmp_dir = self._settings.data_dir / "tmp" / "uploaded_images"
+            tmp_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Extract raw bytes from the PreparedImage
+            base64_data = image.data_uri.split(",")[1]
+            raw_bytes = base64.b64decode(base64_data)
+            
+            ext = "jpg" if image.mime_type == "image/jpeg" else "png"
+            filename = f"uploaded_image_{int(time.time())}.{ext}"
+            file_path = tmp_dir / filename
+            file_path.write_bytes(raw_bytes)
+            logger.info("Saved temp pasted/uploaded image to %s", file_path)
+        except Exception as e:
+            logger.error("Failed to save temp pasted/uploaded image: %s", e)
+
         input_items = self._build_image_input(request.prompt, request.context, image)
         model, params = self._resolve_model_config(request.model)
         return await self.provider.complete(model=model, input_items=input_items, **params)
@@ -184,6 +203,8 @@ class AIService:
 
     def _build_system_message(self, context: AIContext | None) -> dict[str, Any]:
         text = SYSTEM_PROMPT
+        if context and context.developer_mode:
+            text = f"{text}\n\nDEVELOPER MODE ACTIVE:\nYou are in Developer Mode. The user is a developer/administrator of the OTC SNIPER platform. You can discuss software architecture, code improvement, prompt design, new feature suggestions, and API structures. Provide high-quality technical insights and programming guidance."
         context_block = self._context_block(context)
         if context_block:
             text = f"{text}\n\nTrading context:\n{context_block}"

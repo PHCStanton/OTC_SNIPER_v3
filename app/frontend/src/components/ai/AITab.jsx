@@ -4,6 +4,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, ImagePlus, Loader2, RefreshCcw, Send, Trash2, Upload } from 'lucide-react';
 import { useAIStore } from '../../stores/useAIStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useToastStore } from '../../stores/useToastStore.js';
 
 function MessageBubble({ message }) {
   const isUser = message.role === 'user';
@@ -29,6 +31,7 @@ async function fileToDataUrl(file) {
 
 export default function AITab({ aiStatus, statusLoading, onStatusRefresh }) {
   const { messages, loading, error, draft, setDraft, clearMessages, sendMessage, analyzeImage, imagePreview, setImagePreview, clearImagePreview, setError } = useAIStore();
+  const aiDevMode = useSettingsStore((s) => s.aiDevMode);
   const [localPrompt, setLocalPrompt] = useState('Analyze this chart screenshot for structure, trend, support, and risk context.');
   const fileInputRef = useRef(null);
   const scrollRef = useRef(null);
@@ -47,6 +50,33 @@ export default function AITab({ aiStatus, statusLoading, onStatusRefresh }) {
       // no-op; keep draft untouched, but this effect ensures a rerender hook for status refresh
     }
   }, [aiStatus, draft]);
+
+  async function handlePaste(event) {
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          event.preventDefault();
+          if (file.size > 20 * 1024 * 1024) {
+            setError('Image exceeds 20 MB limit.');
+            return;
+          }
+          try {
+            const dataUrl = await fileToDataUrl(file);
+            setImagePreview(dataUrl);
+            setError(null);
+            useToastStore.getState().addToast({ type: 'success', message: 'Image pasted from clipboard!' });
+          } catch (err) {
+            setError(err.message);
+          }
+          break;
+        }
+      }
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -118,6 +148,11 @@ export default function AITab({ aiStatus, statusLoading, onStatusRefresh }) {
           <span className="uppercase tracking-[0.16em] opacity-70">{aiStatus.provider}</span>
         </div>
         {!enabled && <p className="mt-1 leading-4 opacity-80">{disabledMessage}</p>}
+        {enabled && aiDevMode && (
+          <div className="mt-1.5 border-t border-emerald-400/10 pt-1.5 text-[9px] font-black uppercase tracking-widest text-[#ffb800]">
+            Developer Mode Active
+          </div>
+        )}
       </div>
 
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
@@ -136,9 +171,10 @@ export default function AITab({ aiStatus, statusLoading, onStatusRefresh }) {
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
+          onPaste={handlePaste}
           disabled={!enabled || loading}
           rows={3}
-          placeholder="Ask about the market, a trade setup, or a chart pattern..."
+          placeholder="Ask about the market, a trade setup, or a chart pattern... (You can paste an image directly here)"
           className="w-full resize-none rounded-2xl border border-white/10 bg-[#151a22] px-3 py-2 text-[11px] text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-[#f5df19] disabled:opacity-60"
         />
 

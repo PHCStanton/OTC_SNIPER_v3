@@ -15,6 +15,7 @@ class AIContext(BaseModel):
     current_streak: int | None = Field(default=None, alias="currentStreak")
     total_trades: int | None = Field(default=None, alias="totalTrades")
     account_type: str | None = Field(default=None, alias="accountType")
+    developer_mode: bool | None = Field(default=None, alias="developerMode")
 
 
 class AIMessage(BaseModel):

@@ -87,6 +87,7 @@ class RuntimeSettings:
             self.data_dir / "auth",
             self.data_dir / "auth" / "sessions",
             self.data_dir / "data_output" / "logs",
+            self.data_dir / "tmp" / "uploaded_images",
         ]
 
         for path in required:

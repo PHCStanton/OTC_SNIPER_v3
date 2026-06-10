@@ -2,7 +2,7 @@
  * TopBar — Chrome badge + SSID/Session badge + Theme toggle + Tab toggle.
  * Driven by useOpsStore (live status from Socket.IO check_status polling).
  */
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Bell,
   BookOpen,
@@ -16,10 +16,15 @@ import {
   Loader2,
   DollarSign,
   Ghost,
+  Bot,
+  Zap,
+  Save,
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useAIStore } from '../../stores/useAIStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
 import logoImg from '../../../assets/GOLD_TARGET_LOGO1_RM.png';
@@ -29,6 +34,19 @@ export default function TopBar() {
   const { activeView, dashboardMode, setDashboardMode, setActiveView } = useLayoutStore();
   const [showConnect, setShowConnect] = useState(false);
   const [chromeLoading, setChromeLoading] = useState(false);
+  const [showAiDropdown, setShowAiDropdown] = useState(false);
+  const { aiDevMode, setAiDevMode } = useSettingsStore();
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowAiDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const isTrading = activeView !== 'journal' && activeView !== 'settings' && activeView !== 'ai' && dashboardMode === 'trading';
   const isRisk = activeView !== 'journal' && activeView !== 'settings' && activeView !== 'ai' && dashboardMode === 'risk';
@@ -155,17 +173,99 @@ export default function TopBar() {
               Trading
             </button>
  
-            <button
-              onClick={() => setActiveView('ai')}
-              title="AI Assistant"
-              className={`ml-2 flex items-center justify-center rounded-lg border transition-all duration-350 ${
-                isAI 
-                  ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
-                  : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'
-              }`}
-            >
-              <AiChipIcon size={38} />
-            </button>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowAiDropdown(!showAiDropdown)}
+                title="AI Assistant Menu"
+                className={`ml-2 flex h-11 w-11 items-center justify-center rounded-lg border transition-all duration-350 ${
+                  isAI || showAiDropdown
+                    ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
+                    : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'
+                }`}
+              >
+                <AiChipIcon size={38} />
+              </button>
+              {showAiDropdown && (
+                <div className="absolute right-0 mt-2 w-64 rounded-xl border border-white/5 bg-[#1a1c22] p-3 shadow-2xl z-[100] space-y-3 text-left">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">AI Assistant Menu</span>
+                    <span className="text-[9px] font-bold text-gray-500">v3.0</span>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      onClick={() => {
+                        setActiveView('ai');
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 hover:bg-white/5 hover:text-white transition"
+                    >
+                      <Bot size={14} className="text-[#ffb800]" />
+                      <span>Open AI Chat</span>
+                    </button>
+
+                    <div className="flex items-center justify-between rounded-lg bg-white/[0.02] border border-white/5 p-2.5">
+                      <div className="flex flex-col text-left">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-white">Developer Mode</span>
+                        <span className="text-[8px] text-gray-500">Discuss platform upgrades</span>
+                      </div>
+                      <button
+                        onClick={() => setAiDevMode(!aiDevMode)}
+                        className={`h-4 w-8 rounded-full transition-colors ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                      >
+                        <div className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        useToastStore.getState().addToast({ type: 'info', message: '[AI Advisor] Analyzing trade results (placeholder)' });
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"
+                    >
+                      <TrendingUp size={14} />
+                      <span>Analyze Trade Results</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        useToastStore.getState().addToast({ type: 'success', message: '[AI Advisor] Attached active session context' });
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"
+                    >
+                      <Save size={14} />
+                      <span>Upload Active Context</span>
+                    </button>
+
+                    {aiDevMode && (
+                      <button
+                        onClick={() => {
+                          useAIStore.getState().setDraft("Grok, what features should we add to OTC SNIPER to increase the quality of AI outputs and trading performance?");
+                          setActiveView('ai');
+                          setShowAiDropdown(false);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-emerald-400 hover:bg-white/5 hover:text-emerald-300 transition"
+                      >
+                        <Zap size={14} />
+                        <span>Platform Quality Insights</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setActiveView('journal');
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"
+                    >
+                      <BookOpen size={14} />
+                      <span>Open Trading Journal</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
  
           <div className="flex items-center gap-2 border-l border-white/5 pl-4">

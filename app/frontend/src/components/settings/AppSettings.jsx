@@ -63,6 +63,7 @@ export default function AppSettings() {
     autoGhostBlockOnManipulation,
     ghostIcon,
     aiModel,
+    aiDevMode,
     showManipulationAlerts,
     showSignalConfidence,
     autoFocusOnSignal,
@@ -80,6 +81,7 @@ export default function AppSettings() {
     setAutoGhostBlockOnManipulation,
     setGhostIcon,
     setAiModel,
+    setAiDevMode,
     setShowManipulationAlerts,
     setShowSignalConfidence,
     setAutoFocusOnSignal,
@@ -286,6 +288,22 @@ export default function AppSettings() {
                   <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                 </div>
               </InputGroup>
+
+              <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
+                <div className="flex flex-col text-left">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Developer Mode</p>
+                    <Tooltip content="Enable developer mode to query Grok for platform upgrades, code design, and prompt analysis." />
+                  </div>
+                  <p className="mt-1 text-[9px] text-gray-500 font-medium">Chat with Grok about project insights and feature implementations.</p>
+                </div>
+                <button
+                  onClick={() => setAiDevMode(!aiDevMode)}
+                  className={`h-5 w-10 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                >
+                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
