@@ -35,7 +35,12 @@ export default function TopBar() {
   const [showConnect, setShowConnect] = useState(false);
   const [chromeLoading, setChromeLoading] = useState(false);
   const [showAiDropdown, setShowAiDropdown] = useState(false);
-  const { aiDevMode, setAiDevMode } = useSettingsStore();
+  const { 
+    aiDevMode, 
+    setAiDevMode, 
+    oteoAiExecutionMode, 
+    setOteoAiExecutionMode,
+  } = useSettingsStore();
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -186,10 +191,31 @@ export default function TopBar() {
                 <AiChipIcon size={38} />
               </button>
               {showAiDropdown && (
-                <div className="absolute right-0 mt-2 w-64 rounded-xl border border-white/5 bg-[#1a1c22] p-3 shadow-2xl z-[100] space-y-3 text-left">
-                  <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">AI Assistant Menu</span>
-                    <span className="text-[9px] font-bold text-gray-500">v3.0</span>
+                <div className="absolute right-0 mt-2 w-80 rounded-xl border-2 border-[#1a1c22] bg-gradient-to-br from-[#f5df19] to-[#ffb800] p-3 shadow-[0_10px_30px_rgba(245,223,25,0.25)] z-[100] space-y-3 text-left">
+                  <div className="flex items-center justify-between border-b border-black/10 pb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#1a1c22]">AI Assistant Menu</span>
+                    <div className="flex rounded bg-[#1a1c22] p-0.5 border border-black/10 shrink-0">
+                      <button
+                        onClick={() => setOteoAiExecutionMode('advisory')}
+                        className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest rounded transition-all ${
+                          oteoAiExecutionMode === 'advisory'
+                            ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                            : 'text-gray-500 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        Advise
+                      </button>
+                      <button
+                        onClick={() => setOteoAiExecutionMode('confirmation')}
+                        className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest rounded transition-all ${
+                          oteoAiExecutionMode === 'confirmation'
+                            ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                            : 'text-gray-500 hover:text-white border border-transparent'
+                        }`}
+                      >
+                        Confirm
+                      </button>
+                    </div>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <button
@@ -197,46 +223,24 @@ export default function TopBar() {
                         setActiveView('ai');
                         setShowAiDropdown(false);
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 hover:bg-white/5 hover:text-white transition"
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
                     >
                       <Bot size={14} className="text-[#ffb800]" />
                       <span>Open AI Chat</span>
                     </button>
 
-                    <div className="flex items-center justify-between rounded-lg bg-white/[0.02] border border-white/5 p-2.5">
+                    <div className="flex items-center justify-between rounded-lg bg-[#1a1c22] border border-white/5 p-2.5">
                       <div className="flex flex-col text-left">
                         <span className="text-[10px] font-black uppercase tracking-wide text-white">Developer Mode</span>
                         <span className="text-[8px] text-gray-500">Discuss platform upgrades</span>
                       </div>
                       <button
                         onClick={() => setAiDevMode(!aiDevMode)}
-                        className={`h-4 w-8 rounded-full transition-colors ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                        className={`h-4 w-8 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
                       >
                         <div className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
                       </button>
                     </div>
-
-                    <button
-                      onClick={() => {
-                        setActiveView('analysis');
-                        setShowAiDropdown(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"
-                    >
-                      <TrendingUp size={14} />
-                      <span>Analyze Trade Results</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        useToastStore.getState().addToast({ type: 'success', message: '[AI Advisor] Attached active session context' });
-                        setShowAiDropdown(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"
-                    >
-                      <Save size={14} />
-                      <span>Upload Active Context</span>
-                    </button>
 
                     {aiDevMode && (
                       <button
@@ -245,7 +249,7 @@ export default function TopBar() {
                           setActiveView('ai');
                           setShowAiDropdown(false);
                         }}
-                        className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-emerald-400 hover:bg-white/5 hover:text-emerald-300 transition"
+                        className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-emerald-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-emerald-300 transition border border-emerald-500/10"
                       >
                         <Zap size={14} />
                         <span>Platform Quality Insights</span>
@@ -254,13 +258,35 @@ export default function TopBar() {
 
                     <button
                       onClick={() => {
+                        setActiveView('analysis');
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
+                    >
+                      <TrendingUp size={14} />
+                      <span>Analyze Trade Results</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
                         setActiveView('journal');
                         setShowAiDropdown(false);
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 hover:bg-white/5 hover:text-white transition"
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
                     >
                       <BookOpen size={14} />
                       <span>Open Trading Journal</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        useToastStore.getState().addToast({ type: 'success', message: '[AI Advisor] Attached active session context' });
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
+                    >
+                      <Save size={14} />
+                      <span>Upload Active Context</span>
                     </button>
                   </div>
                 </div>

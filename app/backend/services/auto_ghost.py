@@ -13,6 +13,16 @@ from .trade_service import TradeService
 logger = logging.getLogger(__name__)
 
 
+def _get_severity(val: Any) -> float:
+    """Extract a numeric severity from a manipulation flag value."""
+    if isinstance(val, bool):
+        return 1.0 if val else 0.0
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return 1.0 if val else 0.0
+
+
 @dataclass(frozen=True)
 class AutoGhostConfig:
     enabled: bool = False
@@ -32,6 +42,8 @@ class AutoGhostConfig:
     max_confidence: float | None = None
     max_trades_per_timeframe: int = 0
     timeframe_seconds: int = 0
+    oteo_ai_enabled: bool = False
+    oteo_ai_execution_mode: str = "advisory"
 
 
 class AutoGhostService:
@@ -81,6 +93,8 @@ class AutoGhostService:
         max_confidence: float | None = None,
         max_trades_per_timeframe: int | None = None,
         timeframe_seconds: int | None = None,
+        oteo_ai_enabled: bool | None = None,
+        oteo_ai_execution_mode: str | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         self.config = AutoGhostConfig(
@@ -141,6 +155,8 @@ class AutoGhostService:
                 if timeframe_seconds is None
                 else max(0, int(timeframe_seconds))
             ),
+            oteo_ai_enabled=self.config.oteo_ai_enabled if oteo_ai_enabled is None else bool(oteo_ai_enabled),
+            oteo_ai_execution_mode=self.config.oteo_ai_execution_mode if oteo_ai_execution_mode is None else str(oteo_ai_execution_mode),
         )
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
@@ -182,6 +198,8 @@ class AutoGhostService:
             "auto_ghost_max_confidence": self.config.max_confidence,
             "auto_ghost_max_trades_per_timeframe": self.config.max_trades_per_timeframe,
             "auto_ghost_timeframe_seconds": self.config.timeframe_seconds,
+            "oteo_ai_enabled": self.config.oteo_ai_enabled,
+            "oteo_ai_execution_mode": self.config.oteo_ai_execution_mode,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -362,14 +380,6 @@ class AutoGhostService:
             )
             return self._reject(asset)
         if self.config.block_on_manipulation and manipulation:
-            def _get_severity(val: Any) -> float:
-                if isinstance(val, bool):
-                    return 1.0 if val else 0.0
-                try:
-                    return float(val)
-                except (ValueError, TypeError):
-                    return 1.0 if val else 0.0
-
             if any(_get_severity(score) >= self.config.manipulation_severity_threshold for score in manipulation.values()):
                 logger.info(
                     "Auto-Ghost skipped %s due to active manipulation severity: %s (threshold: %.2f)",
@@ -402,6 +412,36 @@ class AutoGhostService:
                 return None
 
             self._pending_signals.pop(asset, None)
+
+        # AI Confirmation Gate
+        if self.config.oteo_ai_enabled:
+            if self.config.oteo_ai_execution_mode == "confirmation":
+                logger.info("Requesting AI execution confirmation for %s...", asset)
+                try:
+                    ai_confirmed, ai_response_str = await self._query_ai_confirmation(
+                        asset=asset,
+                        direction=oteo_result.get("recommended"),
+                        oteo_score=score,
+                        market_context=oteo_result.get("market_context") or {},
+                        manipulation=manipulation,
+                    )
+                    if not ai_confirmed:
+                        logger.info("Auto-Ghost skipped %s: AI confirmation rejected signal (Response: %r)", asset, ai_response_str)
+                        return self._reject(asset)
+                except Exception as e:
+                    logger.error("AI confirmation failed defensively for %s: %s", asset, e)
+                    return self._reject(asset)
+            else:
+                # Advisory mode: Query in background without blocking execution
+                asyncio.create_task(
+                    self._run_ai_advisory(
+                        asset=asset,
+                        direction=oteo_result.get("recommended"),
+                        oteo_score=score,
+                        market_context=oteo_result.get("market_context") or {},
+                        manipulation=manipulation,
+                    )
+                )
 
         entry_context = {
             "asset": asset,
@@ -495,3 +535,127 @@ class AutoGhostService:
                 "win_rate": round((wins / total) * 100.0, 1) if total > 0 else 0.0,
             }
         return result
+
+    async def _query_ai_confirmation(
+        self,
+        *,
+        asset: str,
+        direction: str,
+        oteo_score: float,
+        market_context: dict[str, Any],
+        manipulation: dict[str, Any],
+    ) -> tuple[bool, str]:
+        """Query the AI provider for a binary trade confirmation (CONFIRM or REJECT)."""
+        from .ai_service import get_ai_service
+        from ..models.ai_models import AIChatRequest, AIMessage, AIContext
+
+        ai_service = get_ai_service()
+        if not ai_service.status().enabled:
+            logger.warning("AI Service is disabled. Auto-confirming trade setup.")
+            return True, "AI_DISABLED"
+
+        # L3 regime fields (take priority over legacy adx_regime)
+        regime_label = market_context.get("regime_label") or market_context.get("adx_regime", "unknown")
+        regime_confidence = market_context.get("regime_confidence", 0)
+        regime_stable = market_context.get("regime_stable", False)
+        trend = market_context.get("trend_direction", "unknown")
+        adx = market_context.get("adx", "unknown")
+        cci = market_context.get("cci", "unknown")
+        cci_state = market_context.get("cci_state", "unknown")
+        tick_health = market_context.get("tick_health", "unknown")
+        nearest_structure_atr = market_context.get("nearest_structure_atr", "N/A")
+
+        # Calculate manipulation severity
+        manip_severity = (
+            max(_get_severity(v) for v in manipulation.values())
+            if manipulation
+            else 0.0
+        )
+
+        system_msg = (
+            "You are an expert AI trading confirmation assistant. You review market data snapshots "
+            "for short-expiry OTC binary options setups and confirm or reject them.\n"
+            "Regime context: RANGE_BOUND=ideal for reversals, TREND_REVERSAL=good for reversals, "
+            "TREND_PULLBACK=conditional (trend-aligned only), STRONG_MOMENTUM/BREAKOUT/CHOPPY=dangerous for reversals.\n"
+            "Answer with EXACTLY 'CONFIRM' or 'REJECT' (no other text, explanation, or punctuation)."
+        )
+
+        user_msg = (
+            f"Trade Setup to Verify:\n"
+            f"Asset: {asset}\n"
+            f"Direction: {direction}\n"
+            f"OTEO Score: {oteo_score}\n"
+            f"Regime: {regime_label} (confidence: {regime_confidence}%, stable: {regime_stable})\n"
+            f"Trend Direction: {trend}\n"
+            f"ADX: {adx}\n"
+            f"CCI: {cci} ({cci_state})\n"
+            f"Nearest S/R: {nearest_structure_atr} ATR\n"
+            f"Tick Health: {tick_health}\n"
+            f"Manipulation Severity: {manip_severity:.2f}\n\n"
+            f"Should we execute this trade? Respond with CONFIRM or REJECT."
+        )
+
+        chat_req = AIChatRequest(
+            messages=[
+                AIMessage(role="system", content=system_msg),
+                AIMessage(role="user", content=user_msg),
+            ],
+            model=ai_service.settings.ai_model,
+            context=AIContext(
+                asset=asset,
+                session_pnl=self._session_pnl,
+                win_rate=self._session_wins / max(1, self._session_trade_count) * 100.0,
+                total_trades=self._session_trade_count,
+            )
+        )
+
+        try:
+            res = await asyncio.wait_for(ai_service.chat(chat_req), timeout=4.0)
+            res_text = res.text.strip().upper()
+            
+            logger.info("AI confirmation response for %s: %s", asset, res_text)
+            
+            if "CONFIRM" in res_text:
+                return True, res_text
+            elif "REJECT" in res_text:
+                return False, res_text
+            else:
+                if "YES" in res_text or "ALLOW" in res_text:
+                    return True, res_text
+                return False, f"AMBIGUOUS_RESPONSE: {res_text}"
+        except asyncio.TimeoutError:
+            logger.error("AI confirmation request timed out (4s limit) for %s", asset)
+            raise RuntimeError("AI confirmation timeout")
+        except Exception as e:
+            logger.error("AI confirmation request failed for %s: %s", asset, e)
+            raise e
+
+    async def _run_ai_advisory(
+        self,
+        *,
+        asset: str,
+        direction: str,
+        oteo_score: float,
+        market_context: dict[str, Any],
+        manipulation: dict[str, Any],
+    ) -> None:
+        """Query the AI provider in the background for advisory analysis and emit notification."""
+        try:
+            confirmed, response = await self._query_ai_confirmation(
+                asset=asset,
+                direction=direction,
+                oteo_score=oteo_score,
+                market_context=market_context,
+                manipulation=manipulation,
+            )
+            
+            msg = f"[AI Advisor] Trade Setup {direction} on {asset} reviewed. Decision: {response}."
+            if self.trade_service.sio:
+                await self.trade_service.sio.emit("notification", {
+                    "type": "info" if confirmed else "warning",
+                    "message": msg,
+                    "timestamp": unix_time(),
+                })
+            logger.info("AI Advisory completed for %s: %s", asset, response)
+        except Exception as e:
+            logger.debug("AI Advisory background query failed: %s", e)

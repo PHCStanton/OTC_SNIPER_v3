@@ -40,6 +40,7 @@ export default function App() {
   const ghostMinConfidenceEnabled = useSettingsStore((s) => s.ghostMinConfidenceEnabled);
   const ghostMaxConfidence = useSettingsStore((s) => s.ghostMaxConfidence);
   const ghostMaxConfidenceEnabled = useSettingsStore((s) => s.ghostMaxConfidenceEnabled);
+  const oteoAiExecutionMode = useSettingsStore((s) => s.oteoAiExecutionMode);
 
   useStreamConnection();
 
@@ -231,6 +232,7 @@ export default function App() {
           oteo_level2_enabled: oteoLevel2Enabled,
           oteo_level3_enabled: oteoLevel3Enabled,
           oteo_ai_enabled: oteoAiEnabled,
+          oteo_ai_execution_mode: oteoAiExecutionMode,
           auto_ghost_enabled: autoGhostEnabled,
           auto_ghost_amount: ghostAmount,
           auto_ghost_expiration_seconds: autoGhostExpirationSeconds,
@@ -268,6 +270,7 @@ export default function App() {
     oteoLevel2Enabled,
     oteoLevel3Enabled,
     oteoAiEnabled,
+    oteoAiExecutionMode,
     ghostAmount,
     autoGhostEnabled,
     autoGhostExpirationSeconds,

@@ -7,6 +7,24 @@ import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
 import { formatAssetLabel, getSignalConfidence, getSignalDirection, getSignalLabel } from './chartUtils.js';
 import AnalysisTerminal from './AnalysisTerminal.jsx';
 
+/**
+ * Color classes for each Level 3 regime label (maps Market_Regimes.md taxonomy).
+ * - Green  → ideal conditions for OTEO reversals
+ * - Yellow → conditional (trend-aligned entries only)
+ * - Orange → dangerous (high momentum or breakout)
+ * - Red    → avoid entirely
+ * - Gray   → insufficient data
+ */
+const REGIME_STYLES = {
+  RANGE_BOUND:       { text: 'text-emerald-400', border: 'border-emerald-500/30', bg: 'bg-emerald-500/10', label: 'Range Bound' },
+  TREND_REVERSAL:    { text: 'text-green-400',   border: 'border-green-500/30',   bg: 'bg-green-500/10',   label: 'Trend Reversal' },
+  TREND_PULLBACK:    { text: 'text-yellow-400',  border: 'border-yellow-500/30',  bg: 'bg-yellow-500/10',  label: 'Trend Pullback' },
+  STRONG_MOMENTUM:   { text: 'text-orange-400',  border: 'border-orange-500/30',  bg: 'bg-orange-500/10',  label: 'Strong Momentum' },
+  BREAKOUT:          { text: 'text-amber-400',   border: 'border-amber-500/30',   bg: 'bg-amber-500/10',   label: 'Breakout' },
+  CHOPPY:            { text: 'text-red-400',     border: 'border-red-500/30',     bg: 'bg-red-500/10',     label: 'Choppy' },
+  INSUFFICIENT_DATA: { text: 'text-gray-500',    border: 'border-gray-600/30',    bg: 'bg-gray-500/5',     label: 'Insufficient Data' },
+};
+
 export default function OTEORing({ asset, signal, manipulation = null, warmup = false }) {
   const confidence = warmup ? 0 : getSignalConfidence(signal);
   const direction  = getSignalDirection(signal);
@@ -130,6 +148,25 @@ export default function OTEORing({ asset, signal, manipulation = null, warmup = 
           )}
           <span className={accentClass}>{label}</span>
         </div>
+      )}
+
+      {/* Level 3 Regime Badge — shown when L3 is enabled and regime is classified */}
+      {!warmup && signal?.level3_enabled && signal?.regime_label && (
+        (() => {
+          const rs = REGIME_STYLES[signal.regime_label] || REGIME_STYLES.INSUFFICIENT_DATA;
+          return (
+            <div
+              className={`mt-2 flex items-center gap-1.5 rounded-full border ${rs.border} ${rs.bg} px-3 py-1 text-[10px] font-mono font-semibold uppercase tracking-wider ${rs.text} transition-colors duration-500`}
+              title={`L3 Regime: ${signal.regime_label} — Confidence: ${signal.regime_confidence}%`}
+            >
+              <span>{rs.label}</span>
+              <span className="opacity-60">{signal.regime_stable ? '✓' : '~'}</span>
+              {signal.regime_confidence > 0 && (
+                <span className="opacity-50">{signal.regime_confidence}%</span>
+              )}
+            </div>
+          );
+        })()
       )}
 
       {/* Fixed-height terminal — replaces the dynamic badge sections */}

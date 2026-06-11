@@ -179,6 +179,17 @@ async def lifespan(app: FastAPI):
     app.state.sio = sio
     app.state.streaming_service = streaming_service
     PocketOptionSession.set_main_loop(asyncio.get_running_loop())
+
+    # Phase 4: Attach AI Review Service if AI is enabled
+    try:
+        from .services.ai_service import get_ai_service
+        ai_svc = get_ai_service()
+        if ai_svc.status().enabled:
+            streaming_service.attach_ai_review(ai_svc, interval=300)
+    except Exception as _ai_attach_err:
+        _log = logging.getLogger(__name__)
+        _log.warning("AI Review Service could not be attached: %s", _ai_attach_err)
+
     yield
 
 

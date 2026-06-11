@@ -59,6 +59,7 @@ export const SETTINGS_DEFAULTS = {
   // AI integration
   aiModel: 'grok-4-1-fast-non-reasoning',
   aiDevMode: false,
+  oteoAiExecutionMode: 'advisory',
 
   // UI preferences
   showManipulationAlerts: true,
@@ -163,6 +164,7 @@ export function validateSettings(input = {}) {
       ? input.aiModel.trim()
       : SETTINGS_DEFAULTS.aiModel,
     aiDevMode: toBoolean(input.aiDevMode, SETTINGS_DEFAULTS.aiDevMode),
+    oteoAiExecutionMode: ['advisory', 'confirmation'].includes(input.oteoAiExecutionMode) ? input.oteoAiExecutionMode : 'advisory',
 
     showManipulationAlerts: toBoolean(input.showManipulationAlerts, SETTINGS_DEFAULTS.showManipulationAlerts),
     showSignalConfidence: toBoolean(input.showSignalConfidence, SETTINGS_DEFAULTS.showSignalConfidence),
@@ -258,6 +260,7 @@ export const useSettingsStore = create()(
       setStopOnLossStreak: (val) => commitSettingsPatch(set, { stopOnLossStreak: val }),
       setAiModel: (val) => commitSettingsPatch(set, { aiModel: val }),
       setAiDevMode: (val) => commitSettingsPatch(set, { aiDevMode: val }),
+      setOteoAiExecutionMode: (val) => commitSettingsPatch(set, { oteoAiExecutionMode: val }),
       setShowManipulationAlerts: (val) => commitSettingsPatch(set, { showManipulationAlerts: val }),
       setShowSignalConfidence: (val) => commitSettingsPatch(set, { showSignalConfidence: val }),
       setAutoFocusOnSignal: (val) => commitSettingsPatch(set, { autoFocusOnSignal: val }),

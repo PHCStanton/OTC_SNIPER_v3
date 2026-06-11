@@ -64,6 +64,7 @@ export default function AppSettings() {
     ghostIcon,
     aiModel,
     aiDevMode,
+    oteoAiExecutionMode,
     showManipulationAlerts,
     showSignalConfidence,
     autoFocusOnSignal,
@@ -82,6 +83,7 @@ export default function AppSettings() {
     setGhostIcon,
     setAiModel,
     setAiDevMode,
+    setOteoAiExecutionMode,
     setShowManipulationAlerts,
     setShowSignalConfidence,
     setAutoFocusOnSignal,
@@ -288,6 +290,35 @@ export default function AppSettings() {
                   <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                 </div>
               </InputGroup>
+
+              {oteoAiEnabled && (
+                <InputGroup label="AI Mode Protocol" tooltip="Advisory: AI analyzes signals but does not block trades. Confirmation: AI must confirm the signal before execution.">
+                  <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setOteoAiExecutionMode('advisory')}
+                      className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                        oteoAiExecutionMode === 'advisory'
+                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                          : 'text-gray-500 hover:text-white'
+                      }`}
+                    >
+                      Advisory (Informational)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOteoAiExecutionMode('confirmation')}
+                      className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                        oteoAiExecutionMode === 'confirmation'
+                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                          : 'text-gray-500 hover:text-white'
+                      }`}
+                    >
+                      Execution Confirmation
+                    </button>
+                  </div>
+                </InputGroup>
+              )}
 
               <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
                 <div className="flex flex-col text-left">

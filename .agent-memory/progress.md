@@ -32,6 +32,11 @@
 - **L1/L2/L3 Optimization and AI Knowledge Base Plan (2026-05-16, PLANNED)** — New historical analyzer and knowledge base plan documented.
 
 ## Recent Delivery Snapshot
+- **Result Analysis Panel Enhancements (2026-06-11, SIGNED OFF & CLOSED ✅):**
+  - **Gregorian UTC Date Columns:** Display epoch start time formatted as `YYYY-MM-DD HH:mm:ss UTC` standard date format on the left of each session.
+  - **Separate Upload Options:** Split dropdown into Single File, Multiple Files, and Folder uploads, adding file input value resets to support duplicate uploads.
+  - **Session Deletion & Stats Purging:** Enabled deletion button for each row and updated the backend to clear existing daily stats files so charts update instantly.
+  - **AI Refinement Fix:** Terminated a stray background server caching old schemas, resolving the 500 completion error.
 - **Result Analysis Panel/Page (2026-06-10):**
   - **Modular Dashboard Shell:** Created visual tabs (Session Logs, Stats & Insights, AI Refinement Center).
   - **Backend Services:** Implemented log parser, daily aggregated stats generator, Grok 4.3 evaluation integration, and persistent pattern memory recall.

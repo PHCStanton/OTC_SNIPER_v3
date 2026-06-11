@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from ..config import RuntimeSettings, get_settings
 from ..models.ai_models import AIChatRequest, AIContext, AIImageRequest, AIStatusResponse, AIUsage

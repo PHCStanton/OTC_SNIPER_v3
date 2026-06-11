@@ -125,8 +125,20 @@ export function useStreamConnection() {
         level2_enabled: Boolean(payload.level2_enabled),
         level2_score_adjustment: Number(payload.level2_score_adjustment ?? 0),
         level2_suppressed_reason: payload.level2_suppressed_reason ?? null,
+        // Level 3 regime fields
+        level3_enabled: Boolean(payload.level3_enabled),
+        level3_score_adjustment: Number(payload.level3_score_adjustment ?? 0),
+        level3_suppressed_reason: payload.level3_suppressed_reason ?? null,
+        regime_label: payload.regime_label ?? null,
+        regime_confidence: Number(payload.regime_confidence ?? 0),
+        regime_stable: Boolean(payload.regime_stable),
+        regime_detail: payload.regime_detail ?? null,
+        // Additional L3 context fields
+        cci_divergence: payload.market_context?.cci_divergence ?? null,
+        tick_health: payload.market_context?.tick_health ?? null,
         market_context: payload.market_context ?? null,
-        regime: payload.market_context?.adx_regime ?? null,
+        // Legacy alias preserved for compatibility — points to adx_regime for older consumers
+        regime: payload.regime_label ?? payload.market_context?.adx_regime ?? null,
       };
 
       const manipulationPayload = payload.manipulation;

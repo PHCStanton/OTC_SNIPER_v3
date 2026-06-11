@@ -15,6 +15,7 @@ class RuntimeStrategyConfigRequest(BaseModel):
     oteo_level2_enabled: bool = Field(default=False)
     oteo_level3_enabled: bool = Field(default=False)
     oteo_ai_enabled: bool = Field(default=False)
+    oteo_ai_execution_mode: str = Field(default="advisory")
     auto_ghost_enabled: bool = Field(default=False)
     auto_ghost_amount: float = Field(default=1.0, gt=0)
     auto_ghost_expiration_seconds: int = Field(default=60, ge=5, le=3600)
@@ -43,6 +44,7 @@ async def get_runtime_config(request: Request) -> JSONResponse:
             "oteo_level2_enabled": streaming_service.level2_enabled,
             "oteo_level3_enabled": streaming_service.level3_enabled,
             "oteo_ai_enabled": streaming_service.oteo_ai_enabled,
+            "oteo_ai_execution_mode": streaming_service.oteo_ai_execution_mode,
             **streaming_service.auto_ghost.status,
         }
     )
@@ -56,6 +58,7 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             level2_enabled=body.oteo_level2_enabled,
             level3_enabled=body.oteo_level3_enabled,
             oteo_ai_enabled=body.oteo_ai_enabled,
+            oteo_ai_execution_mode=body.oteo_ai_execution_mode,
             auto_ghost_enabled=body.auto_ghost_enabled,
             auto_ghost_amount=body.auto_ghost_amount,
             auto_ghost_expiration_seconds=body.auto_ghost_expiration_seconds,
@@ -78,3 +81,41 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
     except Exception as exc:
         logger.error("Failed to update runtime config: %s", exc)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+
+
+@router.get("/ai-review")
+async def get_ai_review(request: Request, asset: str | None = None) -> JSONResponse:
+    """
+    Get the latest AI regime review result.
+
+    Query params:
+        asset (optional): filter to a specific asset.
+
+    Returns:
+        {
+            "available": bool,          # True when AI review service is attached
+            "running": bool,            # True when the review loop is active
+            "review": dict | None,      # Latest review result, or None
+            "all_reviews": dict         # All per-asset reviews (when asset not specified)
+        }
+    """
+    streaming_service = request.app.state.streaming_service
+    ai_review = getattr(streaming_service, "_ai_review", None)
+
+    if ai_review is None:
+        return JSONResponse(content={
+            "available": False,
+            "running": False,
+            "review": None,
+            "all_reviews": {},
+        })
+
+    review = ai_review.get_last_review(asset)
+    all_reviews = ai_review.get_all_reviews() if asset is None else {}
+
+    return JSONResponse(content={
+        "available": True,
+        "running": bool(ai_review._running),
+        "review": review,
+        "all_reviews": all_reviews,
+    })

@@ -9,6 +9,7 @@ from typing import Dict, Any
 
 from .perf_monitor import PerformanceMonitor
 
+from .ai_review import AIReviewService
 from .auto_ghost import AutoGhostService
 from .market_context import MarketContextEngine, Level2Config, apply_level2_policy, apply_level3_policy
 from .oteo import OTEO, OTEOConfig
@@ -41,6 +42,7 @@ class StreamingService:
         self.level2_enabled = False
         self.level3_enabled = False
         self.oteo_ai_enabled = False
+        self.oteo_ai_execution_mode = "advisory"
         self.trade_service = TradeService(repository=get_data_repository(), sio=sio_server)
         self.auto_ghost = AutoGhostService(self.trade_service)
         self.trade_service.set_auto_ghost(self.auto_ghost)
@@ -61,12 +63,25 @@ class StreamingService:
         self.perf_monitor.set_queue(self._tick_queue)
         self._loop = None
         self._consumer_task = None
+        # Phase 4: AI Review Service (attached externally when AI is enabled)
+        self._ai_review: AIReviewService | None = None
 
     def _clear_level3_state(self, *, reset_classifiers: bool) -> None:
         """Clear cached Level 3 regime state."""
         self._last_regime.clear()
         if reset_classifiers:
             self._regime_classifiers.clear()
+        ai_review = getattr(self, "_ai_review", None)
+        if ai_review:
+            ai_review.clear_all()
+
+    def attach_ai_review(self, ai_service: object, interval: int = 300) -> None:
+        """
+        Attach the AI Review Service to the streaming pipeline.
+        Called from main.py during app startup when AI is enabled.
+        """
+        self._ai_review = AIReviewService(ai_service, interval_seconds=interval)  # type: ignore[arg-type]
+        logger.info("AI Review Service attached (interval: %ds)", interval)
 
     def update_runtime_settings(
         self,
@@ -74,6 +89,7 @@ class StreamingService:
         level2_enabled: bool | None = None,
         level3_enabled: bool | None = None,
         oteo_ai_enabled: bool | None = None,
+        oteo_ai_execution_mode: str | None = None,
         auto_ghost_enabled: bool | None = None,
         auto_ghost_amount: float | None = None,
         auto_ghost_expiration_seconds: int | None = None,
@@ -101,6 +117,10 @@ class StreamingService:
             self.oteo_ai_enabled = bool(oteo_ai_enabled)
         elif not hasattr(self, "oteo_ai_enabled"):
             self.oteo_ai_enabled = False
+        if oteo_ai_execution_mode is not None:
+            self.oteo_ai_execution_mode = str(oteo_ai_execution_mode)
+        elif not hasattr(self, "oteo_ai_execution_mode"):
+            self.oteo_ai_execution_mode = "advisory"
         if previous_level3_enabled and not self.level3_enabled:
             self._clear_level3_state(reset_classifiers=False)
         elif not previous_level3_enabled and self.level3_enabled:
@@ -123,11 +143,14 @@ class StreamingService:
             max_confidence=auto_ghost_max_confidence,
             max_trades_per_timeframe=auto_ghost_max_trades_per_timeframe,
             timeframe_seconds=auto_ghost_timeframe_seconds,
+            oteo_ai_enabled=self.oteo_ai_enabled,
+            oteo_ai_execution_mode=self.oteo_ai_execution_mode,
         )
         return {
             "oteo_level2_enabled": self.level2_enabled,
             "oteo_level3_enabled": self.level3_enabled,
             "oteo_ai_enabled": self.oteo_ai_enabled,
+            "oteo_ai_execution_mode": self.oteo_ai_execution_mode,
             **auto_ghost_status,
         }
 
@@ -144,6 +167,8 @@ class StreamingService:
             self._last_regime.pop(asset, None)
             self._tick_counts.pop(asset, None)
             self._payout_cache.pop(asset, None)
+            if self._ai_review:
+                self._ai_review.clear_asset(asset)
             logger.info("Cleaned up engines for removed asset: %s", asset)
 
         self._allowed_assets = new_set
@@ -155,6 +180,8 @@ class StreamingService:
         self.perf_monitor.start()
         self.tick_logger.start()
         self._consumer_task = asyncio.create_task(self._tick_consumer_loop())
+        if self.level3_enabled and self._ai_review:
+            self._ai_review.start()
         logger.info("StreamingService started — tick processing enabled")
 
     def stop(self) -> None:
@@ -164,6 +191,9 @@ class StreamingService:
         if self._consumer_task:
             self._consumer_task.cancel()
             self._consumer_task = None
+        if self._ai_review:
+            self._ai_review.stop()
+            self._ai_review.clear_all()
         
         # Drain the queue
         while not self._tick_queue.empty():
@@ -306,6 +336,7 @@ class StreamingService:
             enriched_result["level2_enabled"] = self.level2_enabled
             enriched_result["level3_enabled"] = self.level3_enabled
             enriched_result["oteo_ai_enabled"] = self.oteo_ai_enabled
+            enriched_result["oteo_ai_execution_mode"] = self.oteo_ai_execution_mode
             if self.level3_enabled and regime is not None:
                 enriched_result["regime"] = regime
                 enriched_result = apply_level3_policy(enriched_result, market_context, regime)
@@ -325,7 +356,7 @@ class StreamingService:
                         enriched_result["confidence"] = "MEDIUM"
                         
                     enriched_result["manipulation_penalty"] = round(penalty, 1)
-
+ 
             payload.update({
                 "oteo_score": enriched_result["oteo_score"],
                 "recommended": enriched_result["recommended"],
@@ -344,6 +375,7 @@ class StreamingService:
                 "level2_enabled": enriched_result["level2_enabled"],
                 "level3_enabled": enriched_result["level3_enabled"],
                 "oteo_ai_enabled": enriched_result["oteo_ai_enabled"],
+                "oteo_ai_execution_mode": enriched_result["oteo_ai_execution_mode"],
                 "level2_score_adjustment": enriched_result["level2_score_adjustment"],
                 "level2_suppressed_reason": enriched_result["level2_suppressed_reason"],
                 "level3_score_adjustment": enriched_result.get("level3_score_adjustment", 0.0),
@@ -361,6 +393,7 @@ class StreamingService:
                 "level2_enabled": self.level2_enabled,
                 "level3_enabled": self.level3_enabled,
                 "oteo_ai_enabled": self.oteo_ai_enabled,
+                "oteo_ai_execution_mode": self.oteo_ai_execution_mode,
                 "level3_score_adjustment": 0.0,
                 "level3_suppressed_reason": None,
                 "market_context": market_context,
@@ -431,6 +464,36 @@ class StreamingService:
                 manipulation=manipulation,
                 payout_pct=payout_pct,
             )
+
+            # Phase 4: Push snapshot to AI review loop when regime data is available
+            if self.level3_enabled and self._ai_review and regime is not None:
+                mc = oteo_result.get("market_context") or {}
+                di_spread = abs(float(mc.get("plus_di") or 0.0) - float(mc.get("minus_di") or 0.0))
+                ag_status = self.auto_ghost.status
+                self._ai_review.push_snapshot(asset, {
+                    "asset": asset,
+                    "regime_label": regime.get("regime_label"),
+                    "regime_confidence": regime.get("regime_confidence"),
+                    "regime_stable": regime.get("regime_stable"),
+                    "regime_persistence": regime.get("regime_persistence"),
+                    "regime_prior": regime.get("regime_prior"),
+                    "regime_detail": regime.get("regime_detail"),
+                    "adx": mc.get("adx"),
+                    "adx_slope": mc.get("adx_slope"),
+                    "di_spread": round(di_spread, 1),
+                    "cci": mc.get("cci"),
+                    "cci_state": mc.get("cci_state"),
+                    "cci_divergence": mc.get("cci_divergence"),
+                    "atr": mc.get("atr"),
+                    "nearest_structure_atr": mc.get("nearest_structure_atr"),
+                    "tick_health": mc.get("tick_health"),
+                    "tick_frequency": mc.get("tick_frequency"),
+                    "manipulation": manipulation,
+                    "recent_win_rate": ag_status.get("auto_ghost_session_wins", 0) / max(1, ag_status.get("auto_ghost_session_trades", 1)) * 100.0,
+                    "recent_trade_count": ag_status.get("auto_ghost_session_trades", 0),
+                    "session_pnl": ag_status.get("auto_ghost_session_pnl", 0.0),
+                    "condition_stats": self.auto_ghost.get_condition_stats(),
+                })
 
     def clear_detector_buffers(self, asset: str) -> None:
         """Clear manipulation detector buffers (used on focus switch)."""

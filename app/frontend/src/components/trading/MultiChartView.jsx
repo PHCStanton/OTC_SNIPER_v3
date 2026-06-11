@@ -40,6 +40,17 @@ function getMiniGaugeTone(direction) {
   };
 }
 
+/** Color class map for all 6 L3 regime labels on mini-cards. */
+const REGIME_CHIP_COLORS = {
+  RANGE_BOUND:       'text-emerald-400',
+  TREND_REVERSAL:    'text-green-400',
+  TREND_PULLBACK:    'text-yellow-400',
+  STRONG_MOMENTUM:   'text-orange-400',
+  BREAKOUT:          'text-amber-400',
+  CHOPPY:            'text-red-400',
+  INSUFFICIENT_DATA: 'text-gray-500',
+};
+
 const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, onRemove }) {
   const setSelectedAsset = useAssetStore((s) => s.setSelectedAsset);
   const starredAssets = useAssetStore((s) => s.starredAssets);
@@ -71,7 +82,8 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
     };
   }, [series, signal, latestPrice]);
   
-  const regime = signal?.regime ?? null;
+  // Prefer L3 regime_label (Phase 5); fall back to legacy alias for L1/L2 mode
+  const regime = signal?.regime_label ?? signal?.regime ?? null;
   const manipulationFlags = manipulation?.flags ?? manipulation;
   const gaugeTone = getMiniGaugeTone(direction);
   const isManipulated = Boolean(
@@ -219,9 +231,16 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
           {config.showRegime && (
             <div className="text-right">
               <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none mb-1">Regime</p>
-              <p className="text-[9px] font-black text-gray-300 uppercase tracking-tighter leading-none truncate max-w-[80px]">
-                {regime ? String(regime).replaceAll('_', ' ') : 'UNAVAIL'}
-              </p>
+              {regime ? (
+                <span className={`text-[9px] font-black uppercase tracking-tighter leading-none truncate max-w-[80px] ${REGIME_CHIP_COLORS[regime] || 'text-gray-300'}`}>
+                  {String(regime).replaceAll('_', ' ')}
+                  {signal?.regime_stable != null && (
+                    <span className="ml-1 opacity-50">{signal.regime_stable ? '✓' : '~'}</span>
+                  )}
+                </span>
+              ) : (
+                <p className="text-[9px] font-black text-gray-500 uppercase tracking-tighter leading-none">UNAVAIL</p>
+              )}
             </div>
           )}
           <div className="flex items-center gap-1.5 text-[9px] font-black text-gray-500 uppercase tracking-wider">
