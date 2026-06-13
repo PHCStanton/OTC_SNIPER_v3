@@ -291,9 +291,20 @@ class AnalysisService:
         # Summarize session details to stay within prompt limits
         trades_summary = []
         for t in session_data.get("trades", []):
-            entry_ctx = t.get("entry_context", {})
-            market_ctx = entry_ctx.get("market_context", {})
-            manipulation = entry_ctx.get("manipulation", {})
+            entry_ctx = t.get("entry_context") or {}
+            market_ctx = entry_ctx.get("market_context") or {}
+            manipulation = entry_ctx.get("manipulation") or {}
+            
+            # Helper to calculate manipulation severity
+            def _get_sev(v: Any) -> float:
+                if isinstance(v, bool):
+                    return 1.0 if v else 0.0
+                try:
+                    return float(v)
+                except (ValueError, TypeError):
+                    return 1.0 if v else 0.0
+            
+            manip_sev = max((_get_sev(val) for val in manipulation.values()), default=0.0)
             
             trades_summary.append({
                 "asset": t.get("asset"),
@@ -303,8 +314,15 @@ class AnalysisService:
                 "oteo": t.get("oteo_score"),
                 "level": t.get("strategy_level"),
                 "expiry": t.get("expiration_seconds"),
-                "regime": market_ctx.get("adx_regime", "unavailable"),
-                "trend": market_ctx.get("trend_direction", "flat"),
+                "regime": entry_ctx.get("regime_label") or market_ctx.get("regime_label") or market_ctx.get("adx_regime") or "unknown",
+                "regime_confidence": entry_ctx.get("regime_confidence") or market_ctx.get("regime_confidence") or 0,
+                "regime_stable": entry_ctx.get("regime_stable") or market_ctx.get("regime_stable") or False,
+                "z_score": entry_ctx.get("z_score") or "N/A",
+                "velocity": entry_ctx.get("velocity") or "N/A",
+                "adx_power": market_ctx.get("adx") or "N/A",
+                "tick_health": market_ctx.get("tick_health") or "N/A",
+                "nearest_sr_atr": market_ctx.get("nearest_structure_atr") or "N/A",
+                "manip_severity": round(manip_sev, 2),
                 "manip_type": list(manipulation.keys()) if isinstance(manipulation, dict) else []
             })
 
@@ -323,8 +341,10 @@ class AnalysisService:
             f"Wins: {session_data['wins']}, Losses: {session_data['losses']}\n"
             f"Net Profit: ${session_data['profit']:.2f}\n"
             f"Win Rate: {session_data['win_rate']:.1f}%\n\n"
-            f"Trades Log Summary:\n{json.dumps(trades_summary[:50], indent=2)}\n\n"
-            f"Analyze and format your response clearly. Include a section named 'Discovered Patterns' "
+            f"Trades Log Summary (enriched with Z-score, velocity, ADX power, S/R distance, and tick health):\n"
+            f"{json.dumps(trades_summary[:50], indent=2)}\n\n"
+            f"Analyze and format your response clearly. Focus on how indicators like Z-score, velocity, tick health, "
+            f"and manipulation severity correlated with win vs loss outcomes. Include a section named 'Discovered Patterns' "
             f"where you list specific repeating characteristics (e.g. 'Level 2 False Reversals') and "
             f"conclude with a concise audio-friendly summary script."
         )

@@ -1,0 +1,572 @@
+{
+  "metadata": {
+    "analyzer_phase": "Phase 2 - Manipulation-First Diagnostics",
+    "run_timestamp_utc": "2026-06-13 02:42:01 UTC",
+    "sessions_analyzed": 1
+  },
+  "totals": {
+    "total_ghost_trades_parsed": 100,
+    "successfully_joined": 99,
+    "unjoined_missing_signals": 0,
+    "unjoined_ambiguous": 1,
+    "missing_tick_files": 0,
+    "parsing_validation_warnings": 0
+  },
+  "performance_of_joined": {
+    "wins": 49,
+    "losses": 50,
+    "settled": 99,
+    "win_rate_pct": 49.49,
+    "net_profit": -101.8,
+    "average_drift_seconds": 0.0,
+    "manipulation_rate_pct": 47.47
+  },
+  "manipulation_diagnostics": {
+    "global_splits": {
+      "manipulation_present": {
+        "total_trades": 47,
+        "settled_trades": 47,
+        "wins": 23,
+        "losses": 24,
+        "win_rate_pct": 48.94,
+        "net_profit": -58.8,
+        "expectancy": -1.2511,
+        "small_sample_warning": false
+      },
+      "manipulation_absent": {
+        "total_trades": 52,
+        "settled_trades": 52,
+        "wins": 26,
+        "losses": 26,
+        "win_rate_pct": 50.0,
+        "net_profit": -43.0,
+        "expectancy": -0.8269,
+        "small_sample_warning": false
+      }
+    },
+    "assets": {
+      "MADUSD_otc": {
+        "total_trades": 3,
+        "manipulation_rate_pct": 33.33,
+        "manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_profit": -20.0,
+          "expectancy": -20.0,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 2,
+          "settled_trades": 2,
+          "wins": 1,
+          "losses": 1,
+          "win_rate_pct": 50.0,
+          "net_profit": -1.6,
+          "expectancy": -0.8,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": -50.0,
+        "expectancy_delta": -19.2,
+        "damage_factor": 19.2
+      },
+      "EURNZD_otc": {
+        "total_trades": 14,
+        "manipulation_rate_pct": 85.71,
+        "manipulation_stats": {
+          "total_trades": 12,
+          "settled_trades": 12,
+          "wins": 7,
+          "losses": 5,
+          "win_rate_pct": 58.33,
+          "net_profit": 28.2,
+          "expectancy": 2.35,
+          "small_sample_warning": false
+        },
+        "non_manipulation_stats": {
+          "total_trades": 2,
+          "settled_trades": 2,
+          "wins": 2,
+          "losses": 0,
+          "win_rate_pct": 100.0,
+          "net_profit": 36.2,
+          "expectancy": 18.1,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": -41.67,
+        "expectancy_delta": -15.75,
+        "damage_factor": 15.75
+      },
+      "CHFJPY_otc": {
+        "total_trades": 10,
+        "manipulation_rate_pct": 70.0,
+        "manipulation_stats": {
+          "total_trades": 7,
+          "settled_trades": 7,
+          "wins": 2,
+          "losses": 5,
+          "win_rate_pct": 28.57,
+          "net_profit": -64.0,
+          "expectancy": -9.1429,
+          "small_sample_warning": false
+        },
+        "non_manipulation_stats": {
+          "total_trades": 3,
+          "settled_trades": 3,
+          "wins": 0,
+          "losses": 3,
+          "win_rate_pct": 0.0,
+          "net_profit": -60.0,
+          "expectancy": -20.0,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": 28.57,
+        "expectancy_delta": 10.8571,
+        "damage_factor": -10.8571
+      },
+      "CADCHF_otc": {
+        "total_trades": 6,
+        "manipulation_rate_pct": 83.33,
+        "manipulation_stats": {
+          "total_trades": 5,
+          "settled_trades": 5,
+          "wins": 3,
+          "losses": 2,
+          "win_rate_pct": 60.0,
+          "net_profit": 14.6,
+          "expectancy": 2.92,
+          "small_sample_warning": false
+        },
+        "non_manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_profit": -20.0,
+          "expectancy": -20.0,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": 60.0,
+        "expectancy_delta": 22.92,
+        "damage_factor": -22.92
+      },
+      "USDARS_otc": {
+        "total_trades": 1,
+        "manipulation_rate_pct": 100.0,
+        "manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 1,
+          "losses": 0,
+          "win_rate_pct": 100.0,
+          "net_profit": 18.4,
+          "expectancy": 18.4,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 0,
+          "settled_trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "win_rate_pct": 0.0,
+          "net_profit": 0,
+          "expectancy": 0.0,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": 100.0,
+        "expectancy_delta": 18.4,
+        "damage_factor": -18.4
+      },
+      "NZDUSD_otc": {
+        "total_trades": 1,
+        "manipulation_rate_pct": 0.0,
+        "manipulation_stats": {
+          "total_trades": 0,
+          "settled_trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "win_rate_pct": 0.0,
+          "net_profit": 0,
+          "expectancy": 0.0,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_profit": -20.0,
+          "expectancy": -20.0,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": 0.0,
+        "expectancy_delta": 20.0,
+        "damage_factor": -20.0
+      },
+      "AUDUSD_otc": {
+        "total_trades": 20,
+        "manipulation_rate_pct": 5.0,
+        "manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 1,
+          "losses": 0,
+          "win_rate_pct": 100.0,
+          "net_profit": 18.4,
+          "expectancy": 18.4,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 19,
+          "settled_trades": 19,
+          "wins": 9,
+          "losses": 10,
+          "win_rate_pct": 47.37,
+          "net_profit": -34.4,
+          "expectancy": -1.8105,
+          "small_sample_warning": false
+        },
+        "win_rate_delta_pct": 52.63,
+        "expectancy_delta": 20.2105,
+        "damage_factor": -20.2105
+      },
+      "EURJPY_otc": {
+        "total_trades": 7,
+        "manipulation_rate_pct": 71.43,
+        "manipulation_stats": {
+          "total_trades": 5,
+          "settled_trades": 5,
+          "wins": 1,
+          "losses": 4,
+          "win_rate_pct": 20.0,
+          "net_profit": -61.6,
+          "expectancy": -12.32,
+          "small_sample_warning": false
+        },
+        "non_manipulation_stats": {
+          "total_trades": 2,
+          "settled_trades": 2,
+          "wins": 2,
+          "losses": 0,
+          "win_rate_pct": 100.0,
+          "net_profit": 36.8,
+          "expectancy": 18.4,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": -80.0,
+        "expectancy_delta": -30.72,
+        "damage_factor": 30.72
+      },
+      "GBPAUD_otc": {
+        "total_trades": 5,
+        "manipulation_rate_pct": 80.0,
+        "manipulation_stats": {
+          "total_trades": 4,
+          "settled_trades": 4,
+          "wins": 3,
+          "losses": 1,
+          "win_rate_pct": 75.0,
+          "net_profit": 35.2,
+          "expectancy": 8.8,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 1,
+          "losses": 0,
+          "win_rate_pct": 100.0,
+          "net_profit": 18.4,
+          "expectancy": 18.4,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": -25.0,
+        "expectancy_delta": -9.6,
+        "damage_factor": 9.6
+      },
+      "LBPUSD_otc": {
+        "total_trades": 8,
+        "manipulation_rate_pct": 0.0,
+        "manipulation_stats": {
+          "total_trades": 0,
+          "settled_trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "win_rate_pct": 0.0,
+          "net_profit": 0,
+          "expectancy": 0.0,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 8,
+          "settled_trades": 8,
+          "wins": 3,
+          "losses": 5,
+          "win_rate_pct": 37.5,
+          "net_profit": -45.6,
+          "expectancy": -5.7,
+          "small_sample_warning": false
+        },
+        "win_rate_delta_pct": -37.5,
+        "expectancy_delta": 5.7,
+        "damage_factor": -5.7
+      },
+      "QARCNY_otc": {
+        "total_trades": 2,
+        "manipulation_rate_pct": 0.0,
+        "manipulation_stats": {
+          "total_trades": 0,
+          "settled_trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "win_rate_pct": 0.0,
+          "net_profit": 0,
+          "expectancy": 0.0,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 2,
+          "settled_trades": 2,
+          "wins": 1,
+          "losses": 1,
+          "win_rate_pct": 50.0,
+          "net_profit": -1.6,
+          "expectancy": -0.8,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": -50.0,
+        "expectancy_delta": 0.8,
+        "damage_factor": -0.8
+      },
+      "GBPUSD_otc": {
+        "total_trades": 10,
+        "manipulation_rate_pct": 0.0,
+        "manipulation_stats": {
+          "total_trades": 0,
+          "settled_trades": 0,
+          "wins": 0,
+          "losses": 0,
+          "win_rate_pct": 0.0,
+          "net_profit": 0,
+          "expectancy": 0.0,
+          "small_sample_warning": true
+        },
+        "non_manipulation_stats": {
+          "total_trades": 10,
+          "settled_trades": 10,
+          "wins": 7,
+          "losses": 3,
+          "win_rate_pct": 70.0,
+          "net_profit": 68.8,
+          "expectancy": 6.88,
+          "small_sample_warning": false
+        },
+        "win_rate_delta_pct": -70.0,
+        "expectancy_delta": -6.88,
+        "damage_factor": 6.88
+      },
+      "GBPJPY_otc": {
+        "total_trades": 12,
+        "manipulation_rate_pct": 91.67,
+        "manipulation_stats": {
+          "total_trades": 11,
+          "settled_trades": 11,
+          "wins": 5,
+          "losses": 6,
+          "win_rate_pct": 45.45,
+          "net_profit": -28.0,
+          "expectancy": -2.5455,
+          "small_sample_warning": false
+        },
+        "non_manipulation_stats": {
+          "total_trades": 1,
+          "settled_trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_profit": -20.0,
+          "expectancy": -20.0,
+          "small_sample_warning": true
+        },
+        "win_rate_delta_pct": 45.45,
+        "expectancy_delta": 17.4545,
+        "damage_factor": -17.4545
+      }
+    },
+    "levels": {
+      "level3": {
+        "total_trades": 99,
+        "manipulation_stats": {
+          "total_trades": 47,
+          "settled_trades": 47,
+          "wins": 23,
+          "losses": 24,
+          "win_rate_pct": 48.94,
+          "net_profit": -58.8,
+          "expectancy": -1.2511,
+          "small_sample_warning": false
+        },
+        "non_manipulation_stats": {
+          "total_trades": 52,
+          "settled_trades": 52,
+          "wins": 26,
+          "losses": 26,
+          "win_rate_pct": 50.0,
+          "net_profit": -43.0,
+          "expectancy": -0.8269,
+          "small_sample_warning": false
+        }
+      }
+    },
+    "hourly_degradation": {
+      "01:00": {
+        "total_trades": 43,
+        "manip_trades": 19,
+        "manip_win_rate_pct": 42.11,
+        "non_manip_win_rate_pct": 58.33,
+        "win_rate_degradation_pct": 16.22
+      },
+      "02:00": {
+        "total_trades": 35,
+        "manip_trades": 19,
+        "manip_win_rate_pct": 47.37,
+        "non_manip_win_rate_pct": 43.75,
+        "win_rate_degradation_pct": -3.62
+      },
+      "03:00": {
+        "total_trades": 18,
+        "manip_trades": 7,
+        "manip_win_rate_pct": 71.43,
+        "non_manip_win_rate_pct": 45.45,
+        "win_rate_degradation_pct": -25.98
+      },
+      "04:00": {
+        "total_trades": 3,
+        "manip_trades": 2,
+        "manip_win_rate_pct": 50.0,
+        "non_manip_win_rate_pct": 0.0,
+        "win_rate_degradation_pct": -50.0
+      }
+    },
+    "rankings": {
+      "asset_manipulation_frequency": [
+        {
+          "asset": "USDARS_otc",
+          "rate_pct": 100.0
+        },
+        {
+          "asset": "GBPJPY_otc",
+          "rate_pct": 91.67
+        },
+        {
+          "asset": "EURNZD_otc",
+          "rate_pct": 85.71
+        },
+        {
+          "asset": "CADCHF_otc",
+          "rate_pct": 83.33
+        },
+        {
+          "asset": "GBPAUD_otc",
+          "rate_pct": 80.0
+        },
+        {
+          "asset": "EURJPY_otc",
+          "rate_pct": 71.43
+        },
+        {
+          "asset": "CHFJPY_otc",
+          "rate_pct": 70.0
+        },
+        {
+          "asset": "MADUSD_otc",
+          "rate_pct": 33.33
+        },
+        {
+          "asset": "AUDUSD_otc",
+          "rate_pct": 5.0
+        },
+        {
+          "asset": "NZDUSD_otc",
+          "rate_pct": 0.0
+        },
+        {
+          "asset": "LBPUSD_otc",
+          "rate_pct": 0.0
+        },
+        {
+          "asset": "QARCNY_otc",
+          "rate_pct": 0.0
+        },
+        {
+          "asset": "GBPUSD_otc",
+          "rate_pct": 0.0
+        }
+      ],
+      "asset_manipulation_damage": [
+        {
+          "asset": "EURJPY_otc",
+          "damage_factor": 30.72
+        },
+        {
+          "asset": "MADUSD_otc",
+          "damage_factor": 19.2
+        },
+        {
+          "asset": "EURNZD_otc",
+          "damage_factor": 15.75
+        },
+        {
+          "asset": "GBPAUD_otc",
+          "damage_factor": 9.6
+        },
+        {
+          "asset": "CHFJPY_otc",
+          "damage_factor": -10.8571
+        },
+        {
+          "asset": "GBPJPY_otc",
+          "damage_factor": -17.4545
+        },
+        {
+          "asset": "USDARS_otc",
+          "damage_factor": -18.4
+        },
+        {
+          "asset": "AUDUSD_otc",
+          "damage_factor": -20.2105
+        },
+        {
+          "asset": "CADCHF_otc",
+          "damage_factor": -22.92
+        }
+      ],
+      "weak_utc_hours": [
+        {
+          "hour": "01:00",
+          "degradation_pct": 16.22,
+          "manip_trades": 19
+        },
+        {
+          "hour": "02:00",
+          "degradation_pct": -3.62,
+          "manip_trades": 19
+        },
+        {
+          "hour": "03:00",
+          "degradation_pct": -25.98,
+          "manip_trades": 7
+        },
+        {
+          "hour": "04:00",
+          "degradation_pct": -50.0,
+          "manip_trades": 2
+        }
+      ]
+    }
+  }
+}
