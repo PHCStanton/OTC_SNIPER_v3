@@ -18,7 +18,8 @@ import {
   ChevronRight,
   ShieldCheck,
   AlertTriangle,
-  Plus
+  Plus,
+  Filter
 } from 'lucide-react';
 import { useToastStore } from '../../stores/useToastStore.js';
 
@@ -43,6 +44,17 @@ export default function AnalysisView() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+  
+  // Custom View Sections Toggle
+  const [visibleSections, setVisibleSections] = useState({
+    timePerformance: true,
+    sessionExtremes: true,
+    streakAnalytics: true,
+    scorePerformance: true,
+    assetPerformers: true
+  });
+  const [showCustomizeDropdown, setShowCustomizeDropdown] = useState(false);
+  const customizeDropdownRef = useRef(null);
 
   // Upload references
   const fileInputRef = useRef(null);
@@ -63,11 +75,14 @@ export default function AnalysisView() {
     }
   };
 
-  // Close upload dropdown on click outside
+  // Close upload and customize dropdowns on click outside
   useEffect(() => {
     function clickOutside(event) {
       if (uploadDropdownRef.current && !uploadDropdownRef.current.contains(event.target)) {
         setShowUploadDropdown(false);
+      }
+      if (customizeDropdownRef.current && !customizeDropdownRef.current.contains(event.target)) {
+        setShowCustomizeDropdown(false);
       }
     }
     document.addEventListener('mousedown', clickOutside);
@@ -269,6 +284,7 @@ export default function AnalysisView() {
 
   // Stats aggregation (Tab 2)
   const currentDailyStats = dataKind === 'ghost' ? sessions.daily_stats_ghost : sessions.daily_stats_live;
+  const insights = (dataKind === 'ghost' ? sessions.insights_ghost : sessions.insights_live) || {};
   
   // Calculate total session metrics
   const totalStats = filteredSessions.reduce((acc, curr) => {
@@ -384,6 +400,39 @@ export default function AnalysisView() {
               onChange={(e) => handleFileUpload(e.target.files, folderInputRef)}
               className="hidden"
             />
+          </div>
+
+          {/* Customize View dropdown */}
+          <div className="relative" ref={customizeDropdownRef}>
+            <button
+              onClick={() => setShowCustomizeDropdown(!showCustomizeDropdown)}
+              className="flex items-center gap-2 rounded-lg border border-white/5 bg-[#1e222a] px-4 py-2.5 text-xs font-bold transition hover:bg-white/5 hover:text-white"
+            >
+              <Filter size={14} className="text-[#ffb800]" />
+              Customize View
+            </button>
+            {showCustomizeDropdown && (
+              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-[#ffb800]/25 bg-[#1a1c22] p-3 shadow-2xl z-[100] space-y-2 text-left">
+                <div className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-1 px-1">Toggle Widgets</div>
+                {[
+                  { key: 'timePerformance', label: 'Time & Day Performance' },
+                  { key: 'sessionExtremes', label: 'Session Extremes (Top 3)' },
+                  { key: 'streakAnalytics', label: 'Streak Analytics' },
+                  { key: 'scorePerformance', label: 'OTEO Score WR Bands' },
+                  { key: 'assetPerformers', label: 'Top 10 Asset Performers' }
+                ].map(item => (
+                  <label key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white/5 cursor-pointer text-xs font-bold text-gray-300 select-none">
+                    <input
+                      type="checkbox"
+                      checked={visibleSections[item.key]}
+                      onChange={() => setVisibleSections(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                      className="accent-[#ffb800] rounded"
+                    />
+                    <span>{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <button
@@ -708,6 +757,261 @@ export default function AnalysisView() {
             </div>
 
           </div>
+
+          {/* Custom Insight Cards */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* 1. Time & Day Performance Card */}
+            {visibleSections.timePerformance && (
+              <div className="rounded-xl border border-white/5 bg-[#14171d] p-5 shadow-xl">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+                  <Clock size={14} className="text-[#ffb800]" />
+                  Time & Day Insights (Min 5 Trades)
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500">UTC Hour</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Best Window:</span>
+                        <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-bold text-emerald-400">
+                          {insights.time_of_day?.best || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Worst Window:</span>
+                        <span className="rounded bg-rose-500/10 px-2 py-0.5 font-bold text-rose-400">
+                          {insights.time_of_day?.worst || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500">Day of Week</div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Best Day:</span>
+                        <span className="rounded bg-emerald-500/10 px-2 py-0.5 font-bold text-emerald-400">
+                          {insights.day_of_week?.best || 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-400">Worst Day:</span>
+                        <span className="rounded bg-rose-500/10 px-2 py-0.5 font-bold text-rose-400">
+                          {insights.day_of_week?.worst || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Streak Analytics Card */}
+            {visibleSections.streakAnalytics && (
+              <div className="rounded-xl border border-white/5 bg-[#14171d] p-5 shadow-xl">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+                  <TrendingUp size={14} className="text-[#ffb800]" />
+                  Streak Analytics
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-lg bg-black/20 p-3 text-center">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500">Avg Win Streak</div>
+                    <div className="mt-2 text-xl font-black text-emerald-400">
+                      {insights.streaks?.avg_win_streak !== undefined ? `${insights.streaks.avg_win_streak} trades` : '0.0'}
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-black/20 p-3 text-center">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500">Avg Loss Streak</div>
+                    <div className="mt-2 text-xl font-black text-rose-400">
+                      {insights.streaks?.avg_loss_streak !== undefined ? `${insights.streaks.avg_loss_streak} trades` : '0.0'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. OTEO Score Bands Card */}
+            {visibleSections.scorePerformance && (
+              <div className="rounded-xl border border-white/5 bg-[#14171d] p-5 shadow-xl">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+                  <ShieldCheck size={14} className="text-[#ffb800]" />
+                  OTEO Score Bands Win Rate (Min 5 Trades)
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500">Highest WR Band</div>
+                    <div className="rounded bg-emerald-500/10 p-2.5 font-bold text-emerald-400 text-center text-xs">
+                      {insights.oteo_scores?.best_band || 'N/A'}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500">Lowest WR Band</div>
+                    <div className="rounded bg-rose-500/10 p-2.5 font-bold text-rose-400 text-center text-xs">
+                      {insights.oteo_scores?.worst_band || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Session Extremes Card */}
+            {visibleSections.sessionExtremes && (
+              <div className="rounded-xl border border-white/5 bg-[#14171d] p-5 shadow-xl md:col-span-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+                  <Award size={14} className="text-[#ffb800]" />
+                  Session Extremes (Top 3)
+                </h3>
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Top 3 Wins */}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-2">Top 3 Win Sessions</div>
+                    <div className="space-y-2">
+                      {insights.session_extremes?.top_wins?.length > 0 ? (
+                        insights.session_extremes.top_wins.map((s, idx) => (
+                          <div key={s.session_id || idx} className="flex items-center justify-between rounded bg-black/20 p-2 text-xs">
+                            <button
+                              onClick={() => {
+                                setSelectedSessionId(s.session_id);
+                                setActiveTab('ai');
+                                setTimeout(() => {
+                                  document.querySelector('select')?.scrollIntoView({ behavior: 'smooth' });
+                                }, 100);
+                              }}
+                              className="font-mono text-[#ffb800] hover:underline font-bold"
+                              title="Click to view AI Refinement review"
+                            >
+                              {s.session_id}
+                            </button>
+                            <div className="flex items-center gap-3">
+                              <span className="text-gray-400 font-bold">{s.wins} Wins</span>
+                              <span className="font-bold text-emerald-400">({s.win_rate}%)</span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[11px] text-gray-500 font-bold">No sessions computed yet</div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Top 3 Losses */}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-gray-500 mb-2">Top 3 Loss Sessions</div>
+                    <div className="space-y-2">
+                      {insights.session_extremes?.top_losses?.length > 0 ? (
+                        insights.session_extremes.top_losses.map((s, idx) => (
+                          <div key={s.session_id || idx} className="flex items-center justify-between rounded bg-black/20 p-2 text-xs">
+                            <button
+                              onClick={() => {
+                                setSelectedSessionId(s.session_id);
+                                setActiveTab('ai');
+                                setTimeout(() => {
+                                  document.querySelector('select')?.scrollIntoView({ behavior: 'smooth' });
+                                }, 100);
+                              }}
+                              className="font-mono text-[#ffb800] hover:underline font-bold"
+                              title="Click to view AI Refinement review"
+                            >
+                              {s.session_id}
+                            </button>
+                            <div className="flex items-center gap-3">
+                              <span className="text-gray-400 font-bold">{s.losses} Losses</span>
+                              <span className="font-bold text-rose-400">({s.win_rate}%)</span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-[11px] text-gray-500 font-bold">No sessions computed yet</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5. Top 10 Asset Performers Card */}
+            {visibleSections.assetPerformers && (
+              <div className="rounded-xl border border-white/5 bg-[#14171d] p-5 shadow-xl md:col-span-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 mb-4 flex items-center gap-2">
+                  <Activity size={14} className="text-[#ffb800]" />
+                  Asset Performance Rankings (Min 5 Trades)
+                </h3>
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Top 10 Best Performers */}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
+                      <TrendingUp size={12} />
+                      Top 10 Best Performing Assets
+                    </div>
+                    <div className="overflow-hidden rounded border border-white/5 bg-black/10">
+                      <table className="w-full text-left text-[11px]">
+                        <thead>
+                          <tr className="border-b border-white/5 bg-black/20 text-gray-500 font-black uppercase">
+                            <th className="p-2">Asset</th>
+                            <th className="p-2">WR %</th>
+                            <th className="p-2">Trades</th>
+                            <th className="p-2 text-right">PnL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {insights.asset_performers?.best_assets?.length > 0 ? (
+                            insights.asset_performers.best_assets.map((a, idx) => (
+                              <tr key={a.asset || idx} className="hover:bg-white/[0.02]">
+                                <td className="p-2 font-bold text-gray-300">{a.asset}</td>
+                                <td className="p-2 font-black text-emerald-400">{a.win_rate.toFixed(1)}%</td>
+                                <td className="p-2 font-bold text-gray-400">{a.total_trades}</td>
+                                <td className="p-2 text-right font-black text-emerald-400">${a.profit.toFixed(2)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="p-4 text-center text-gray-500 font-bold">No assets qualifying (&ge; 5 trades)</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Top 10 Worst Performers */}
+                  <div>
+                    <div className="text-[10px] font-black uppercase tracking-wider text-rose-400 mb-2 flex items-center gap-1.5">
+                      <TrendingDown size={12} />
+                      Top 10 Worst Performing Assets
+                    </div>
+                    <div className="overflow-hidden rounded border border-white/5 bg-black/10">
+                      <table className="w-full text-left text-[11px]">
+                        <thead>
+                          <tr className="border-b border-white/5 bg-black/20 text-gray-500 font-black uppercase">
+                            <th className="p-2">Asset</th>
+                            <th className="p-2">WR %</th>
+                            <th className="p-2">Trades</th>
+                            <th className="p-2 text-right">PnL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {insights.asset_performers?.worst_assets?.length > 0 ? (
+                            insights.asset_performers.worst_assets.map((a, idx) => (
+                              <tr key={a.asset || idx} className="hover:bg-white/[0.02]">
+                                <td className="p-2 font-bold text-gray-300">{a.asset}</td>
+                                <td className="p-2 font-black text-rose-400">{a.win_rate.toFixed(1)}%</td>
+                                <td className="p-2 font-bold text-gray-400">{a.total_trades}</td>
+                                <td className="p-2 text-right font-black text-rose-400">${a.profit.toFixed(2)}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan={4} className="p-4 text-center text-gray-500 font-bold">No assets qualifying (&ge; 5 trades)</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 

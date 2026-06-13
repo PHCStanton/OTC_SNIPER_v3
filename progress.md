@@ -31,9 +31,14 @@
 - **Level 3 Phase 3 (2026-05-02, SIGNED OFF)** — Added tick-frequency health, dead/low-market handling, Auto-Ghost confirmation windows, adaptive cooldown, and CCI divergence.
 - **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`.
 - **OTEO Level Backtest Plan (2026-05-15, CLOSED ✅)** — 4-phase plan fully implemented and signed off.
-- **L1/L2/L3 Optimization and AI Knowledge Base Plan (2026-05-16, PLANNED)** — New historical analyzer and knowledge base plan documented.
+- **L1/L2/L3 Optimization and AI Knowledge Base Plan — Phases 1-3, 5, 6 (2026-06-13, 100% COMPLETE ✅)** — Refactored offline analyzer, executed 10,207 trades full-corpus analysis, generated 1,029 KB patterns, created lazy-loading KnowledgeBaseLoader singleton, integrated microstructure manipulation taxonomy, mapped live active manipulation flags, and wired KB matching context into verification prompts and advisory logs. All tests pass cleanly.
  
 ## Recent Delivery Snapshot
+- **L123 Phase 6 (AI Advisory Contract):**
+  - **KnowledgeBaseLoader:** Created singleton to load patterns lazily and query top matching templates using symbol normalizations, regime, and score band.
+  - **Microstructure Taxonomy:** Embedded table containing Liquidity Sweeps, Pinning, Push & Snap, Fake Breakouts, Whipsaws, Low Liquidity, and Multi-Asset Coordination definitions into prompts.
+  - **Prompt Ingestion:** Extended AI confirmation prompts to append strategy level, active manipulation flags, and top matching historical statistics.
+  - **Socket Notifications:** Exposed top KB match summary (WR%, count) in Socket.IO warning/info messages.
 - **Result Analysis Panel/Page (2026-06-10):**
   - **Modular Dashboard Shell:** Created visual tabs (Session Logs, Stats & Insights, AI Refinement Center).
   - **Backend Services:** Implemented log parser, daily aggregated stats generator, Grok 4.3 evaluation integration, and persistent pattern memory recall.
@@ -51,6 +56,8 @@
   - **FastAPI Routing & Streaming:** Updated FastApi schemas, backend settings, and Socket.IO emission loops to accept and route `oteo_ai_enabled`.
  
 ## Verification Status
+- `conda run -n QuFLX-v2 python -m unittest test_knowledge_base_retrieval.py` -> ✅ passed (5/5 tests clean)
+- `conda run -n QuFLX-v2 python test_auto_ghost.py` -> ✅ passed (all 6 smoke tests clean)
 - `conda run -n QuFLX-v2 python -m py_compile app/backend/main.py app/backend/api/analysis.py app/backend/services/analysis_service.py` -> ✅ passed
 - `npm --prefix app/frontend run build` -> ✅ passed (built successfully in 4.23s)
 - `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` -> ✅ passed (39/39 tests clean)

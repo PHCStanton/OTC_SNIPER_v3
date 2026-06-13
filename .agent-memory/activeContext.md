@@ -5,15 +5,26 @@
 - **Result Analysis Panel/Page (2026-06-10) is fully implemented, verified, and closed.** Added backend router `/api/analysis/*` for parsing ghost/live trade sessions, calculating daily stats summaries, running Grok 4.3 reviews, persisting pattern recall memory, and producing speech playback audio. Integrated TopBar routing, activeView selection, and visual tabs (Session Logs list, responsive custom SVG charts, and AI Refinement dashboard).
 - **AI Developer Mode and Copy-Paste Uploads (2026-06-10) are fully implemented, verified, and closed.** Added a Developer Mode toggle to AppSettings and TopBar dropdown, enabled direct clipboard paste image uploads in the AITab, persisted pasted image files on the backend temporary path, and added visual status indicators and platform insights options.
 - **Independent AI Layer Toggle (2026-06-10) is fully implemented, verified, and closed.** Decoupled the AI advisory/model logic from Level 3. Added a dedicated AI toggle button next to Level 1, 2, and 3 buttons in the settings panel card, syncing it to the backend and tracking it in logs/payloads.
+- **Independent AI Layer Toggle (2026-06-10) are fully implemented, verified, and closed.** Decoupled the AI advisory/model logic from Level 3. Added a dedicated AI toggle button next to Level 1, 2, and 3 buttons in the settings panel card, syncing it to the backend and tracking it in logs/payloads.
 - **Lagging and Latency Optimizations (2026-06-05) are fully implemented, verified, and closed.**
 - The Auto-Ghost trader's 401-trade evidence set already drove the Level 2 hardening and tuning work; that foundation remains stable.
 - **TRAE session fixes (2026-04-27) remain fully implemented and closed.**
 - **Level 3 Phases 0, 1, 2, 3, 4, and 5 are all complete.** Phase 3 passed the multi-agent review gate on 2026-05-02; Phases 4 & 5 were implemented on 2026-06-11.
 - **OTEO Level Backtest Plan (2026-05-15) is now fully closed.** All 4 phases implemented, reviewed, and signed off.
 - The next valid implementation target is **Phase 6: Volatility-Adaptive Expiry** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
-- A separate planning track is documented in `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`; not yet started.
- 
+- **L123 Optimization and AI Knowledge Base Plan (2026-06-13) — 100% COMPLETE ✅ (Phases 1-3, 5, 6).** `scripts/analyze_trade_intelligence.py` refactored into composable phase functions. Full-corpus run: 9,999/10,207 trades joined (97.96%), 66 assets, 3 strategy levels, 1,029 knowledge-base patterns generated. Phase 6 (AI Advisory Contract) implemented: loaded condition patterns into AI confirmation prompts and background advisory loops, integrated active manipulation severity formatting, and embedded the OTC microstructure manipulation patterns taxonomy. All 5 new retrieval unit tests and existing auto-ghost smoke tests pass cleanly.
+
 ## Latest Changes
+
+### Applied on 2026-06-13 — L123 Phase 6 (AI Advisory Contract) (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| KB-1 | KB Loader & Query | `ai_review.py` | Implemented `KnowledgeBaseLoader` lazy-loading patterns from `condition_patterns.json`, custom similarity scoring matching symbols/regimes/bands, and prompt formatting helpers. |
+| KB-2 | Manipulation Taxonomy | `ai_review.py`, `auto_ghost.py` | Added detailed `_MANIPULATION_TAXONOMY` describing the 7 microstructure patterns (Liquidity Sweeps, Pinning, Push & Snap, Fake Breakouts, Whipsaws, Low Liquidity, Multi-Asset Coordination) to prompts. |
+| KB-3 | AI Confirmation | `auto_ghost.py` | Updated `_query_ai_confirmation` signature and logic to accept strategy level, load matching KB patterns, format active manipulation severities, and embed context in prompts. |
+| KB-4 | Advisory Notifications | `auto_ghost.py` | Enriched Socket.io notifications with top historical KB pattern matches (win rate, count). |
+| KB-5 | Unit Tests | `test_knowledge_base_retrieval.py` | Created comprehensive unit tests covering lazy loading, similarity priority querying, band mappings, and full AI confirmation prompt structure validation. |
 
 ### Applied on 2026-06-11 — Level 3 Phase 4 & Phase 5 (VERIFIED ✅)
 
@@ -66,8 +77,8 @@
 - **Developer Mode & Dropdown:** TopBar AI button opens a dropdown menu containing navigation commands, placeholder actions, and Developer Mode switches. System prompt changes in Dev Mode to support software construction discussions.
 - **Pasting screenshots:** Direct clipboard screenshot paste operations are fully functional in AITab, and the backend writes temporary image files to `app/data/tmp/uploaded_images/` automatically.
 - **Level 3 Phases 0–5 are all complete.** Phase 4 (AI Advisory Review Loop) and Phase 5 (Frontend L3 Visualization) implemented and verified on 2026-06-11.
-- **Next target: Phase 6 (Volatility-Adaptive Expiry)** — ATR percentile, suggest_expiry helper, backend plumbing, frontend settings toggle.
-- L123 Optimization Plan Phase 1 can begin independently as an offline analysis track.
+- **L123 Plan Phases 1+2+3+5 complete (2026-06-13).** `analyze_trade_intelligence.py` refactored into composable functions. Full-corpus: 9,999 trades joined, 66 assets, 3 strategy levels (Level1/Level2/Level3), 5 regimes, 1,029 KB patterns (101 medium/high confidence). Artifacts: `reports/analysis/joined_trades.csv`, `summary_statistics.json`, `mismatch_audit.md`, `knowledge_base/condition_patterns.json`.
+- **Next target: L123 Phase 6 (AI Advisory Contract)** — payload contract, pattern retrieval, trade confirmation messages wired to `AIReviewService`.
 
 ## Validation
 - **Backend Compilation:** `conda run -n QuFLX-v2 python -m py_compile app/backend/services/ai_review.py app/backend/services/ai_service.py app/backend/services/auto_ghost.py app/backend/services/streaming.py app/backend/api/strategy.py app/backend/main.py` -> ✅ passed.

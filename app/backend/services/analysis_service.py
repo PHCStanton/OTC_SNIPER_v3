@@ -148,11 +148,209 @@ class AnalysisService:
         daily_stats_ghost = self.load_daily_stats_files("ghost")
         daily_stats_live = self.load_daily_stats_files("live")
 
+        # Calculate advanced insights
+        insights_ghost = self._calculate_advanced_insights(ghost_sessions)
+        insights_live = self._calculate_advanced_insights(live_sessions)
+
         return {
             "ghost_sessions": [self._clean_session_for_api(s) for s in ghost_sessions],
             "live_sessions": [self._clean_session_for_api(s) for s in live_sessions],
             "daily_stats_ghost": daily_stats_ghost,
             "daily_stats_live": daily_stats_live,
+            "insights_ghost": insights_ghost,
+            "insights_live": insights_live,
+        }
+
+    def _calculate_advanced_insights(self, sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Compute advanced insights (UTC hour, weekdays, extremes, streaks, score WRs, and best/worst assets)."""
+        import datetime
+        
+        all_trades = []
+        for s in sessions:
+            for t in s.get("trades", []):
+                if t.get("timestamp") and t.get("outcome") in ("win", "loss"):
+                    all_trades.append(t)
+                    
+        empty_shell = {
+            "time_of_day": {"best": "N/A", "worst": "N/A"},
+            "day_of_week": {"best": "N/A", "worst": "N/A"},
+            "session_extremes": {"top_wins": [], "top_losses": []},
+            "streaks": {"avg_win_streak": 0.0, "avg_loss_streak": 0.0},
+            "oteo_scores": {"best_band": "N/A", "worst_band": "N/A"},
+            "asset_performers": {"best_assets": [], "worst_assets": []}
+        }
+        if not all_trades:
+            return empty_shell
+            
+        # 1. Time of Day (UTC) & Weekdays
+        hour_stats = {}
+        day_stats = {}
+        WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        
+        for t in all_trades:
+            ts = float(t["timestamp"])
+            dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
+            h_str = f"{dt.hour:02d}:00"
+            w_str = WEEKDAYS[dt.weekday()]
+            
+            is_win = t["outcome"] == "win"
+            
+            # Hour
+            h_data = hour_stats.setdefault(h_str, {"total": 0, "wins": 0})
+            h_data["total"] += 1
+            if is_win:
+                h_data["wins"] += 1
+                
+            # Weekday
+            w_data = day_stats.setdefault(w_str, {"total": 0, "wins": 0})
+            w_data["total"] += 1
+            if is_win:
+                w_data["wins"] += 1
+                
+        # Resolve best/worst hour (minimum 5 trades)
+        valid_hours = {h: (d["wins"] / d["total"] * 100.0) for h, d in hour_stats.items() if d["total"] >= 5}
+        best_hour = "N/A"
+        worst_hour = "N/A"
+        if valid_hours:
+            best_h = max(valid_hours, key=valid_hours.get)
+            worst_h = min(valid_hours, key=valid_hours.get)
+            best_hour = f"{best_h} ({valid_hours[best_h]:.1f}% WR)"
+            worst_hour = f"{worst_h} ({valid_hours[worst_h]:.1f}% WR)"
+            
+        # Resolve best/worst day (minimum 5 trades)
+        valid_days = {w: (d["wins"] / d["total"] * 100.0) for w, d in day_stats.items() if d["total"] >= 5}
+        best_day = "N/A"
+        worst_day = "N/A"
+        if valid_days:
+            best_d = max(valid_days, key=valid_days.get)
+            worst_d = min(valid_days, key=valid_days.get)
+            best_day = f"{best_d} ({valid_days[best_d]:.1f}% WR)"
+            worst_day = f"{worst_d} ({valid_days[worst_d]:.1f}% WR)"
+            
+        # 2. Session Extremes (Top 3 wins & losses)
+        top_wins_sessions = []
+        top_losses_sessions = []
+        for s in sessions:
+            top_wins_sessions.append({
+                "session_id": s["session_id"],
+                "wins": s["wins"],
+                "total_trades": s["total_trades"],
+                "win_rate": round(s["win_rate"], 1)
+            })
+            top_losses_sessions.append({
+                "session_id": s["session_id"],
+                "losses": s["losses"],
+                "total_trades": s["total_trades"],
+                "win_rate": round(s["win_rate"], 1)
+            })
+            
+        top_wins = sorted(top_wins_sessions, key=lambda x: x["wins"], reverse=True)[:3]
+        top_losses = sorted(top_losses_sessions, key=lambda x: x["losses"], reverse=True)[:3]
+        
+        # 3. Overall Streaks (Chronological across all trades)
+        sorted_trades = sorted(all_trades, key=lambda x: float(x["timestamp"]))
+        win_streaks = []
+        loss_streaks = []
+        
+        curr_streak_type = None
+        curr_streak_len = 0
+        
+        for t in sorted_trades:
+            outcome = t["outcome"]
+            if curr_streak_type is None:
+                curr_streak_type = outcome
+                curr_streak_len = 1
+            elif outcome == curr_streak_type:
+                curr_streak_len += 1
+            else:
+                if curr_streak_type == "win":
+                    win_streaks.append(curr_streak_len)
+                else:
+                    loss_streaks.append(curr_streak_len)
+                curr_streak_type = outcome
+                curr_streak_len = 1
+                
+        if curr_streak_len > 0:
+            if curr_streak_type == "win":
+                win_streaks.append(curr_streak_len)
+            else:
+                loss_streaks.append(curr_streak_len)
+                
+        avg_win_streak = sum(win_streaks) / len(win_streaks) if win_streaks else 0.0
+        avg_loss_streak = sum(loss_streaks) / len(loss_streaks) if loss_streaks else 0.0
+        
+        # 4. OTEO Score Bands (highest and lowest win rate band, minimum 5 trades)
+        score_bands = {"50-60": {"total": 0, "wins": 0},
+                       "60-70": {"total": 0, "wins": 0},
+                       "70-80": {"total": 0, "wins": 0},
+                       "80-90": {"total": 0, "wins": 0},
+                       "90-100": {"total": 0, "wins": 0}}
+                       
+        for t in all_trades:
+            score = float(t.get("oteo_score") or 0.0)
+            is_win = t["outcome"] == "win"
+            band = None
+            if 50.0 <= score < 60.0:
+                band = "50-60"
+            elif 60.0 <= score < 70.0:
+                band = "60-70"
+            elif 70.0 <= score < 80.0:
+                band = "70-80"
+            elif 80.0 <= score < 90.0:
+                band = "80-90"
+            elif 90.0 <= score <= 100.0:
+                band = "90-100"
+                
+            if band:
+                score_bands[band]["total"] += 1
+                if is_win:
+                    score_bands[band]["wins"] += 1
+                    
+        valid_bands = {b: (d["wins"] / d["total"] * 100.0) for b, d in score_bands.items() if d["total"] >= 5}
+        best_band = "N/A"
+        worst_band = "N/A"
+        if valid_bands:
+            best_b = max(valid_bands, key=valid_bands.get)
+            worst_b = min(valid_bands, key=valid_bands.get)
+            best_band = f"{best_b} ({valid_bands[best_b]:.1f}% WR)"
+            worst_band = f"{worst_b} ({valid_bands[worst_b]:.1f}% WR)"
+            
+        # 5. Asset Performers (Top 10 Best and Worst, minimum 5 trades)
+        asset_stats = {}
+        for t in all_trades:
+            asset = t["asset"]
+            is_win = t["outcome"] == "win"
+            a_data = asset_stats.setdefault(asset, {"total": 0, "wins": 0, "losses": 0, "profit": 0.0})
+            a_data["total"] += 1
+            if is_win:
+                a_data["wins"] += 1
+            else:
+                a_data["losses"] += 1
+            a_data["profit"] += float(t.get("profit") or 0.0)
+            
+        ranked_assets = []
+        for asset, d in asset_stats.items():
+            if d["total"] >= 5:
+                wr = d["wins"] / d["total"] * 100.0
+                ranked_assets.append({
+                    "asset": asset,
+                    "total_trades": d["total"],
+                    "wins": d["wins"],
+                    "losses": d["losses"],
+                    "win_rate": round(wr, 1),
+                    "profit": round(d["profit"], 2)
+                })
+                
+        best_assets = sorted(ranked_assets, key=lambda x: (x["win_rate"], x["profit"]), reverse=True)[:10]
+        worst_assets = sorted(ranked_assets, key=lambda x: (x["win_rate"], x["profit"]))[:10]
+        
+        return {
+            "time_of_day": {"best": best_hour, "worst": worst_hour},
+            "day_of_week": {"best": best_day, "worst": worst_day},
+            "session_extremes": {"top_wins": top_wins, "top_losses": top_losses},
+            "streaks": {"avg_win_streak": round(avg_win_streak, 2), "avg_loss_streak": round(avg_loss_streak, 2)},
+            "oteo_scores": {"best_band": best_band, "worst_band": worst_band},
+            "asset_performers": {"best_assets": best_assets, "worst_assets": worst_assets}
         }
 
     def _clean_session_for_api(self, s: Dict[str, Any]) -> Dict[str, Any]:

@@ -415,6 +415,7 @@ class AutoGhostService:
 
         # AI Confirmation Gate
         if self.config.oteo_ai_enabled:
+            strategy_level = "level3" if oteo_result.get("level3_enabled") else "level2" if oteo_result.get("level2_enabled") else "level1"
             if self.config.oteo_ai_execution_mode == "confirmation":
                 logger.info("Requesting AI execution confirmation for %s...", asset)
                 try:
@@ -424,6 +425,7 @@ class AutoGhostService:
                         oteo_score=score,
                         market_context=oteo_result.get("market_context") or {},
                         manipulation=manipulation,
+                        strategy_level=strategy_level,
                     )
                     if not ai_confirmed:
                         logger.info("Auto-Ghost skipped %s: AI confirmation rejected signal (Response: %r)", asset, ai_response_str)
@@ -440,6 +442,7 @@ class AutoGhostService:
                         oteo_score=score,
                         market_context=oteo_result.get("market_context") or {},
                         manipulation=manipulation,
+                        strategy_level=strategy_level,
                     )
                 )
 
@@ -544,10 +547,12 @@ class AutoGhostService:
         oteo_score: float,
         market_context: dict[str, Any],
         manipulation: dict[str, Any],
+        strategy_level: str = "level1",
     ) -> tuple[bool, str]:
         """Query the AI provider for a binary trade confirmation (CONFIRM or REJECT)."""
         from .ai_service import get_ai_service
         from ..models.ai_models import AIChatRequest, AIMessage, AIContext
+        from .ai_review import KnowledgeBaseLoader, format_patterns_for_prompt, _MANIPULATION_TAXONOMY
 
         ai_service = get_ai_service()
         if not ai_service.status().enabled:
@@ -565,16 +570,28 @@ class AutoGhostService:
         tick_health = market_context.get("tick_health", "unknown")
         nearest_structure_atr = market_context.get("nearest_structure_atr", "N/A")
 
-        # Calculate manipulation severity
-        manip_severity = (
-            max(_get_severity(v) for v in manipulation.values())
+        # Retrieve top matching historical patterns from KB
+        kb_loader = KnowledgeBaseLoader.get_instance()
+        matched_patterns = kb_loader.query_top_patterns(
+            asset=asset,
+            strategy_level=strategy_level,
+            oteo_score=oteo_score,
+            regime_label=regime_label,
+            direction=direction,
+        )
+        patterns_context = format_patterns_for_prompt(matched_patterns)
+
+        # Format active manipulation flags cleanly
+        active_manip = (
+            ", ".join(f"{k} (severity: {v:.2f})" for k, v in manipulation.items())
             if manipulation
-            else 0.0
+            else "None"
         )
 
         system_msg = (
             "You are an expert AI trading confirmation assistant. You review market data snapshots "
-            "for short-expiry OTC binary options setups and confirm or reject them.\n"
+            "for short-expiry OTC binary options setups and confirm or reject them.\n\n"
+            f"{_MANIPULATION_TAXONOMY}\n\n"
             "Regime context: RANGE_BOUND=ideal for reversals, TREND_REVERSAL=good for reversals, "
             "TREND_PULLBACK=conditional (trend-aligned only), STRONG_MOMENTUM/BREAKOUT/CHOPPY=dangerous for reversals.\n"
             "Answer with EXACTLY 'CONFIRM' or 'REJECT' (no other text, explanation, or punctuation)."
@@ -585,13 +602,16 @@ class AutoGhostService:
             f"Asset: {asset}\n"
             f"Direction: {direction}\n"
             f"OTEO Score: {oteo_score}\n"
+            f"Strategy Level: {strategy_level.upper()}\n"
             f"Regime: {regime_label} (confidence: {regime_confidence}%, stable: {regime_stable})\n"
             f"Trend Direction: {trend}\n"
             f"ADX: {adx}\n"
             f"CCI: {cci} ({cci_state})\n"
             f"Nearest S/R: {nearest_structure_atr} ATR\n"
             f"Tick Health: {tick_health}\n"
-            f"Manipulation Severity: {manip_severity:.2f}\n\n"
+            f"Active Manipulation: {active_manip}\n\n"
+            f"Historical Context (Top Matching KB Patterns):\n"
+            f"{patterns_context}\n\n"
             f"Should we execute this trade? Respond with CONFIRM or REJECT."
         )
 
@@ -638,6 +658,7 @@ class AutoGhostService:
         oteo_score: float,
         market_context: dict[str, Any],
         manipulation: dict[str, Any],
+        strategy_level: str = "level1",
     ) -> None:
         """Query the AI provider in the background for advisory analysis and emit notification."""
         try:
@@ -647,15 +668,32 @@ class AutoGhostService:
                 oteo_score=oteo_score,
                 market_context=market_context,
                 manipulation=manipulation,
+                strategy_level=strategy_level,
             )
             
-            msg = f"[AI Advisor] Trade Setup {direction} on {asset} reviewed. Decision: {response}."
+            # Query top pattern for the advisory socket notification
+            from .ai_review import KnowledgeBaseLoader
+            kb_loader = KnowledgeBaseLoader.get_instance()
+            regime_label = market_context.get("regime_label") or market_context.get("adx_regime", "unknown")
+            matched_patterns = kb_loader.query_top_patterns(
+                asset=asset,
+                strategy_level=strategy_level,
+                oteo_score=oteo_score,
+                regime_label=regime_label,
+                direction=direction,
+            )
+            top_pattern_str = "No KB Match"
+            if matched_patterns:
+                top_p = matched_patterns[0]
+                top_pattern_str = f"KB Match: WR={top_p.get('win_rate_pct', 0.0):.1f}%, N={top_p.get('sample_size', 0)}"
+
+            msg = f"[AI Advisor] Trade Setup {direction} on {asset} reviewed. Decision: {response}. ({top_pattern_str})"
             if self.trade_service.sio:
                 await self.trade_service.sio.emit("notification", {
                     "type": "info" if confirmed else "warning",
                     "message": msg,
                     "timestamp": unix_time(),
                 })
-            logger.info("AI Advisory completed for %s: %s", asset, response)
+            logger.info("AI Advisory completed for %s: %s (%s)", asset, response, top_pattern_str)
         except Exception as e:
             logger.debug("AI Advisory background query failed: %s", e)
