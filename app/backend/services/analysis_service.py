@@ -100,6 +100,20 @@ class AnalysisService:
         assets = list(set(t.get("asset") for t in trades if t.get("asset")))
         strategies = list(set(t.get("strategy_level") for t in trades if t.get("strategy_level")))
 
+        # Compute regimes and avg z_score for filtering / optimal z analysis
+        regimes = set()
+        z_scores = []
+        for t in trades:
+            entry = t.get("entry_context") or {}
+            r = entry.get("regime_label") or entry.get("regime") or "unknown"
+            regimes.add(r)
+            try:
+                z = float(entry.get("z_score", 0) or 0)
+                z_scores.append(z)
+            except (ValueError, TypeError):
+                pass
+        avg_z = round(sum(z_scores) / len(z_scores), 2) if z_scores else 0.0
+
         return {
             "session_id": filepath.stem,
             "kind": kind,
@@ -113,6 +127,8 @@ class AnalysisService:
             "end_time": end_time,
             "assets": assets,
             "strategy_levels": strategies,
+            "regimes": list(regimes),
+            "avg_z_score": avg_z,
             "trades": trades,
         }
 
@@ -152,6 +168,12 @@ class AnalysisService:
         insights_ghost = self._calculate_advanced_insights(ghost_sessions)
         insights_live = self._calculate_advanced_insights(live_sessions)
 
+        # Compute z-regime win rates for the 5 optimal cutoffs (for panel filters and analysis)
+        ghost_all_trades = [t for s in ghost_sessions for t in s.get("trades", [])]
+        live_all_trades = [t for s in live_sessions for t in s.get("trades", [])]
+        z_regime_ghost = self._compute_z_regime_winrates(ghost_all_trades)
+        z_regime_live = self._compute_z_regime_winrates(live_all_trades)
+
         return {
             "ghost_sessions": [self._clean_session_for_api(s) for s in ghost_sessions],
             "live_sessions": [self._clean_session_for_api(s) for s in live_sessions],
@@ -159,6 +181,8 @@ class AnalysisService:
             "daily_stats_live": daily_stats_live,
             "insights_ghost": insights_ghost,
             "insights_live": insights_live,
+            "z_regime_ghost": z_regime_ghost,
+            "z_regime_live": z_regime_live,
         }
 
     def _calculate_advanced_insights(self, sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -360,6 +384,43 @@ class AnalysisService:
             del cleaned["trades"]
         return cleaned
 
+    def _compute_z_regime_winrates(self, all_trades: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Compute win rates for 5 fixed optimal z-score cutoffs per regime.
+        Used for filters and AI analysis in Results & Analysis Panel.
+        """
+        if not all_trades:
+            return {}
+        cutoffs = [0.3, 0.5, 0.8, 1.2, 2.0]
+        from collections import defaultdict
+        data = defaultdict(lambda: {c: {"wins": 0, "total": 0} for c in cutoffs})
+        for t in all_trades:
+            entry = t.get("entry_context") or {}
+            regime = entry.get("regime_label") or entry.get("regime") or "unknown"
+            try:
+                z = float(entry.get("z_score", 0) or 0)
+            except (ValueError, TypeError):
+                z = 0.0
+            outcome = str(t.get("outcome", "")).lower()
+            is_win = outcome == "win"
+            for c in cutoffs:
+                if abs(z) >= c:
+                    data[regime][c]["total"] += 1
+                    if is_win:
+                        data[regime][c]["wins"] += 1
+        result = {}
+        for regime, cdata in data.items():
+            result[regime] = []
+            for c in cutoffs:
+                d = cdata[c]
+                total = d["total"]
+                wr = (d["wins"] / total * 100.0) if total > 0 else 0.0
+                result[regime].append({
+                    "z_cutoff": c,
+                    "win_rate": round(wr, 1),
+                    "trades": total
+                })
+        return result
+
     def update_daily_summaries(self, sessions: List[Dict[str, Any]], kind: str) -> None:
         """Aggregate trade sessions into daily stats summaries saved to disk."""
         stats_dir = self.settings.data_dir / f"{kind}_trades" / "stats"
@@ -477,14 +538,20 @@ class AnalysisService:
         summaries.sort(key=lambda s: s.get("date", ""), reverse=True)
         return summaries
 
-    async def run_ai_refinement(self, session_id: str, kind: str) -> Dict[str, Any]:
-        """Perform token-efficient logs review via Grok 4.3 API."""
+    async def run_ai_refinement(self, session_id: str, kind: str, filters: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        """Perform token-efficient logs review via Grok 4.3 API.
+        filters can include z_cutoff, regimes to filter trades and analyze optimal z/regime combos.
+        """
         session_dir = self.settings.data_dir / f"{kind}_trades" / "sessions"
         filepath = session_dir / f"{session_id}.jsonl"
         session_data = self.parse_session_file(filepath, kind)
 
         if not session_data:
             return {"error": f"Session {session_id} not found or has no trades."}
+
+        filters = filters or {}
+        z_cutoff = filters.get("z_cutoff")
+        selected_regimes = filters.get("regimes") or []
 
         # Summarize session details to stay within prompt limits
         trades_summary = []
@@ -504,6 +571,19 @@ class AnalysisService:
             
             manip_sev = max((_get_sev(val) for val in manipulation.values()), default=0.0)
             
+            z_val = entry_ctx.get("z_score") or 0
+            try:
+                z_val = float(z_val)
+            except (ValueError, TypeError):
+                z_val = 0.0
+            regime = entry_ctx.get("regime_label") or market_ctx.get("regime_label") or market_ctx.get("adx_regime") or "unknown"
+
+            # Apply filters if provided
+            if z_cutoff is not None and abs(z_val) < float(z_cutoff):
+                continue
+            if selected_regimes and regime not in selected_regimes:
+                continue
+
             trades_summary.append({
                 "asset": t.get("asset"),
                 "dir": t.get("direction"),
@@ -512,10 +592,10 @@ class AnalysisService:
                 "oteo": t.get("oteo_score"),
                 "level": t.get("strategy_level"),
                 "expiry": t.get("expiration_seconds"),
-                "regime": entry_ctx.get("regime_label") or market_ctx.get("regime_label") or market_ctx.get("adx_regime") or "unknown",
+                "regime": regime,
                 "regime_confidence": entry_ctx.get("regime_confidence") or market_ctx.get("regime_confidence") or 0,
                 "regime_stable": entry_ctx.get("regime_stable") or market_ctx.get("regime_stable") or False,
-                "z_score": entry_ctx.get("z_score") or "N/A",
+                "z_score": round(z_val, 2) if z_val else "N/A",
                 "velocity": entry_ctx.get("velocity") or "N/A",
                 "adx_power": market_ctx.get("adx") or "N/A",
                 "tick_health": market_ctx.get("tick_health") or "N/A",
@@ -523,6 +603,13 @@ class AnalysisService:
                 "manip_severity": round(manip_sev, 2),
                 "manip_type": list(manipulation.keys()) if isinstance(manipulation, dict) else []
             })
+
+        # Compute optimal z-regime for the (filtered) session trades for AI analysis of filters
+        session_z_regime = self._compute_z_regime_winrates([
+            {"entry_context": {"regime_label": t.get("regime"), "z_score": t.get("z_score")},
+             "outcome": t.get("outcome")}
+            for t in trades_summary
+        ])
 
         # Grok system prompt
         system_prompt = (
@@ -539,12 +626,17 @@ class AnalysisService:
             f"Wins: {session_data['wins']}, Losses: {session_data['losses']}\n"
             f"Net Profit: ${session_data['profit']:.2f}\n"
             f"Win Rate: {session_data['win_rate']:.1f}%\n\n"
+            f"Active Filters Applied (if any): z_cutoff={z_cutoff}, regimes={selected_regimes}\n\n"
             f"Trades Log Summary (enriched with Z-score, velocity, ADX power, S/R distance, and tick health):\n"
             f"{json.dumps(trades_summary[:50], indent=2)}\n\n"
+            f"Optimal 5 z-score cutoffs and Win Rates by Regime (for filter analysis):\n"
+            f"{json.dumps(session_z_regime, indent=2)}\n\n"
             f"Analyze and format your response clearly. Focus on how indicators like Z-score, velocity, tick health, "
             f"and manipulation severity correlated with win vs loss outcomes. Include a section named 'Discovered Patterns' "
-            f"where you list specific repeating characteristics (e.g. 'Level 2 False Reversals') and "
-            f"conclude with a concise audio-friendly summary script."
+            f"where you list specific repeating characteristics (e.g. 'Level 2 False Reversals'). "
+            f"Also analyze the optimal z-score thresholds per regime shown above and recommend which z-score cutoffs + regimes "
+            f"would be best to add as filters in the Ghost Controller for execution quality. Suggest specific 5 optimal combinations "
+            f"and expected impact on win rate. Conclude with a concise audio-friendly summary script."
         )
 
         ai_service = get_ai_service()
@@ -556,9 +648,10 @@ class AnalysisService:
         ]
         
         # Call AI provider
+        ai_service = get_ai_service()
         chat_req = AIChatRequest(
             messages=[AIMessage(role=m["role"], content=m["content"]) for m in messages],
-            model="grok-4.3",
+            model=ai_service.settings.ai_model,  # respect AI Settings / profile model
             context=AIContext(
                 asset=session_data["assets"][0] if session_data["assets"] else None,
                 balance=None,

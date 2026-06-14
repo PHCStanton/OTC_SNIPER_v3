@@ -31,7 +31,8 @@
 ## Technical Decisions
 - **JSON/JSONL as source of truth (v3):** Kept as the primary data store structure before executing the eventual Supabase migration.
 - **Port Isolation:** Running the app on port 8001 to prevent conflict with QuFLX v2 on 8000.
-- **AI Advisory Only:** The AI component (Grok) acts strictly as an advisory system for session analysis, signal confirmation, and risk insights. It does not execute live trades autonomously.
+- **AI Advisory Only:** The AI component (Grok) acts strictly as an advisory system for session analysis, signal confirmation, and risk insights. It does not execute live trades autonomously. Extended for native TTS voice profiles (grok/browser + custom) and dynamic z-score/regime filters in analysis (5 optimal cutoffs with per-regime WRs). AI can propose adaptive gate values (z-score, regimes, etc.) from recent trades + KB for Ghost Controller calibration.
+- **Profile-Driven Config:** Extensible profiles for model/reasoning/voice/TTS and (future) execution filters. Profile selection drives fast vs quality paths and filter application.
 - **Direct tick streaming in v3:** Live market data is currently routed directly from the broker tick callback into Socket.IO, without Redis in the runtime path.
 - **Direct Socket.IO dev connection:** Local frontend development may connect directly to the backend Socket.IO endpoint when the Vite proxy handshake is unreliable.
 - **Explicit trade rejection feedback:** Frontend trade flows must validate broker response success and render failure state immediately.

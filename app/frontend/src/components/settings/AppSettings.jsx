@@ -269,10 +269,10 @@ export default function AppSettings() {
             </div>
           </SectionCard>
 
-          {/* AI INTEGRATION & CONFIG */}
+          {/* AI INTEGRATION & CONFIG - basic global model kept for compatibility */}
           <SectionCard 
-            title="AI Integration & Feeds" 
-            subtitle="Configure machine learning filters and asset catalog options."
+            title="AI Integration & Feeds (Basic)" 
+            subtitle="Global model + dev toggle. Use the new 'AI & Voice' tab (top) for full profiles, reasoning, and voice settings."
             icon={Zap}
           >
             <div className="space-y-6">
@@ -283,9 +283,10 @@ export default function AppSettings() {
                     onChange={(e) => setAiModel(e.target.value)}
                     className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-xs font-black uppercase tracking-widest text-white outline-none border border-white/5"
                   >
-                    <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast (Standard)</option>
-                    <option value="grok-4-1-reasoning">Grok 4.1 Reasoning (High Confidence)</option>
-                    <option value="grok-4-agentic">Grok 4 Agentic (Experimental)</option>
+                    <option value="grok-4.3-fast">Grok 4.3 Fast (Non-Reasoning - Recommended for speed)</option>
+                    <option value="grok-4.3-balanced">Grok 4.3 Balanced (Light Reasoning - Reviews & Analysis)</option>
+                    <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast Non-Reasoning (Legacy)</option>
+                    <option value="grok-4-1-fast-reasoning">Grok 4.1 Fast Reasoning (Legacy)</option>
                   </select>
                   <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                 </div>

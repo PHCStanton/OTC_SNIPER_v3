@@ -32,7 +32,9 @@
 - **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`.
 - **OTEO Level Backtest Plan (2026-05-15, CLOSED ✅)** — 4-phase plan fully implemented and signed off.
 - **L1/L2/L3 Optimization and AI Knowledge Base Plan — Phases 1-3, 5, 6 (2026-06-13, 100% COMPLETE ✅)** — Refactored offline analyzer, executed 10,207 trades full-corpus analysis, generated 1,029 KB patterns, created lazy-loading KnowledgeBaseLoader singleton, integrated microstructure manipulation taxonomy, mapped live active manipulation flags, and wired KB matching context into verification prompts and advisory logs. All tests pass cleanly.
- 
+- **Z-Score & Regime Gates (Ghost Protocol) Integration (2026-06-14, SIGNED OFF & CLOSED ✅)** — Resolved the JSX compilation syntax error, calibration stopwatch auto-stop, and Grok audio overlapping in `AnalysisView.jsx`. Implemented settings, validation, and loadGhostProtocol actions in `useSettingsStore.js` and wired them to sync via `App.jsx`. Configured FastAPI strategy router, streaming service updates, and implemented the actual Z-Score and Market Regime confluences validation checks inside `auto_ghost.py`.
+- **Grok Native TTS (Text-to-Speech) Integration (2026-06-13+)** — Full stack: backend provider/service/config/API for /v1/tts with voice profiles (grok vs browser), speed, custom voice_ids. Frontend AISettings with toggle/selectors/test playback. Integrated into AnalysisView and voice-over flows.
+
 ## Recent Delivery Snapshot
 - **L123 Phase 6 (AI Advisory Contract):**
   - **KnowledgeBaseLoader:** Created singleton to load patterns lazily and query top matching templates using symbol normalizations, regime, and score band.

@@ -33,6 +33,12 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_max_confidence: float | None = Field(default=None)
     auto_ghost_max_trades_per_timeframe: int = Field(default=0, ge=0, le=100)
     auto_ghost_timeframe_seconds: int = Field(default=0, ge=0, le=3600)
+    auto_ghost_min_zscore_enabled: bool = Field(default=False)
+    auto_ghost_min_zscore: float | None = Field(default=None)
+    auto_ghost_max_zscore_enabled: bool = Field(default=False)
+    auto_ghost_max_zscore: float | None = Field(default=None)
+    auto_ghost_allowed_regimes: list[str] | None = Field(default=None)
+    auto_ghost_require_regime_stable: bool = Field(default=False)
 
 
 @router.get("/runtime-config")
@@ -76,6 +82,12 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             auto_ghost_max_confidence=body.auto_ghost_max_confidence,
             auto_ghost_max_trades_per_timeframe=body.auto_ghost_max_trades_per_timeframe,
             auto_ghost_timeframe_seconds=body.auto_ghost_timeframe_seconds,
+            auto_ghost_min_zscore_enabled=body.auto_ghost_min_zscore_enabled,
+            auto_ghost_min_zscore=body.auto_ghost_min_zscore,
+            auto_ghost_max_zscore_enabled=body.auto_ghost_max_zscore_enabled,
+            auto_ghost_max_zscore=body.auto_ghost_max_zscore,
+            auto_ghost_allowed_regimes=body.auto_ghost_allowed_regimes,
+            auto_ghost_require_regime_stable=body.auto_ghost_require_regime_stable,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:

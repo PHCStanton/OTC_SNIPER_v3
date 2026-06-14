@@ -21,6 +21,8 @@ logger = logging.getLogger("otc_sniper.api.analysis")
 class AIAnalysisRequest(BaseModel):
     session_id: str
     kind: str  # 'ghost' or 'live'
+    z_cutoff: float | None = None
+    regimes: List[str] | None = None  # for filtering trades in analysis and optimal z/regime filter
 
 class PatternSaveRequest(BaseModel):
     name: str
@@ -42,10 +44,17 @@ async def get_sessions():
 
 @router.post("/run-ai-refinement")
 async def run_ai_refinement(request: AIAnalysisRequest):
-    """Run Grok 4.3 evaluation over a session's log results."""
+    """Run Grok 4.3 evaluation over a session's log results.
+    Supports optional filters (z_cutoff, regimes) that are applied to trades and passed for optimal z-score/regime analysis.
+    """
     try:
         service = get_analysis_service()
-        res = await service.run_ai_refinement(request.session_id, request.kind)
+        filters = {}
+        if request.z_cutoff is not None:
+            filters["z_cutoff"] = request.z_cutoff
+        if request.regimes:
+            filters["regimes"] = request.regimes
+        res = await service.run_ai_refinement(request.session_id, request.kind, filters)
         if "error" in res:
             raise HTTPException(status_code=404, detail=res["error"])
         return res

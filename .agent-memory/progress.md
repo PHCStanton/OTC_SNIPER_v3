@@ -30,8 +30,13 @@
 - **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`.
 - **OTEO Level Backtest Plan (2026-05-15, CLOSED ✅)** — 4-phase plan fully implemented and signed off.
 - **L1/L2/L3 Optimization and AI Knowledge Base Plan (2026-05-16, PLANNED)** — New historical analyzer and knowledge base plan documented.
+- **Grok Native TTS (Text-to-Speech) Integration (2026-06-13+)** — Full stack: backend provider/service/config/API for /v1/tts with voice profiles (grok vs browser), speed, custom voice_ids. Frontend AISettings with toggle/selectors/test playback. Integrated into AnalysisView and voice-over flows. Profiles now manage Grok voices.
+- **Results & Analysis Panel: 5 Optimal Z-Score + Regime Filters (2026-06-13+)** — Backend: session enrichment (regimes, avg_z_score), _compute_z_regime_winrates for cutoffs 0.3/0.5/0.8/1.2/2.0 with per-regime WR, filter support in AI refinement, prompt injection for analysis + Ghost Controller suggestions. API extended. Frontend: filter bar chips/presets in Logs, client filtering on sessions, active banner, passed to Grok. Larger UI sizing. Ties to execution quality (z-score/regime gates for Auto-Ghost). AI now explicitly analyzes optimal filters.
 
 ## Recent Delivery Snapshot
+- **Grok Native TTS + Analysis Panel Filters (2026-06-13+, active iteration):**
+  - Full Grok TTS stack with profile-driven voice management (browser fallback + native Grok voices with custom support).
+  - Results & Analysis Panel now includes 5 optimal z-score cutoffs (0.3-2.0) + per-regime win rates directly in the filter bar as selectable chips/presets. Client + server filtering. AI refinement explicitly receives/applies/analyzes the filters and optimal data, with instructions to recommend controller settings.
 - **Result Analysis Panel Enhancements (2026-06-11, SIGNED OFF & CLOSED ✅):**
   - **Gregorian UTC Date Columns:** Display epoch start time formatted as `YYYY-MM-DD HH:mm:ss UTC` standard date format on the left of each session.
   - **Separate Upload Options:** Split dropdown into Single File, Multiple Files, and Folder uploads, adding file input value resets to support duplicate uploads.

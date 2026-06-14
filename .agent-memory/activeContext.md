@@ -84,3 +84,24 @@
 - **Backend Compilation:** `conda run -n QuFLX-v2 python -m py_compile app/backend/services/ai_review.py app/backend/services/ai_service.py app/backend/services/auto_ghost.py app/backend/services/streaming.py app/backend/api/strategy.py app/backend/main.py` -> ✅ passed.
 - **Frontend Production Build:** `npm run build` inside `app/frontend` -> ✅ passed (0 errors, built in 2.43s).
 - **Backend Unit Tests:** `conda run -n QuFLX-v2 python -m pytest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py -v --tb=short` -> ✅ passed (39/39).
+
+### Applied on 2026-06-13+ — Grok Native TTS Integration + Results & Analysis Panel Regime/Z-Score Filters (VERIFIED + ITERATED)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| TTS-1 | Backend TTS Provider | `ai_providers/xai_provider.py` | Added `generate_speech(text, voice_id, language, speed, output_format, with_timestamps)` calling `POST /v1/tts`. Returns raw audio bytes or JSON. Reuses auth/httpx client. |
+| TTS-2 | AI Service Layer | `ai_service.py` | Added `text_to_speech(text, voice_config)` and `generate_voice_over_audio(...)` (script gen + TTS chain). Integrated profile resolution from ai_config. |
+| TTS-3 | AI Profiles & Config | `ai_config.py` | Extended DEFAULT_PROFILES and helpers with `voice.provider` ("browser"|"grok"), `voiceId`, `speed`, `language`. Added `get_effective_voice_for_feature`. |
+| TTS-4 | API Proxy | `api/ai.py` | New `POST /api/ai/speak` (SpeakRequest with text, voice_id, speed, profile_key, etc.). Proxies to service, returns audio/mpeg. |
+| TTS-5 | Frontend Voice UI | `components/settings/AISettings.jsx` | Voice provider toggle (Grok vs Browser). Grok: built-in selectors (eve/ara/rex/sal/leo) + custom voice_id input. Speed/language. Test buttons calling /speak. Larger sizes per request. |
+| TTS-6 | Playback Integration | `components/analysis/AnalysisView.jsx` (and similar) | Profile-aware playback: if "grok" uses `/api/ai/speak` -> blob -> <audio>. Fallback to speechSynthesis. Updated handlePlayVoice. |
+| ANAL-1 | Session Enrichment | `analysis_service.py` | `parse_session_file` now returns "regimes": list, "avg_z_score". New `_compute_z_regime_winrates(trades)` for 5 cutoffs (0.3,0.5,0.8,1.2,2.0) → per-regime {z_cutoff, win_rate, trades}. |
+| ANAL-2 | API Response & Insights | `analysis_service.py`, `api/analysis.py` | `get_all_sessions` returns top-level `z_regime_ghost`/`z_regime_live`. AIAnalysisRequest extended with `z_cutoff`, `regimes`. |
+| ANAL-3 | AI Analysis with Filters | `analysis_service.py`, `api/analysis.py` | `run_ai_refinement` accepts filters, applies to `trades_summary` (z/regime filtering before Grok). Computes session_z_regime. Injects into prompt + explicit instruction: "analyze the optimal z-score thresholds per regime ... recommend ... for Ghost Controller filters". |
+| ANAL-4 | Frontend Filters | `components/analysis/AnalysisView.jsx` | In Logs filter bar: regime multi-select chips (RANGE_BOUND etc.), 5 Z-Score preset buttons (with live WR info from zRegimeData). `filteredSessions` now respects `s.regimes` + `Math.abs(s.avg_z_score) >= cutoff`. Robust fallback if no data. |
+| ANAL-5 | Active Filter UX + Size | `AnalysisView.jsx` | Added prominent "Active Z/Regime filter(s) applied — X sessions match" banner. Larger fonts/sizes (p-4, text-xs/11px/12px, px-3 py-1, rounded-2xl) for the new block per prior request. Passes filters on every Grok Review click. |
+| ANAL-6 | Execution Quality Tie-in | Discussion (Ghost Controller / auto_ghost.py context) | Confirmed z-score + regime as high-value additions to controller gates (alongside confidence window, manip severity). AI can use recent N trades + KB for "smart average" calibration suggestions before live execution. |
+| UX-1 | Filter Robustness | `AnalysisView.jsx` | Graceful degradation: sessions without new fields aren't dropped. Derived `currentZRegimeData` for kind switching. |
+
+- **Current Active Focus:** Integrating the new regime/z-score filters into the Ghost Controller for live execution gating; exploring AI-driven adaptive calibration of gates from recent ghost results (5-10-20 trade windows) using condition_stats + KB patterns. Full verification of TTS + filter flows (backend compile, frontend build, filter + AI roundtrips).
+- **Agent Context Note:** All changes respect existing AI-advisory-only boundary, profile-driven config (for models/reasoning/voices), and L123-derived KB for grounding suggestions. No autonomous mutation of live settings without user approval / confirmation mode.

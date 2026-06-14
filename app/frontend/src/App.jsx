@@ -41,6 +41,12 @@ export default function App() {
   const ghostMaxConfidence = useSettingsStore((s) => s.ghostMaxConfidence);
   const ghostMaxConfidenceEnabled = useSettingsStore((s) => s.ghostMaxConfidenceEnabled);
   const oteoAiExecutionMode = useSettingsStore((s) => s.oteoAiExecutionMode);
+  const ghostMinZScore = useSettingsStore((s) => s.ghostMinZScore);
+  const ghostMinZScoreEnabled = useSettingsStore((s) => s.ghostMinZScoreEnabled);
+  const ghostMaxZScore = useSettingsStore((s) => s.ghostMaxZScore);
+  const ghostMaxZScoreEnabled = useSettingsStore((s) => s.ghostMaxZScoreEnabled);
+  const ghostAllowedRegimes = useSettingsStore((s) => s.ghostAllowedRegimes);
+  const ghostRequireRegimeStable = useSettingsStore((s) => s.ghostRequireRegimeStable);
 
   useStreamConnection();
 
@@ -250,6 +256,12 @@ export default function App() {
           auto_ghost_min_confidence_enabled: ghostMinConfidenceEnabled,
           auto_ghost_max_confidence: ghostMaxConfidenceEnabled ? ghostMaxConfidence : null,
           auto_ghost_max_confidence_enabled: ghostMaxConfidenceEnabled,
+          auto_ghost_min_zscore: ghostMinZScoreEnabled ? ghostMinZScore : null,
+          auto_ghost_min_zscore_enabled: ghostMinZScoreEnabled,
+          auto_ghost_max_zscore: ghostMaxZScoreEnabled ? ghostMaxZScore : null,
+          auto_ghost_max_zscore_enabled: ghostMaxZScoreEnabled,
+          auto_ghost_allowed_regimes: ghostAllowedRegimes,
+          auto_ghost_require_regime_stable: ghostRequireRegimeStable,
         });
       } catch (err) {
         if (isMounted) {
@@ -288,6 +300,12 @@ export default function App() {
     ghostMinConfidenceEnabled,
     ghostMaxConfidence,
     ghostMaxConfidenceEnabled,
+    ghostMinZScore,
+    ghostMinZScoreEnabled,
+    ghostMaxZScore,
+    ghostMaxZScoreEnabled,
+    ghostAllowedRegimes,
+    ghostRequireRegimeStable,
   ]);
 
   return (

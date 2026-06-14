@@ -3,14 +3,16 @@
  * Splits Account / App / Risk concerns into dedicated panels.
  */
 import { useState } from 'react';
-import { ChevronRight, Database, LayoutGrid, ShieldAlert, UserRound } from 'lucide-react';
+import { ChevronRight, Database, LayoutGrid, ShieldAlert, UserRound, Zap } from 'lucide-react';
 import AccountSettings from './AccountSettings.jsx';
 import AppSettings from './AppSettings.jsx';
 import RiskSettings from './RiskSettings.jsx';
+import AISettings from './AISettings.jsx';
 
 const TABS = [
   { id: 'account', label: 'Account', icon: UserRound, note: 'SSID, broker, session identity' },
   { id: 'app', label: 'App', icon: LayoutGrid, note: 'OTEO, ghost trading, UI prefs' },
+  { id: 'ai', label: 'AI & Voice', icon: Zap, note: 'Models, reasoning profiles, voices, KB' },
   { id: 'risk', label: 'Risk', icon: ShieldAlert, note: 'Capital, payout, sizing, guardrails' },
 ];
 
@@ -21,7 +23,9 @@ export default function SettingsView() {
     ? AccountSettings
     : activeTab === 'app'
       ? AppSettings
-      : RiskSettings;
+      : activeTab === 'ai'
+        ? AISettings
+        : RiskSettings;
 
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top,_rgba(255,184,0,0.06),_transparent_34%),linear-gradient(180deg,#0c0f0f_0%,#10151a_46%,#131820_100%)] px-4 py-4 text-[#e3e6e7] lg:px-6 lg:py-6">

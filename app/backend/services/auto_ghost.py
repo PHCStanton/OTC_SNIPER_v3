@@ -44,6 +44,12 @@ class AutoGhostConfig:
     timeframe_seconds: int = 0
     oteo_ai_enabled: bool = False
     oteo_ai_execution_mode: str = "advisory"
+    min_zscore_enabled: bool = False
+    min_zscore: float | None = None
+    max_zscore_enabled: bool = False
+    max_zscore: float | None = None
+    allowed_regimes: list[str] | None = None
+    require_regime_stable: bool = False
 
 
 class AutoGhostService:
@@ -95,6 +101,12 @@ class AutoGhostService:
         timeframe_seconds: int | None = None,
         oteo_ai_enabled: bool | None = None,
         oteo_ai_execution_mode: str | None = None,
+        min_zscore_enabled: bool | None = None,
+        min_zscore: float | None = None,
+        max_zscore_enabled: bool | None = None,
+        max_zscore: float | None = None,
+        allowed_regimes: list[str] | None = None,
+        require_regime_stable: bool | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         self.config = AutoGhostConfig(
@@ -157,6 +169,12 @@ class AutoGhostService:
             ),
             oteo_ai_enabled=self.config.oteo_ai_enabled if oteo_ai_enabled is None else bool(oteo_ai_enabled),
             oteo_ai_execution_mode=self.config.oteo_ai_execution_mode if oteo_ai_execution_mode is None else str(oteo_ai_execution_mode),
+            min_zscore_enabled=self.config.min_zscore_enabled if min_zscore_enabled is None else bool(min_zscore_enabled),
+            min_zscore=self.config.min_zscore if min_zscore is None else (float(min_zscore) if min_zscore is not None else None),
+            max_zscore_enabled=self.config.max_zscore_enabled if max_zscore_enabled is None else bool(max_zscore_enabled),
+            max_zscore=self.config.max_zscore if max_zscore is None else (float(max_zscore) if max_zscore is not None else None),
+            allowed_regimes=self.config.allowed_regimes if allowed_regimes is None else allowed_regimes,
+            require_regime_stable=self.config.require_regime_stable if require_regime_stable is None else bool(require_regime_stable),
         )
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
@@ -200,6 +218,12 @@ class AutoGhostService:
             "auto_ghost_timeframe_seconds": self.config.timeframe_seconds,
             "oteo_ai_enabled": self.config.oteo_ai_enabled,
             "oteo_ai_execution_mode": self.config.oteo_ai_execution_mode,
+            "auto_ghost_min_zscore_enabled": self.config.min_zscore_enabled,
+            "auto_ghost_min_zscore": self.config.min_zscore,
+            "auto_ghost_max_zscore_enabled": self.config.max_zscore_enabled,
+            "auto_ghost_max_zscore": self.config.max_zscore,
+            "auto_ghost_allowed_regimes": self.config.allowed_regimes,
+            "auto_ghost_require_regime_stable": self.config.require_regime_stable,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -388,6 +412,54 @@ class AutoGhostService:
                     self.config.manipulation_severity_threshold
                 )
                 return self._reject(asset)
+
+        # Z-Score Gate Bounds checks (Ai-Calibration / Ghost Protocol)
+        z_score = oteo_result.get("z_score")
+        if z_score is not None:
+            try:
+                z_val = float(z_score)
+                if self.config.min_zscore_enabled and self.config.min_zscore is not None:
+                    if z_val < self.config.min_zscore:
+                        logger.info(
+                            "Auto-Ghost skipped %s: z-score %.2f < min gate %.2f (Ai-Calibration gate)",
+                            asset,
+                            z_val,
+                            self.config.min_zscore,
+                        )
+                        return self._reject(asset)
+                if self.config.max_zscore_enabled and self.config.max_zscore is not None:
+                    if z_val > self.config.max_zscore:
+                        logger.info(
+                            "Auto-Ghost skipped %s: z-score %.2f > max gate %.2f (Ai-Calibration gate)",
+                            asset,
+                            z_val,
+                            self.config.max_zscore,
+                        )
+                        return self._reject(asset)
+            except (ValueError, TypeError):
+                pass
+
+        # Regime Gate checks (Ai-Calibration / Ghost Protocol)
+        regime_label = oteo_result.get("regime_label")
+        regime_stable = oteo_result.get("regime_stable")
+        if self.config.allowed_regimes:
+            if regime_label not in self.config.allowed_regimes:
+                logger.info(
+                    "Auto-Ghost skipped %s: regime %s not in allowed %s (Ghost Protocol gate)",
+                    asset,
+                    regime_label,
+                    self.config.allowed_regimes,
+                )
+                return self._reject(asset)
+
+        if self.config.require_regime_stable and regime_stable is False:
+            logger.info(
+                "Auto-Ghost skipped %s: regime %s is unstable (Ghost Protocol gate)",
+                asset,
+                regime_label,
+            )
+            return self._reject(asset)
+
         if asset in self._active_assets:
             return self._reject(asset)
         if len(self._active_assets) >= self.config.max_concurrent_trades:

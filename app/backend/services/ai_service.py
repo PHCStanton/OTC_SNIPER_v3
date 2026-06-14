@@ -18,25 +18,50 @@ from .ai_providers import AIProvider, AIResult, get_provider
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 DEFAULT_AI_MODEL = "grok-4.3"
 
-# Registry mapping user-facing model keys to physical API models and their options
+# Registry mapping user-facing model keys to physical API models and their options.
+# Use these keys in AI Settings profiles. reasoning_effort controls speed vs depth:
+# - "none": Fast non-reasoning path (recommended for real-time confirmation, low latency).
+# - "low": Light reasoning (good for review loops, analysis).
+# All currently map to grok-4.3; future models can be added here without changing callers.
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
+    "grok-4.3-fast": {
+        "api_model": "grok-4.3",
+        "params": {"reasoning_effort": "none"},
+        "description": "Fast non-reasoning (low latency, lower token cost)",
+    },
+    "grok-4.3-balanced": {
+        "api_model": "grok-4.3",
+        "params": {"reasoning_effort": "low"},
+        "description": "Balanced with light reasoning (review & analysis)",
+    },
     "grok-4.3": {
         "api_model": "grok-4.3",
-        "params": {"reasoning_effort": "none"},  # default to fast, cost-efficient non-reasoning
+        "params": {"reasoning_effort": "none"},
+        "description": "Default fast path (non-reasoning)",
     },
     "grok-4-1-fast-non-reasoning": {
         "api_model": "grok-4.3",
-        "params": {"reasoning_effort": "none"},  # legacy mapping
+        "params": {"reasoning_effort": "none"},
+        "description": "Legacy fast non-reasoning",
     },
     "grok-4-1-fast-reasoning": {
         "api_model": "grok-4.3",
-        "params": {"reasoning_effort": "low"},   # legacy mapping
-    },
-    "grok-4": {
-        "api_model": "grok-4.3",
-        "params": {"reasoning_effort": "none"},  # legacy mapping
+        "params": {"reasoning_effort": "low"},
+        "description": "Legacy reasoning",
     },
 }
+
+
+def get_available_ai_models() -> list[dict[str, str]]:
+    """Return list of model options for UI (key, label, description)."""
+    return [
+        {
+            "key": key,
+            "label": key.replace("-", " ").replace(".", " "),
+            "description": cfg.get("description", ""),
+        }
+        for key, cfg in MODEL_REGISTRY.items()
+    ]
 
 VOICE_OVER_SYSTEM_PROMPT = """
 You are OTC SNIPER's voice-over script generator.
@@ -145,6 +170,7 @@ class AIService:
         Generates a structured, natural-sounding voice-over script from project updates or documentation.
 
         This method serves as a lightweight foundation for future text-to-speech or voice generation pipelines.
+        Call text_to_speech() on the returned script for native Grok audio.
         """
         self._ensure_enabled()
 
@@ -165,12 +191,84 @@ class AIService:
         resolved_model, params = self._resolve_model_config(model)
         return await self.provider.complete(model=resolved_model, input_items=input_items, **params)
 
+    async def text_to_speech(
+        self,
+        text: str,
+        voice_config: dict[str, Any] | None = None,
+    ) -> bytes:
+        """
+        Native Grok TTS via xAI /v1/tts.
+        If voice_config is None, resolves from active AI profile (via ai_config).
+        Returns raw audio bytes (typically MP3).
+        """
+        self._ensure_enabled()
+
+        if voice_config is None:
+            try:
+                from .ai_config import get_effective_voice_for_feature
+                voice_config = get_effective_voice_for_feature("voiceover")
+            except Exception:
+                voice_config = {"provider": "grok", "voiceId": "eve", "language": "en", "speed": 1.0}
+
+        # Only Grok provider is supported here; browser fallback is client-side
+        provider = voice_config.get("provider", "grok")
+        if provider != "grok":
+            # Caller should fall back to browser speechSynthesis
+            raise RuntimeError("text_to_speech called for non-grok provider; use browser client-side instead.")
+
+        voice_id = voice_config.get("voiceId") or voice_config.get("voice_id") or "eve"
+        language = voice_config.get("language", "en")
+        speed = float(voice_config.get("speed", 1.0))
+
+        # Delegate to provider (returns bytes for standard MP3)
+        audio = await self.provider.generate_speech(
+            text=text,
+            voice_id=voice_id,
+            language=language,
+            speed=speed,
+        )
+        if isinstance(audio, (bytes, bytearray)):
+            return bytes(audio)
+        # If timestamps were requested (future), audio would be dict; for now assume bytes
+        return audio  # type: ignore[return-value]
+
+    async def generate_voice_over_audio(
+        self,
+        content: str,
+        tone: str = "professional",
+        model: str | None = None,
+        voice_config: dict[str, Any] | None = None,
+    ) -> bytes:
+        """
+        Convenience: generate script via Grok then synthesize with native TTS using the given (or profile) voice.
+        Returns audio bytes ready for playback.
+        """
+        script_result = await self.generate_voice_over(content, tone=tone, model=model)
+        script_text = script_result.text if hasattr(script_result, 'text') else str(script_result)
+        return await self.text_to_speech(script_text, voice_config)
+
     def _ensure_enabled(self) -> None:
         if not self.status().enabled:
             raise RuntimeError(self.status().reason or "AI is disabled.")
 
     def _resolve_model_config(self, override: str | None = None) -> tuple[str, dict[str, Any]]:
-        """Resolves the active model name and its extra API parameters (e.g. reasoning_effort)."""
+        """Resolves the active model name and its extra API parameters (e.g. reasoning_effort).
+
+        Honors dedicated AI Settings profiles when available (ai_config).
+        """
+        if not override:
+            try:
+                from .ai_config import get_effective_model_for_feature
+                # Default to chat / global for general resolution
+                requested, params = get_effective_model_for_feature("chat")
+                if requested:
+                    cfg = MODEL_REGISTRY.get(requested)
+                    if cfg:
+                        return cfg["api_model"], cfg["params"] or params
+                    return requested, params
+            except Exception:
+                pass  # fall through to settings
+
         requested = (override or self._settings.ai_model or DEFAULT_AI_MODEL).strip()
         if not requested:
             requested = DEFAULT_AI_MODEL

@@ -103,3 +103,48 @@ class XAIProvider(AIProvider):
             if isinstance(value, int):
                 result[key] = value
         return result or None
+
+    async def generate_speech(
+        self,
+        *,
+        text: str,
+        voice_id: str = "eve",
+        language: str = "en",
+        speed: float = 1.0,
+        output_format: dict[str, Any] | None = None,
+        with_timestamps: bool = False,
+    ) -> bytes | dict[str, Any]:
+        """
+        Call xAI Grok Native TTS.
+        Returns raw audio bytes (default MP3) or JSON dict if with_timestamps=True.
+        See https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+        """
+        if not self._api_key:
+            raise ValueError("GROK_API_KEY is required to call the xAI TTS.")
+
+        payload: dict[str, Any] = {
+            "text": text,
+            "voice_id": voice_id,
+            "language": language,
+            "speed": speed,
+        }
+        if output_format:
+            payload["output_format"] = output_format
+        if with_timestamps:
+            payload["with_timestamps"] = True
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        async with httpx.AsyncClient(base_url=self._base_url, timeout=self._timeout, headers=headers) as client:
+            response = await client.post("/tts", json=payload)
+
+        if response.status_code >= 400:
+            raise RuntimeError(self._format_error(response))
+
+        if with_timestamps or response.headers.get("content-type", "").startswith("application/json"):
+            return response.json()
+        else:
+            return response.content  # raw audio bytes (e.g. MP3)

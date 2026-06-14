@@ -67,6 +67,19 @@ export default function GhostTradingWidget() {
     ghostMaxConfidenceEnabled,
     autoGhostManipulationSeverityThreshold,
     autoGhostBlockOnManipulation,
+    // New Z-Score + Regime gates for Ai-Calibration / Ghost Protocol
+    ghostMinZScore,
+    ghostMinZScoreEnabled,
+    ghostMaxZScore,
+    ghostMaxZScoreEnabled,
+    ghostAllowedRegimes,
+    ghostRequireRegimeStable,
+    setGhostMinZScore,
+    setGhostMinZScoreEnabled,
+    setGhostMaxZScore,
+    setGhostMaxZScoreEnabled,
+    setGhostAllowedRegimes,
+    setGhostRequireRegimeStable,
     setGhostAmount,
     setAutoGhostExpirationSeconds,
     setGhostMaxTradesPerTimeframe,
@@ -487,6 +500,113 @@ export default function GhostTradingWidget() {
                     onChange={(e) => setAutoGhostManipulationSeverityThreshold(Number(e.target.value))}
                     className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
                   />
+                </div>
+              </div>
+
+              {/* Z-Score Gate Bounds — new for Ai-Calibration / Ghost Protocol confluence */}
+              <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Z-Score Gate Bounds (Ai-Calibration)</span>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={ghostMinZScoreEnabled}
+                        onChange={(e) => setGhostMinZScoreEnabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${ghostMinZScoreEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                        Min Z (avoid extreme negative deviation)
+                      </span>
+                    </label>
+                    <span className={`text-[10px] font-black font-mono ${ghostMinZScoreEnabled ? 'text-white' : 'text-gray-600'}`}>
+                      {ghostMinZScore.toFixed(1)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-3"
+                    max="1"
+                    step="0.1"
+                    disabled={!ghostMinZScoreEnabled}
+                    value={ghostMinZScore}
+                    onChange={(e) => setGhostMinZScore(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={ghostMaxZScoreEnabled}
+                        onChange={(e) => setGhostMaxZScoreEnabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${ghostMaxZScoreEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                        Max Z (cap positive deviation)
+                      </span>
+                    </label>
+                    <span className={`text-[10px] font-black font-mono ${ghostMaxZScoreEnabled ? 'text-white' : 'text-gray-600'}`}>
+                      {ghostMaxZScore.toFixed(1)}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="-1"
+                    max="3"
+                    step="0.1"
+                    disabled={!ghostMaxZScoreEnabled}
+                    value={ghostMaxZScore}
+                    onChange={(e) => setGhostMaxZScore(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                  />
+                </div>
+              </div>
+
+              {/* Regime Gate — multi-confluence for Ghost Protocol */}
+              <div className="space-y-2 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Regime Gate (Ai-Calibration)</span>
+
+                <div className="flex items-center gap-2 mb-1">
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={ghostRequireRegimeStable}
+                      onChange={(e) => setGhostRequireRegimeStable(e.target.checked)}
+                      className="accent-[#ffb800] rounded h-3 w-3"
+                    />
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${ghostRequireRegimeStable ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      Require Regime Stable
+                    </span>
+                  </label>
+                </div>
+
+                <div>
+                  <div className="text-[8px] font-black uppercase tracking-wider text-gray-500 mb-1">Allowed Regimes (click to toggle)</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'CHOPPY'].map(r => {
+                      const active = (ghostAllowedRegimes || []).includes(r);
+                      return (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => {
+                            const current = ghostAllowedRegimes || [];
+                            const next = active ? current.filter(x => x !== r) : [...current, r];
+                            setGhostAllowedRegimes(next);
+                          }}
+                          className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border transition ${active
+                            ? 'bg-[#ffb800]/20 text-[#ffb800] border-[#ffb800]/40'
+                            : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/30'}`}
+                        >
+                          {r.replace('_', ' ')}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[8px] text-gray-500 mt-1">Ghost only executes in selected regimes{ghostRequireRegimeStable ? ' when stable' : ''}. {(!ghostAllowedRegimes || ghostAllowedRegimes.length === 0) ? ' (All regimes allowed if empty)' : ''}</div>
                 </div>
               </div>
             </div>

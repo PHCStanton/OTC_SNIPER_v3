@@ -36,6 +36,16 @@ export const SETTINGS_DEFAULTS = {
   ghostMaxConfidence: 95,
   ghostMaxConfidenceEnabled: false,
 
+  // Ghost Z-Score & Regime gates (Ai-Calibration / Ghost Protocol)
+  ghostMinZScore: -0.5,
+  ghostMinZScoreEnabled: false,
+  ghostMaxZScore: 1.5,
+  ghostMaxZScoreEnabled: false,
+  ghostAllowedRegimes: [],
+  ghostRequireRegimeStable: false,
+  ghostProtocols: null,
+  activeGhostProtocol: 'default',
+
   // Trade Markers
   showGhostEntryMarkers: true,
   showLiveEntryMarkers: true,
@@ -56,10 +66,25 @@ export const SETTINGS_DEFAULTS = {
   maxTradesPerSession: 20,
   stopOnLossStreak: 3,
 
-  // AI integration
-  aiModel: 'grok-4-1-fast-non-reasoning',
+  // AI integration (see dedicated AI Settings for full profiles + voices)
+  aiModel: 'grok-4.3-fast',
   aiDevMode: false,
   oteoAiExecutionMode: 'advisory',
+
+  // Rich AI Profiles (dedicated AI tab) — easy add/remove/manage various settings + voices here
+  // voice now supports Grok Native TTS:
+  // provider: 'browser' | 'grok'
+  // voiceId: 'eve' | 'ara' | 'rex' | 'sal' | 'leo' | custom_id  (for grok)
+  // speed, language for Grok TTS; rate/pitch/volume for browser
+  aiProfiles: null,
+  activeAiProfile: 'default',
+  featureProfiles: {
+    confirmation: 'default',
+    review: 'deep-review',
+    analysis: 'deep-review',
+    chat: 'default',
+    voiceover: 'deep-review',
+  },
 
   // UI preferences
   showManipulationAlerts: true,
@@ -143,6 +168,15 @@ export function validateSettings(input = {}) {
     ghostMaxConfidence: toNumber(input.ghostMaxConfidence, SETTINGS_DEFAULTS.ghostMaxConfidence, { min: 50, max: 100, integer: true }),
     ghostMaxConfidenceEnabled: toBoolean(input.ghostMaxConfidenceEnabled, SETTINGS_DEFAULTS.ghostMaxConfidenceEnabled),
 
+    ghostMinZScore: toNumber(input.ghostMinZScore, SETTINGS_DEFAULTS.ghostMinZScore, { min: -3.0, max: 3.0, integer: false }),
+    ghostMinZScoreEnabled: toBoolean(input.ghostMinZScoreEnabled, SETTINGS_DEFAULTS.ghostMinZScoreEnabled),
+    ghostMaxZScore: toNumber(input.ghostMaxZScore, SETTINGS_DEFAULTS.ghostMaxZScore, { min: -3.0, max: 3.0, integer: false }),
+    ghostMaxZScoreEnabled: toBoolean(input.ghostMaxZScoreEnabled, SETTINGS_DEFAULTS.ghostMaxZScoreEnabled),
+    ghostAllowedRegimes: Array.isArray(input.ghostAllowedRegimes) ? input.ghostAllowedRegimes : SETTINGS_DEFAULTS.ghostAllowedRegimes,
+    ghostRequireRegimeStable: toBoolean(input.ghostRequireRegimeStable, SETTINGS_DEFAULTS.ghostRequireRegimeStable),
+    ghostProtocols: input.ghostProtocols && typeof input.ghostProtocols === 'object' ? input.ghostProtocols : null,
+    activeGhostProtocol: typeof input.activeGhostProtocol === 'string' ? input.activeGhostProtocol : 'default',
+
     showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
     showLiveEntryMarkers: toBoolean(input.showLiveEntryMarkers, SETTINGS_DEFAULTS.showLiveEntryMarkers),
 
@@ -165,6 +199,13 @@ export function validateSettings(input = {}) {
       : SETTINGS_DEFAULTS.aiModel,
     aiDevMode: toBoolean(input.aiDevMode, SETTINGS_DEFAULTS.aiDevMode),
     oteoAiExecutionMode: ['advisory', 'confirmation'].includes(input.oteoAiExecutionMode) ? input.oteoAiExecutionMode : 'advisory',
+
+    // AI Profiles (including Grok Native TTS voice settings)
+    aiProfiles: input.aiProfiles && typeof input.aiProfiles === 'object' ? input.aiProfiles : null,
+    activeAiProfile: typeof input.activeAiProfile === 'string' ? input.activeAiProfile : 'default',
+    featureProfiles: input.featureProfiles && typeof input.featureProfiles === 'object'
+      ? { ...SETTINGS_DEFAULTS.featureProfiles, ...input.featureProfiles }
+      : { ...SETTINGS_DEFAULTS.featureProfiles },
 
     showManipulationAlerts: toBoolean(input.showManipulationAlerts, SETTINGS_DEFAULTS.showManipulationAlerts),
     showSignalConfidence: toBoolean(input.showSignalConfidence, SETTINGS_DEFAULTS.showSignalConfidence),
@@ -244,6 +285,50 @@ export const useSettingsStore = create()(
       setGhostMinConfidenceEnabled: (val) => commitSettingsPatch(set, { ghostMinConfidenceEnabled: val }),
       setGhostMaxConfidence: (val) => commitSettingsPatch(set, { ghostMaxConfidence: val }),
       setGhostMaxConfidenceEnabled: (val) => commitSettingsPatch(set, { ghostMaxConfidenceEnabled: val }),
+      setGhostMinZScore: (val) => commitSettingsPatch(set, { ghostMinZScore: val }),
+      setGhostMinZScoreEnabled: (val) => commitSettingsPatch(set, { ghostMinZScoreEnabled: val }),
+      setGhostMaxZScore: (val) => commitSettingsPatch(set, { ghostMaxZScore: val }),
+      setGhostMaxZScoreEnabled: (val) => commitSettingsPatch(set, { ghostMaxZScoreEnabled: val }),
+      setGhostAllowedRegimes: (val) => commitSettingsPatch(set, { ghostAllowedRegimes: val }),
+      setGhostRequireRegimeStable: (val) => commitSettingsPatch(set, { ghostRequireRegimeStable: val }),
+      setGhostProtocols: (val) => commitSettingsPatch(set, { ghostProtocols: val }),
+      setActiveGhostProtocol: (val) => commitSettingsPatch(set, { activeGhostProtocol: val }),
+      loadGhostProtocol: (key) => {
+        set((state) => {
+          const protocols = state.ghostProtocols || {};
+          const proto = protocols[key];
+          if (!proto) {
+            if (key === 'default') {
+              return {
+                ...state,
+                ...validateSettings({
+                  ...state,
+                  activeGhostProtocol: 'default',
+                  ghostMinZScoreEnabled: false,
+                  ghostMaxZScoreEnabled: false,
+                  ghostAllowedRegimes: [],
+                  ghostRequireRegimeStable: false,
+                })
+              };
+            }
+            return state;
+          }
+          const gates = proto.gates || {};
+          return {
+            ...state,
+            ...validateSettings({
+              ...state,
+              activeGhostProtocol: key,
+              ghostMinZScoreEnabled: gates.minZScoreEnabled ?? false,
+              ghostMinZScore: gates.minZScore ?? -0.5,
+              ghostMaxZScoreEnabled: gates.maxZScoreEnabled ?? false,
+              ghostMaxZScore: gates.maxZScore ?? 1.5,
+              ghostAllowedRegimes: gates.allowedRegimes ?? [],
+              ghostRequireRegimeStable: gates.requireRegimeStable ?? false,
+            })
+          };
+        });
+      },
       setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),
       setShowLiveEntryMarkers: (val) => commitSettingsPatch(set, { showLiveEntryMarkers: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),
@@ -261,6 +346,13 @@ export const useSettingsStore = create()(
       setAiModel: (val) => commitSettingsPatch(set, { aiModel: val }),
       setAiDevMode: (val) => commitSettingsPatch(set, { aiDevMode: val }),
       setOteoAiExecutionMode: (val) => commitSettingsPatch(set, { oteoAiExecutionMode: val }),
+
+      // Rich AI profiles management (dedicated AI Settings)
+      setAiProfiles: (profiles) => commitSettingsPatch(set, { aiProfiles: profiles }),
+      setActiveAiProfile: (key) => commitSettingsPatch(set, { activeAiProfile: key }),
+      setFeatureProfile: (feature, profileKey) => set((state) => ({
+        featureProfiles: { ...state.featureProfiles, [feature]: profileKey },
+      })),
       setShowManipulationAlerts: (val) => commitSettingsPatch(set, { showManipulationAlerts: val }),
       setShowSignalConfidence: (val) => commitSettingsPatch(set, { showSignalConfidence: val }),
       setAutoFocusOnSignal: (val) => commitSettingsPatch(set, { autoFocusOnSignal: val }),

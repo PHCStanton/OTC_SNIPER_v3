@@ -24,6 +24,7 @@
 - Pydantic
 - Socket.IO
 - PocketOption APIs and custom adapters.
+- xAI Grok API (text + native TTS /v1/tts for voice profiles; reasoning_effort support).
 
 ## Runtime Constraints
 - The functional app lives strictly in `app/`. Workspace root remains for planning.
@@ -45,3 +46,9 @@
 - Incremental testing: test after every single change.
 - Verify everything before proceeding.
 - Run backend compilation checks and frontend production builds (`npm run build`) before signing off.
+
+## Recent AI & Analysis Capabilities (2026-06-13+)
+- **Grok Native TTS:** Full /v1/tts integration with voice profiles (provider: grok/browser, voiceId, speed, language, custom voices). Proxy endpoint /api/ai/speak. Chained with voice-over script gen. Client playback switches based on active profile.
+- **Results & Analysis Panel Filters:** 5 optimal z-score cutoffs (0.3/0.5/0.8/1.2/2.0) + per-regime win rates exposed in filter bar as toggleable chips/presets. Per-session "regimes" + "avg_z_score" enrichment. Client filtering of session list; server-side filtering of AI trade summaries. AI prompts now include the optimal data + active filters and are instructed to recommend specific z/regime combos as Ghost Controller execution gates.
+- **Profile Extensibility:** ai_config + frontend profiles drive model (reasoning_effort), voice (TTS), and (future) filter defaults per feature (confirmation, review, analysis, voiceover).
+- **AI-Adaptive Context:** Recent N-trade windows (via condition_stats, entry_context with z/regime/manip) + KB patterns enable AI to suggest "smart average" gate values (calibration phase before live execution). Advisory/confirmation modes preserved.

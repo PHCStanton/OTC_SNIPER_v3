@@ -107,6 +107,12 @@ class StreamingService:
         auto_ghost_max_confidence: float | None = None,
         auto_ghost_max_trades_per_timeframe: int | None = None,
         auto_ghost_timeframe_seconds: int | None = None,
+        auto_ghost_min_zscore_enabled: bool | None = None,
+        auto_ghost_min_zscore: float | None = None,
+        auto_ghost_max_zscore_enabled: bool | None = None,
+        auto_ghost_max_zscore: float | None = None,
+        auto_ghost_allowed_regimes: list[str] | None = None,
+        auto_ghost_require_regime_stable: bool | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -143,6 +149,12 @@ class StreamingService:
             max_confidence=auto_ghost_max_confidence,
             max_trades_per_timeframe=auto_ghost_max_trades_per_timeframe,
             timeframe_seconds=auto_ghost_timeframe_seconds,
+            min_zscore_enabled=auto_ghost_min_zscore_enabled,
+            min_zscore=auto_ghost_min_zscore,
+            max_zscore_enabled=auto_ghost_max_zscore_enabled,
+            max_zscore=auto_ghost_max_zscore,
+            allowed_regimes=auto_ghost_allowed_regimes,
+            require_regime_stable=auto_ghost_require_regime_stable,
             oteo_ai_enabled=self.oteo_ai_enabled,
             oteo_ai_execution_mode=self.oteo_ai_execution_mode,
         )
