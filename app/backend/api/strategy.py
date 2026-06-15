@@ -37,6 +37,7 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_min_zscore: float | None = Field(default=None)
     auto_ghost_max_zscore_enabled: bool = Field(default=False)
     auto_ghost_max_zscore: float | None = Field(default=None)
+    auto_ghost_regime_gate_enabled: bool = Field(default=False)
     auto_ghost_allowed_regimes: list[str] | None = Field(default=None)
     auto_ghost_require_regime_stable: bool = Field(default=False)
 
@@ -86,6 +87,7 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             auto_ghost_min_zscore=body.auto_ghost_min_zscore,
             auto_ghost_max_zscore_enabled=body.auto_ghost_max_zscore_enabled,
             auto_ghost_max_zscore=body.auto_ghost_max_zscore,
+            auto_ghost_regime_gate_enabled=body.auto_ghost_regime_gate_enabled,
             auto_ghost_allowed_regimes=body.auto_ghost_allowed_regimes,
             auto_ghost_require_regime_stable=body.auto_ghost_require_regime_stable,
         )

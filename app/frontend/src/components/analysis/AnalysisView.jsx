@@ -43,6 +43,17 @@ export default function AnalysisView() {
   const synthRef = useRef(window.speechSynthesis);
   const utteranceRef = useRef(null);
 
+  // New: Grok voice prefetch + chunking support (for responsive playback)
+  const [voiceScript, setVoiceScript] = useState('');
+  const [prefetchedVoiceUrl, setPrefetchedVoiceUrl] = useState(null);
+  const [isPrefetchingVoice, setIsPrefetchingVoice] = useState(false);
+  const [currentVoiceChunk, setCurrentVoiceChunk] = useState(0);
+  const [totalVoiceChunks, setTotalVoiceChunks] = useState(0);
+  const voiceBlobUrlsRef = useRef([]); // track all created blob URLs for proper revocation
+  const chunkQueueRef = useRef([]); // remaining chunks for sequential play
+  const currentAudioRef = useRef(null);
+  const prefetchedUrlRef = useRef(null); // reliable ref for the first prefetched chunk url (avoids stale state in callbacks)
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -80,6 +91,16 @@ export default function AnalysisView() {
 
   const ghostTotalTrades = useRiskStore((s) => s.ghostTotalTrades);
 
+  // Settings store hooks (called at top-level to satisfy Rules of Hooks)
+  const activeGhostProtocol = useSettingsStore((s) => s.activeGhostProtocol);
+  const ghostMinZScore = useSettingsStore((s) => s.ghostMinZScore);
+  const ghostMinZScoreEnabled = useSettingsStore((s) => s.ghostMinZScoreEnabled);
+  const ghostMaxZScore = useSettingsStore((s) => s.ghostMaxZScore);
+  const ghostMaxZScoreEnabled = useSettingsStore((s) => s.ghostMaxZScoreEnabled);
+  const ghostRegimeGateEnabled = useSettingsStore((s) => s.ghostRegimeGateEnabled);
+  const ghostAllowedRegimes = useSettingsStore((s) => s.ghostAllowedRegimes);
+  const ghostRequireRegimeStable = useSettingsStore((s) => s.ghostRequireRegimeStable);
+
   // Upload references
   const fileInputRef = useRef(null);
   const multiFileInputRef = useRef(null);
@@ -114,6 +135,8 @@ export default function AnalysisView() {
   }, []);
 
   // Calibration timer effect (in-tab for Ghost Protocol calibration, references GlobalTimer concept)
+  // For time mode, we now primarily drive via the shared store + GlobalTimer (deep hook)
+  // This effect still runs for trades mode and as fallback/sync
   useEffect(() => {
     if (calibRunning) {
       calibIntervalRef.current = setInterval(() => {
@@ -130,8 +153,15 @@ export default function AnalysisView() {
             stopCalibration(true);
           }
         } else if (calibMode === 'time') {
-          // Auto stop if target duration in minutes reached
-          if (elapsed >= calibTarget * 60 * 1000) {
+          // For time mode, read the authoritative elapsed from the GlobalTimer-driven store
+          const storeElapsed = useSettingsStore.getState().calibTimerElapsedMs || elapsed;
+          setCalibElapsedMs(storeElapsed);
+          setCalibCollectedTrades(0); // not used for time
+
+          // If the global timer (via store) triggered alert or we locally reached target, stop
+          const storeActive = useSettingsStore.getState().calibTimerActive;
+          const storeAlert = useSettingsStore.getState().calibTimerAlertTriggered;
+          if (!storeActive || storeAlert || (storeElapsed >= calibTarget * 60 * 1000)) {
             stopCalibration(true);
           }
         }
@@ -152,7 +182,16 @@ export default function AnalysisView() {
     setCalibStartTime(Date.now());
     setCalibElapsedMs(0);
     setCalibCollectedTrades(0);
-    setCalibRunning(true);
+
+    if (calibMode === 'time') {
+      // Deep hook: delegate time-based calibration to the shared GlobalTimer via store
+      // This makes the global stopwatch + alert UI drive the run (see GlobalTimer integration)
+      const { startCalibTimer } = useSettingsStore.getState();
+      startCalibTimer(calibTarget);
+      setCalibRunning(true);
+    } else {
+      setCalibRunning(true);
+    }
   }
 
   function stopCalibration(autoFromTarget = false) {
@@ -161,6 +200,14 @@ export default function AnalysisView() {
       clearInterval(calibIntervalRef.current);
       calibIntervalRef.current = null;
     }
+
+    if (calibMode === 'time') {
+      // Stop the shared global timer when Ai-Cal time run ends
+      const { stopCalibTimer, resetCalibTimer } = useSettingsStore.getState();
+      stopCalibTimer();
+      // keep elapsed for final display until reset
+    }
+
     // Capture final collected
     const finalCollected = calibMode === 'trades' 
       ? Math.max(0, (ghostTotalTrades || 0) - calibStartTrades)
@@ -351,6 +398,15 @@ export default function AnalysisView() {
     setSelectedSessionId(sessionId);
     setRunningAI(true);
     setAiReport('');
+    setVoiceScript('');
+    // Reset voice prefetch / chunk state for new analysis
+    setPrefetchedVoiceUrl(null);
+    prefetchedUrlRef.current = null;
+    setIsPrefetchingVoice(false);
+    setCurrentVoiceChunk(0);
+    setTotalVoiceChunks(0);
+    chunkQueueRef.current = [];
+    revokeAllVoiceUrls();
     try {
       const res = await fetch('/api/analysis/run-ai-refinement', {
         method: 'POST',
@@ -365,10 +421,15 @@ export default function AnalysisView() {
       if (res.ok) {
         const d = await res.json();
         setAiReport(d.report);
+        setVoiceScript(d.voice_script || '');
         setPatterns(d.patterns || []);
+        // Eagerly start Grok voice preparation (prefetch) so playback feels instant on click
+        // This is the main lever for responsiveness (moved off the click path)
+        setTimeout(() => prefetchVoiceIfNeeded(d), 50);
       } else {
         const err = await res.json();
         setAiReport(`Error running AI analysis: ${err.detail || 'Unknown error'}`);
+        setVoiceScript('');
       }
     } catch (e) {
       setAiReport(`Failed to connect to Grok 4.3: ${e.message}`);
@@ -377,7 +438,103 @@ export default function AnalysisView() {
     }
   }
 
-  // Text to Speech playback — respects AI Profile (Grok Native TTS or Browser)
+  // === Voice helpers: chunking + prefetch for fast Grok TTS start ===
+  function chunkTextForVoice(text, maxChars = 380) {
+    if (!text) return [];
+    // Split on sentence endings and newlines, keep delimiters
+    const sentences = text
+      .replace(/\s+/g, ' ')
+      .split(/(?<=[.!?])\s+|\n+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    const chunks = [];
+    let current = '';
+
+    for (const s of sentences) {
+      if ((current + ' ' + s).trim().length > maxChars && current) {
+        chunks.push(current.trim());
+        current = s;
+      } else {
+        current = (current + ' ' + s).trim();
+      }
+    }
+    if (current) chunks.push(current.trim());
+
+    // If still too few chunks or very long single sentence, hard split
+    return chunks.length ? chunks : [text.substring(0, maxChars)];
+  }
+
+  async function prefetchVoiceIfNeeded(reportData) {
+    const report = reportData?.report || aiReport;
+    if (!report) return;
+
+    const { activeAiProfile, aiProfiles } = useSettingsStore.getState();
+    const profiles = aiProfiles || {};
+    const activeProf = profiles[activeAiProfile] || {};
+    const voice = activeProf.voice || {};
+    const useGrok = voice.provider === 'grok';
+
+    if (!useGrok) return;
+
+    // Prefer the short dedicated script returned by backend (huge win for speed + cost)
+    const script = reportData?.voice_script || voiceScript || '';
+    const textForVoice = (script && script.length > 10 ? script : report).replace(/[*#`\-]/g, '');
+
+    const chunks = chunkTextForVoice(textForVoice);
+    if (!chunks.length) return;
+
+    setIsPrefetchingVoice(true);
+    setCurrentVoiceChunk(0);
+    setTotalVoiceChunks(chunks.length);
+    chunkQueueRef.current = chunks.slice(1); // first chunk will be prefetched now
+
+    try {
+      const voiceId = voice.voiceId || voice.customVoiceId || 'rex';
+      const speed = voice.speed ?? 1.0;
+      const language = voice.language || 'en';
+
+      const res = await fetch('/api/ai/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: chunks[0],
+          voice_id: voiceId,
+          language,
+          speed,
+          profile_key: activeAiProfile,
+        }),
+      });
+      if (!res.ok) throw new Error(`TTS prefetch ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      voiceBlobUrlsRef.current.push(url);
+
+      setPrefetchedVoiceUrl(url);
+      prefetchedUrlRef.current = url;
+      // Store first chunk text for potential re-use on play
+      chunkQueueRef.current.firstChunkText = chunks[0]; // minor metadata
+    } catch (err) {
+      console.warn('Voice prefetch failed (will fetch on demand):', err);
+      // Leave prefetched null — play path will handle on-demand
+    } finally {
+      setIsPrefetchingVoice(false);
+    }
+  }
+
+  function revokeAllVoiceUrls() {
+    voiceBlobUrlsRef.current.forEach(u => {
+      try { URL.revokeObjectURL(u); } catch (e) {}
+    });
+    voiceBlobUrlsRef.current = [];
+    if (prefetchedUrlRef.current) {
+      try { URL.revokeObjectURL(prefetchedUrlRef.current); } catch (e) {}
+      prefetchedUrlRef.current = null;
+    }
+    setPrefetchedVoiceUrl(null);
+  }
+
+  // === Main playback (now supports prefetch + chunk queue for Grok) ===
   function handlePlayVoice() {
     if (!aiReport) return;
 
@@ -388,64 +545,32 @@ export default function AnalysisView() {
     const useGrok = voice.provider === 'grok';
 
     if (isPlayingVoice) {
+      // Stop everything
       synthRef.current?.cancel();
-      setIsPlayingVoice(false);
-      // Also stop any Grok audio if playing
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
       if (window.currentGrokAudio) {
         window.currentGrokAudio.pause();
         window.currentGrokAudio = null;
       }
+      chunkQueueRef.current = [];
+      setIsPlayingVoice(false);
+      setCurrentVoiceChunk(0);
+      prefetchedUrlRef.current = null;
+      revokeAllVoiceUrls();
       return;
     }
 
-    const cleanText = aiReport.replace(/[*#`\-]/g, '');
+    const script = voiceScript || '';
+    const baseText = (script && script.length > 10 ? script : aiReport).replace(/[*#`\-]/g, '');
 
     if (useGrok) {
-      // Grok Native TTS via backend proxy (respects profile voiceId, speed, language)
-      setIsPlayingVoice(true);
-      const voiceId = voice.voiceId || voice.customVoiceId || 'rex';
-      const speed = voice.speed ?? 1.0;
-      const language = voice.language || 'en';
-
-      fetch('/api/ai/speak', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: cleanText,
-          voice_id: voiceId,
-          language,
-          speed,
-          profile_key: activeAiProfile,
-        }),
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error(`TTS ${res.status}`);
-          return res.blob();
-        })
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          window.currentGrokAudio = audio;
-          audio.onended = () => {
-            setIsPlayingVoice(false);
-            URL.revokeObjectURL(url);
-            window.currentGrokAudio = null;
-          };
-          audio.onerror = () => {
-            setIsPlayingVoice(false);
-            URL.revokeObjectURL(url);
-            window.currentGrokAudio = null;
-          };
-          audio.play().catch(() => setIsPlayingVoice(false));
-        })
-        .catch((err) => {
-          console.warn('Grok TTS failed, falling back to browser:', err);
-          // Fallback to browser
-          playBrowser(cleanText);
-        });
+      playGrokVoiceChunks(baseText, activeAiProfile, voice);
     } else {
-      // Legacy browser path + dummy backend call (kept for compatibility)
-      fetch(`/api/analysis/speech?text=${encodeURIComponent(cleanText.substring(0, 100))}`)
+      // Legacy browser path
+      fetch(`/api/analysis/speech?text=${encodeURIComponent(baseText.substring(0, 100))}`)
         .then((res) => (res.ok ? res.blob() : null))
         .then((blob) => {
           if (blob) {
@@ -456,9 +581,113 @@ export default function AnalysisView() {
           }
         })
         .catch(() => {});
-
-      playBrowser(cleanText);
+      playBrowser(baseText);
     }
+  }
+
+  async function playGrokVoiceChunks(baseText, activeAiProfile, voiceCfg) {
+    const voiceId = voiceCfg.voiceId || voiceCfg.customVoiceId || 'rex';
+    const speed = voiceCfg.speed ?? 1.0;
+    const language = voiceCfg.language || 'en';
+
+    // Build chunk list (use pre-computed if we have remaining)
+    let chunks = [];
+    if (chunkQueueRef.current && chunkQueueRef.current.length > 0 && chunkQueueRef.current.firstChunkText) {
+      // We have a pre-fetched first chunk scenario
+      chunks = [chunkQueueRef.current.firstChunkText, ...chunkQueueRef.current];
+    } else {
+      chunks = chunkTextForVoice(baseText);
+    }
+    if (!chunks.length) return;
+
+    setIsPlayingVoice(true);
+    setCurrentVoiceChunk(0);
+    setTotalVoiceChunks(chunks.length);
+    chunkQueueRef.current = chunks.slice(1); // remaining after first
+
+    const playNextChunk = async (chunkIndex, chunkText) => {
+      if (!isPlayingVoice && chunkIndex > 0) return; // stopped
+
+      setCurrentVoiceChunk(chunkIndex + 1);
+
+      try {
+        let audioUrl;
+
+        // Use prefetched first chunk if available and this is chunk 0
+        if (chunkIndex === 0 && prefetchedUrlRef.current) {
+          audioUrl = prefetchedUrlRef.current;
+          prefetchedUrlRef.current = null;
+          setPrefetchedVoiceUrl(null); // consume it (state for UI)
+        } else {
+          // Fetch this chunk on demand (or subsequent chunks)
+          const res = await fetch('/api/ai/speak', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: chunkText,
+              voice_id: voiceId,
+              language,
+              speed,
+              profile_key: activeAiProfile,
+            }),
+          });
+          if (!res.ok) throw new Error(`TTS ${res.status}`);
+          const blob = await res.blob();
+          audioUrl = URL.createObjectURL(blob);
+          voiceBlobUrlsRef.current.push(audioUrl);
+        }
+
+        const audio = new Audio(audioUrl);
+        currentAudioRef.current = audio;
+        window.currentGrokAudio = audio;
+
+        audio.onended = async () => {
+          // Revoke this url unless it was the (now consumed) prefetched one.
+          // We compare to the ref value at definition time or simply avoid revoking the one we assigned from ref.
+          const wasPrefetched = (chunkIndex === 0 && !prefetchedUrlRef.current); // after consume, ref is null, so this chunk was the prefetched
+          if (!wasPrefetched) {
+            try { URL.revokeObjectURL(audioUrl); } catch (e) {}
+          }
+          currentAudioRef.current = null;
+          window.currentGrokAudio = null;
+
+          const remaining = chunkQueueRef.current;
+          if (remaining.length > 0) {
+            const nextText = remaining.shift();
+            chunkQueueRef.current = remaining;
+            await playNextChunk(chunkIndex + 1, nextText);
+          } else {
+            // All done
+            setIsPlayingVoice(false);
+            setCurrentVoiceChunk(0);
+            revokeAllVoiceUrls();
+          }
+        };
+
+        audio.onerror = () => {
+          console.warn('Chunk audio error, stopping voice');
+          setIsPlayingVoice(false);
+          setCurrentVoiceChunk(0);
+          currentAudioRef.current = null;
+          window.currentGrokAudio = null;
+          revokeAllVoiceUrls();
+        };
+
+        await audio.play();
+      } catch (err) {
+        console.warn('Grok TTS chunk failed, falling back to browser for remaining text:', err);
+        setIsPlayingVoice(false);
+        setCurrentVoiceChunk(0);
+        revokeAllVoiceUrls();
+        // Fallback for the rest of the text
+        const remainingText = chunks.slice(chunkIndex).join(' ');
+        playBrowser(remainingText);
+      }
+    };
+
+    // Kick off first chunk (uses prefetch if ready)
+    const firstText = chunks[0];
+    await playNextChunk(0, firstText);
   }
 
   function playBrowser(text) {
@@ -474,10 +703,16 @@ export default function AnalysisView() {
   useEffect(() => {
     return () => {
       synthRef.current?.cancel();
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
       if (window.currentGrokAudio) {
         window.currentGrokAudio.pause();
         window.currentGrokAudio = null;
       }
+      revokeAllVoiceUrls();
+      chunkQueueRef.current = [];
     };
   }, []);
 
@@ -1322,7 +1557,7 @@ export default function AnalysisView() {
                 <div className="flex gap-2 items-center">
                   <select 
                     className="flex-1 bg-[#25282f] text-xs p-2 rounded border border-white/10 font-bold"
-                    value={useSettingsStore((s) => s.activeGhostProtocol) || 'default'}
+                    value={activeGhostProtocol || 'default'}
                     onChange={(e) => {
                       const key = e.target.value;
                       const load = useSettingsStore.getState().loadGhostProtocol;
@@ -1361,6 +1596,10 @@ export default function AnalysisView() {
                   </button>
                 </div>
                 <div className="text-[8px] text-emerald-400 mt-1">Mirrors aiProfiles/voice profiles. Load applies gates instantly.</div>
+                {/* Live surface of current active Ghost Protocol gates (from store) */}
+                <div className="mt-2 text-[8px] bg-[#1a1c22] p-1 rounded border border-white/5">
+                  <span className="text-gray-500">Active Gates:</span> Z [{ghostMinZScoreEnabled ? ghostMinZScore.toFixed(1) : '—'}…{ghostMaxZScoreEnabled ? ghostMaxZScore.toFixed(1) : '—'}] Regimes: {ghostRegimeGateEnabled ? ((ghostAllowedRegimes || []).join('+') || 'ALL') : 'OFF'}{ghostRegimeGateEnabled && ghostRequireRegimeStable ? ' (stable)' : ''}
+                </div>
               </div>
 
               <div className="rounded-lg border border-white/5 bg-black/30 p-3">
@@ -1387,6 +1626,7 @@ export default function AnalysisView() {
                   <div className="text-xs bg-[#1a1c22] p-2 rounded border border-white/5">
                     <div>Mode: <span className="font-bold">{calibMode}</span> • Target: {calibTarget} {calibMode === 'trades' ? 'trades' : 'min'}</div>
                     <div className="font-mono mt-1">Progress: {calibMode === 'trades' ? calibCollectedTrades : formatCalibTime(calibElapsedMs)} / {calibTarget} ({progressPercent}%)</div>
+                    {calibMode === 'time' && <div className="text-[8px] text-emerald-400">Driven by Global Timer (see top bar)</div>}
                     <button onClick={() => stopCalibration()} className="mt-1 w-full py-1 text-xs bg-rose-500/20 text-rose-300 rounded">STOP &amp; COMPUTE SUGGESTIONS</button>
                   </div>
                 ) : (
@@ -1443,6 +1683,7 @@ export default function AnalysisView() {
                   setters.setGhostMinZScore(gatesToApply.minZScore);
                   setters.setGhostMaxZScoreEnabled(!!gatesToApply.maxZScoreEnabled);
                   setters.setGhostMaxZScore(gatesToApply.maxZScore);
+                  setters.setGhostRegimeGateEnabled(true);
                   setters.setGhostAllowedRegimes(gatesToApply.allowedRegimes || []);
                   setters.setGhostRequireRegimeStable(!!gatesToApply.requireRegimeStable);
 
@@ -1536,30 +1777,52 @@ export default function AnalysisView() {
           {/* Right Column: AI Analysis Report Viewer */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* Audio Voice Player widget */}
+            {/* Audio Voice Player widget — now with prefetch + chunk status */}
             {aiReport && (
               <div className="flex items-center justify-between rounded-xl border border-white/5 bg-[#14171d] p-4">
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handlePlayVoice}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ffb800]/10 text-[#ffb800] hover:bg-[#ffb800]/20 transition"
+                    disabled={isPrefetchingVoice && !prefetchedVoiceUrl}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[#ffb800]/10 text-[#ffb800] hover:bg-[#ffb800]/20 transition disabled:opacity-60"
+                    title={isPrefetchingVoice ? 'Preparing Grok voice...' : 'Play Grok voice briefing'}
                   >
                     {isPlayingVoice ? <Pause size={18} /> : <Play size={18} />}
                   </button>
                   <div>
-                    <div className="text-xs font-black uppercase tracking-wider text-gray-300">Spoken Advisory briefing</div>
-                    <div className="text-[10px] text-gray-500">Listen to Grok 4.3's verbal optimization breakdown</div>
+                    <div className="text-xs font-black uppercase tracking-wider text-gray-300 flex items-center gap-2">
+                      Spoken Advisory briefing
+                      {voiceScript && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold">SHORT SCRIPT</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-gray-500">
+                      {isPrefetchingVoice
+                        ? 'Preparing Grok voice (first words ready soon)...'
+                        : isPlayingVoice && totalVoiceChunks > 1
+                          ? `Grok 4.3 speaking — part ${currentVoiceChunk} of ${totalVoiceChunks}`
+                          : prefetchedVoiceUrl
+                            ? 'Grok voice ready — click to play instantly'
+                            : "Listen to Grok 4.3's verbal optimization breakdown (prefetched for speed)"}
+                    </div>
                   </div>
                 </div>
-                {/* Micro waveform voice playback indicator */}
-                {isPlayingVoice && (
+
+                {/* Status / waveform area */}
+                {isPlayingVoice ? (
                   <div className="flex items-end gap-1 h-6">
                     <div className="w-1 bg-[#ffb800] rounded animate-pulse h-3" />
                     <div className="w-1 bg-[#ffb800] rounded animate-pulse h-5" style={{ animationDelay: '0.15s' }} />
                     <div className="w-1 bg-[#ffb800] rounded animate-pulse h-2" style={{ animationDelay: '0.3s' }} />
                     <div className="w-1 bg-[#ffb800] rounded animate-pulse h-4" style={{ animationDelay: '0.45s' }} />
                   </div>
-                )}
+                ) : isPrefetchingVoice ? (
+                  <div className="text-[10px] text-[#ffb800] font-bold flex items-center gap-1">
+                    <RefreshCw size={12} className="animate-spin" /> synthesizing...
+                  </div>
+                ) : prefetchedVoiceUrl ? (
+                  <div className="text-[9px] px-2 py-0.5 rounded bg-[#ffb800]/10 text-[#ffb800] font-bold">READY</div>
+                ) : null}
               </div>
             )}
 

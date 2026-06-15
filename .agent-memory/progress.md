@@ -22,6 +22,8 @@
 - Modular Multi-Chart UX — Configurable mini-chart cards with star/focus controls, larger gauges, regime/manipulation overlays, and per-asset W/L tracking.
 - **Lagging and Latency Optimizations (2026-06-05, SIGNED OFF & CLOSED ✅)** — Implemented performance telemetry, thread-safe broker tick enqueueing, async bounded queue processing, memory-buffered tick logging, Zustand store splitting, requestAnimationFrame FPS throttling, lazy rendering, and narrow Zustand selectors. Fixed a critical cleanup animation frame leak that caused sparklines/gauges to freeze.
 - **Independent AI Toggle (2026-06-10, SIGNED OFF & CLOSED ✅)** — Decoupled the OTEO AI layer from Level 3. Added a dedicated AI toggle button next to Level 1, 2, and 3 buttons in the settings panel card, syncing it to the backend and tracking it in logs/payloads.
+- **Result Analysis Panel/Page (2026-06-10, SIGNED OFF & CLOSED ✅)** — Created a modular dashboard containing Session Logs comparison, responsive custom SVG charts, Grok 4.3 AI evaluation refinement tool, pattern recall database memory, and text-to-speech audio playbacks. Registered route endpoints `/api/analysis/*` in the FastAPI backend app.
+- **AI Developer Mode & Copy-Paste Uploads (2026-06-10, SIGNED OFF & CLOSED ✅)** — Isolated features in the `feature/ai-developer-mode-paste` branch. Implemented Developer Mode setting, Settings toggle card, AITab clipboard paste event listeners, backend temporary uploaded image persistence, TopBar AI dropdown popup with functional shortcuts and placeholder actions.
 - **Level 3 Phase 0 (2026-05-01, SIGNED OFF)** — 5 pre-implementation fixes completed across 3 backend files.
 - **Level 3 Phase 1 (2026-05-01, SIGNED OFF)** — Added `regime_classifier.py`, exposed `candle_closed`, wired persisted regime state into `streaming.py`.
 - **Level 3 Phase 2 (2026-05-01, SIGNED OFF)** — Added `Level3PolicyConfig` + `apply_level3_policy()`, wired Level 3 policy into `streaming.py`.
@@ -29,39 +31,35 @@
 - **Level 3 Phase 3 (2026-05-02, SIGNED OFF)** — Added tick-frequency health, dead/low-market handling, Auto-Ghost confirmation windows, adaptive cooldown, and CCI divergence.
 - **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`.
 - **OTEO Level Backtest Plan (2026-05-15, CLOSED ✅)** — 4-phase plan fully implemented and signed off.
-- **L1/L2/L3 Optimization and AI Knowledge Base Plan (2026-05-16, PLANNED)** — New historical analyzer and knowledge base plan documented.
-- **Grok Native TTS (Text-to-Speech) Integration (2026-06-13+)** — Full stack: backend provider/service/config/API for /v1/tts with voice profiles (grok vs browser), speed, custom voice_ids. Frontend AISettings with toggle/selectors/test playback. Integrated into AnalysisView and voice-over flows. Profiles now manage Grok voices.
-- **Results & Analysis Panel: 5 Optimal Z-Score + Regime Filters (2026-06-13+)** — Backend: session enrichment (regimes, avg_z_score), _compute_z_regime_winrates for cutoffs 0.3/0.5/0.8/1.2/2.0 with per-regime WR, filter support in AI refinement, prompt injection for analysis + Ghost Controller suggestions. API extended. Frontend: filter bar chips/presets in Logs, client filtering on sessions, active banner, passed to Grok. Larger UI sizing. Ties to execution quality (z-score/regime gates for Auto-Ghost). AI now explicitly analyzes optimal filters.
+- **L1/L2/L3 Optimization and AI Knowledge Base Plan — Phases 1-3, 5, 6 (2026-06-13, 100% COMPLETE ✅)** — Refactored offline analyzer, executed 10,207 trades full-corpus analysis, generated 1,029 KB patterns, created lazy-loading KnowledgeBaseLoader singleton, integrated microstructure manipulation taxonomy, mapped live active manipulation flags, and wired KB matching context into verification prompts and advisory logs. All tests pass cleanly.
+- **Z-Score & Regime Gates (Ghost Protocol) Integration & Stale Tick Filtering (2026-06-14, SIGNED OFF & CLOSED ✅)** — Resolved the JSX compilation syntax error, Grok audio overlapping, and calibration stopwatch auto-stop running leak in `GlobalTimer.jsx`. Resolved React Rules of Hooks violation in `AnalysisView.jsx`. Implemented settings, validation, and loadGhostProtocol actions in `useSettingsStore.js` and wired them to sync via `App.jsx`. Configured FastAPI strategy router, streaming service updates, and implemented the actual Z-Score and Market Regime confluences validation checks inside `auto_ghost.py`. Applied a 15-minute (900s) age limit constraint on historical ticks loaded during engine pre-seeding in `streaming.py` to prevent stale context data from corrupting initialization state. Added Test 7 and Test 8 smoke tests in `test_auto_ghost.py` for full gates verification.
+- **Grok Native TTS (Text-to-Speech) Integration (2026-06-13+)** — Full stack: backend provider/service/config/API for /v1/tts with voice profiles (grok vs browser), speed, custom voice_ids. Frontend AISettings with toggle/selectors/test playback. Integrated into AnalysisView and voice-over flows.
 
 ## Recent Delivery Snapshot
-- **Grok Native TTS + Analysis Panel Filters (2026-06-13+, active iteration):**
-  - Full Grok TTS stack with profile-driven voice management (browser fallback + native Grok voices with custom support).
-  - Results & Analysis Panel now includes 5 optimal z-score cutoffs (0.3-2.0) + per-regime win rates directly in the filter bar as selectable chips/presets. Client + server filtering. AI refinement explicitly receives/applies/analyzes the filters and optimal data, with instructions to recommend controller settings.
-- **Result Analysis Panel Enhancements (2026-06-11, SIGNED OFF & CLOSED ✅):**
-  - **Gregorian UTC Date Columns:** Display epoch start time formatted as `YYYY-MM-DD HH:mm:ss UTC` standard date format on the left of each session.
-  - **Separate Upload Options:** Split dropdown into Single File, Multiple Files, and Folder uploads, adding file input value resets to support duplicate uploads.
-  - **Session Deletion & Stats Purging:** Enabled deletion button for each row and updated the backend to clear existing daily stats files so charts update instantly.
-  - **AI Refinement Fix:** Terminated a stray background server caching old schemas, resolving the 500 completion error.
+- **L123 Phase 6 (AI Advisory Contract):**
+  - **KnowledgeBaseLoader:** Created singleton to load patterns lazily and query top matching templates using symbol normalizations, regime, and score band.
+  - **Microstructure Taxonomy:** Embedded table containing Liquidity Sweeps, Pinning, Push & Snap, Fake Breakouts, Whipsaws, Low Liquidity, and Multi-Asset Coordination definitions into prompts.
+  - **Prompt Ingestion:** Extended AI confirmation prompts to append strategy level, active manipulation flags, and top matching historical statistics.
+  - **Socket Notifications:** Exposed top KB match summary (WR%, count) in Socket.IO warning/info messages.
 - **Result Analysis Panel/Page (2026-06-10):**
   - **Modular Dashboard Shell:** Created visual tabs (Session Logs, Stats & Insights, AI Refinement Center).
   - **Backend Services:** Implemented log parser, daily aggregated stats generator, Grok 4.3 evaluation integration, and persistent pattern memory recall.
   - **Speech playback:** Exposed a TTS endpoint with browser Web Speech synthesis integration.
   - **SVG Charting:** Constructed native responsive SVG charts (cumulative profit line area chart, expiration WR bar chart).
+- **AI Developer Mode & Paste Uploads (2026-06-10):**
+  - **Git Branching:** Switched working scope to the `feature/ai-developer-mode-paste` branch.
+  - **Clipboard Paste Handlers:** Enabled users to paste screenshot images directly into the AITab textarea. The files are parsed as Data URLs, setting the preview panel instantly.
+  - **Dropdown Header Menu:** Refactored the TopBar AI button into a popover dropdown supporting navigation commands, placeholder actions, and toggling Developer Mode. Includes a click-outside listener to dismiss the menu.
+  - **Prompt Ingestion:** Dev Mode adjusts the Grok system prompt to act as an advanced software engineering advisor for OTC SNIPER upgrades.
+  - **Image Persistence:** Backend decodes incoming base64 screenshot uploads and persists raw binary files to `data/tmp/uploaded_images` automatically.
 - **Independent AI Toggle (2026-06-10):**
-  - **decoupled AI config:** Added `oteoAiEnabled` to the Zustand settings store, updating validators and adding a toggle action.
-  - **Settings Panel UI:** Exported the `AiChipIcon` SVG from TopBar and wired it into a brand new independent AI toggle button right next to Level 1/2/3 indicators, while renaming Level 3 (AI) to Level 3.
-  - **FastAPI Routing:** Upgraded `strategy.py` router and models to support the new `oteo_ai_enabled` setting.
-  - **Streaming & Auto-Ghost:** Hooked up the state into the Socket.IO tick payloads, signal log files, and auto-ghost execution context.
-- **Lagging and Latency Optimizations (2026-06-05):**
-  - **Thread-safe Hotpath:** `PocketOptionSession` uses `loop.call_soon_threadsafe` to hand off ticks to `StreamingService`.
-  - **Async Queueing:** enqueues ticks into an `asyncio.Queue` (size 500) processed by a background worker task.
-  - **Memory-Buffered Logging:** `TickLogger` buffers tick writes and flushes them to disk every 5 seconds or 100 ticks.
-  - **Store Splitting & Throttling:** `useStreamStore.js` splits ticks history from current values.
-  - **Zustand Selector Refactoring:** Switched all hooks in `RightSidebar`, `GhostTradingWidget`, `SessionRiskPanel`, and `JournalView` to target narrow fields.
-  - **Gauges & Sparkline Optimizations:** Lazy-renders mini gauges on hover.
-  - **Animation Frame Leak Fix:** Reset `rafIdRef.current = null` in the socket clean-up callback, resolving sparkline freezing.
+  - **decoupled AI config:** Added `oteoAiEnabled` to the settings store and synchronized it.
+  - **Settings Panel UI:** Exported the `AiChipIcon` SVG and wired it into a brand new independent AI toggle button right next to Level 1/2/3 indicators, while renaming Level 3 (AI) to Level 3.
+  - **FastAPI Routing & Streaming:** Updated FastApi schemas, backend settings, and Socket.IO emission loops to accept and route `oteo_ai_enabled`.
  
 ## Verification Status
+- `conda run -n QuFLX-v2 python -m unittest test_knowledge_base_retrieval.py` -> ✅ passed (5/5 tests clean)
+- `conda run -n QuFLX-v2 python test_auto_ghost.py` -> ✅ passed (all 8 smoke tests clean)
 - `conda run -n QuFLX-v2 python -m py_compile app/backend/main.py app/backend/api/analysis.py app/backend/services/analysis_service.py` -> ✅ passed
 - `npm --prefix app/frontend run build` -> ✅ passed (built successfully in 4.23s)
 - `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` -> ✅ passed (39/39 tests clean)

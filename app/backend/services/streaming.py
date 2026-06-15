@@ -111,6 +111,7 @@ class StreamingService:
         auto_ghost_min_zscore: float | None = None,
         auto_ghost_max_zscore_enabled: bool | None = None,
         auto_ghost_max_zscore: float | None = None,
+        auto_ghost_regime_gate_enabled: bool | None = None,
         auto_ghost_allowed_regimes: list[str] | None = None,
         auto_ghost_require_regime_stable: bool | None = None,
     ) -> dict[str, Any]:
@@ -153,6 +154,7 @@ class StreamingService:
             min_zscore=auto_ghost_min_zscore,
             max_zscore_enabled=auto_ghost_max_zscore_enabled,
             max_zscore=auto_ghost_max_zscore,
+            regime_gate_enabled=auto_ghost_regime_gate_enabled,
             allowed_regimes=auto_ghost_allowed_regimes,
             require_regime_stable=auto_ghost_require_regime_stable,
             oteo_ai_enabled=self.oteo_ai_enabled,
@@ -230,23 +232,30 @@ class StreamingService:
             market_context = MarketContextEngine(config=self.level2_config)
             
             recent_ticks = self.tick_logger.load_recent(asset, max_ticks=300)
-            if recent_ticks:
-                for tick in recent_ticks:
+            now = time.time()
+            valid_ticks = [t for t in recent_ticks if (now - float(t["t"])) <= 900.0]
+            if valid_ticks:
+                for tick in valid_ticks:
                     oteo.seed_tick(float(tick["p"]), timestamp=float(tick["t"]))
                     market_context.seed_tick(float(tick["p"]), timestamp=float(tick["t"]))
-                logger.info("Pre-seeded OTEO for %s with %d historical ticks", asset, len(recent_ticks))
+                logger.info(
+                    "Pre-seeded OTEO for %s with %d historical ticks (filtered %d stale)",
+                    asset,
+                    len(valid_ticks),
+                    len(recent_ticks) - len(valid_ticks),
+                )
             
             self._oteo_engines[asset] = oteo
             self._market_context_engines[asset] = market_context
             self._manip_engines[asset] = ManipulationDetector()
-            self._tick_counts[asset] = len(recent_ticks)
+            self._tick_counts[asset] = len(valid_ticks)
 
         if asset not in self._regime_classifiers:
             self._regime_classifiers[asset] = RegimeClassifier()
             
         return self._oteo_engines[asset], self._market_context_engines[asset], self._manip_engines[asset]
 
-    def _resolve_asset_payout_pct(self, asset: str) -> float:
+    def _resolve_asset_payout_pct(self, asset: str) -> float | None:
         now = time.time()
         cached = self._payout_cache.get(asset)
         if cached and (now - cached[1]) < self.PAYOUT_CACHE_TTL_SECONDS:
@@ -258,8 +267,12 @@ class StreamingService:
             self._payout_cache[asset] = (payout_pct, now)
             return payout_pct
         except Exception as exc:
-            logger.debug("Failed to resolve payout for %s: %s", asset, exc)
-            return 0.0
+            logger.warning(
+                "Failed to resolve payout for %s; Auto-Ghost will skip until payout is available: %s",
+                asset,
+                exc,
+            )
+            return None
 
     def process_tick(self, asset: str, price: float, timestamp: float, source: str = "pocket_option") -> None:
         """

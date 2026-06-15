@@ -62,11 +62,7 @@ export default function AppSettings() {
     autoGhostManipulationSeverityThreshold,
     autoGhostBlockOnManipulation,
     ghostIcon,
-    aiModel,
-    aiDevMode,
-    oteoAiExecutionMode,
     showManipulationAlerts,
-    showSignalConfidence,
     autoFocusOnSignal,
     setOteoLevel2Enabled,
     setOteoLevel3Enabled,
@@ -81,9 +77,6 @@ export default function AppSettings() {
     setAutoGhostManipulationSeverityThreshold,
     setAutoGhostBlockOnManipulation,
     setGhostIcon,
-    setAiModel,
-    setAiDevMode,
-    setOteoAiExecutionMode,
     setShowManipulationAlerts,
     setShowSignalConfidence,
     setAutoFocusOnSignal,
@@ -269,74 +262,13 @@ export default function AppSettings() {
             </div>
           </SectionCard>
 
-          {/* AI INTEGRATION & CONFIG - basic global model kept for compatibility */}
+          {/* FOCUS & REFRESH CONFIG */}
           <SectionCard 
-            title="AI Integration & Feeds (Basic)" 
-            subtitle="Global model + dev toggle. Use the new 'AI & Voice' tab (top) for full profiles, reasoning, and voice settings."
-            icon={Zap}
+            title="Focus & Refresh Config" 
+            subtitle="Configure automatic asset focusing on signals and catalog refresh behavior."
+            icon={RefreshCcw}
           >
             <div className="space-y-6">
-              <InputGroup label="AI Model Select" tooltip="Model selector for signal refinement and trade confirmation">
-                <div className="relative">
-                  <select
-                    value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                    className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-xs font-black uppercase tracking-widest text-white outline-none border border-white/5"
-                  >
-                    <option value="grok-4.3-fast">Grok 4.3 Fast (Non-Reasoning - Recommended for speed)</option>
-                    <option value="grok-4.3-balanced">Grok 4.3 Balanced (Light Reasoning - Reviews & Analysis)</option>
-                    <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast Non-Reasoning (Legacy)</option>
-                    <option value="grok-4-1-fast-reasoning">Grok 4.1 Fast Reasoning (Legacy)</option>
-                  </select>
-                  <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                </div>
-              </InputGroup>
-
-              {oteoAiEnabled && (
-                <InputGroup label="AI Mode Protocol" tooltip="Advisory: AI analyzes signals but does not block trades. Confirmation: AI must confirm the signal before execution.">
-                  <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1">
-                    <button
-                      type="button"
-                      onClick={() => setOteoAiExecutionMode('advisory')}
-                      className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
-                        oteoAiExecutionMode === 'advisory'
-                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                          : 'text-gray-500 hover:text-white'
-                      }`}
-                    >
-                      Advisory (Informational)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOteoAiExecutionMode('confirmation')}
-                      className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
-                        oteoAiExecutionMode === 'confirmation'
-                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                          : 'text-gray-500 hover:text-white'
-                      }`}
-                    >
-                      Execution Confirmation
-                    </button>
-                  </div>
-                </InputGroup>
-              )}
-
-              <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
-                <div className="flex flex-col text-left">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-white">Developer Mode</p>
-                    <Tooltip content="Enable developer mode to query Grok for platform upgrades, code design, and prompt analysis." />
-                  </div>
-                  <p className="mt-1 text-[9px] text-gray-500 font-medium">Chat with Grok about project insights and feature implementations.</p>
-                </div>
-                <button
-                  onClick={() => setAiDevMode(!aiDevMode)}
-                  className={`h-5 w-10 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-                >
-                  <div className={`h-3 w-3 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
                   <div className="flex items-center gap-2">

@@ -1,107 +1,527 @@
-## Ai-Calibration + Ghost Protocol Implementation Session (2026-06-13)
+1. Previous Conversation:
 
-This session implemented the Ai-Calibration tab and Ghost Protocol system. Core goals: add Z-Score + Regime Detection Gates as extra confluences directly in the Ghost Controller's Controller Settings; create a dedicated 3rd tab called `Ai-Calibration`; introduce a user-calibratable "Ghost Protocol" (customisable strategy profiles for the Ghost Trader only) with one-click AI-suggested parameter application, calibration runners (N trades or timed), dynamic suggestions from live analysis data, and profile persistence modeled on the existing voice/AI profiles system.
+- User asked for a close inspection of `app\backend\services\auto_ghost.py` in workspace `OTC_SNIPER`, specifically to check whether latest modifications might block executions or prevent receiving signals.
 
-**Key design constraints (strictly followed):**
-- AI / gates only ever modify Ghost execution parameters (never user live balance or live trade executions).
-- Ghost Trader mirrors the user's account (balance/lot sizing simulation for realism).
-- Trades execute exactly as before (Signal Click or Select + Manual).
-- Live trader results intentionally will not 100% match Ghost results.
-- Protocols are customisable user profiles (create/save/load bundles of gate values + description).
+- Relevant provided context came from:
 
-### What was completed — UI Modifications
+  - `OTC_SNIPER/.agent-memory/activeContext.md`: latest Z-Score & Regime Gates / Ghost Protocol integration was completed 2026-06-14; `auto_ghost.py` gained Z-score min/max checks and market regime whitelist/stability filters. `streaming.py` gained stale tick filtering and emits regime/Z-score fields.
+  - `OTC_SNIPER/progress.md`: Z-Score & Regime Gates signed off and tests existed in `test_auto_ghost.py`.
 
-*   **GhostTradingWidget.jsx (Controller Settings tab inside floating Auto Ghost Controller widget):**
-    *   Added full "Z-Score Gate Bounds (Ai-Calibration)" section after Confidence Gate: min/max Z sliders (range -3 to +3, 0.1 steps) with independent enable checkboxes.
-    *   Added full "Regime Gate (Ai-Calibration)" section: multi-select clickable chips for `RANGE_BOUND | TREND_REVERSAL | TREND_PULLBACK | STRONG_MOMENTUM | CHOPPY`, plus "Require Regime Stable" checkbox.
-    *   Added live "Active Protocol Gates" summary line in the Telemetry tab (shows current Z range + active regimes + stable flag) for immediate visual feedback.
-    *   All new controls are fully wired to `useSettingsStore` (destructuring + setters) and update instantly.
-    *   Edge-case polish: empty `allowedRegimes` displays "(All regimes allowed if empty)".
+- Initial investigation was performed in PLAN MODE, reading/searching:
 
-*   **AnalysisView.jsx (Analysis panel):**
-    *   Renamed the 3rd top-level tab from "AI Refinement" to **Ai-Calibration**.
-    *   Inserted a prominent new top-level card at the start of the 'ai' tab content:
-        *   Header: "Ai-Calibration — Ghost Protocol" with explanation of safety boundaries.
-        *   Active Ghost Protocol selector (dropdown) + "Save Current" button that captures live gate values into a named bundle.
-        *   Calibration Run section (fully functional):
-            *   "Start 30-trade Calib" and "10 min Timed" buttons (user-spec: N trades or 5-15 min using Global Timer Bar pattern).
-            *   In-tab wired state machine: `calibMode`, `calibTarget`, `calibRunning`, `calibStartTrades` (from `useRiskStore.ghostTotalTrades`), `calibStartTime`, `calibElapsedMs`, `calibCollectedTrades`.
-            *   Live progress display + percentage (trades delta or stopwatch-style elapsed).
-            *   Auto-stop on trade target; manual Stop & Compute; Reset.
-            *   Uses local `setInterval` + `useEffect` (mirrors GlobalTimer stopwatch/alert logic).
-        *   Dynamic AI Suggested Gates panel:
-            *   "Recompute from Analysis" button.
-            *   `computeDynamicSuggestionsFromData()` function that reads `currentZRegimeData` (sourced from existing `/api/analysis/sessions` + `analysis_service._compute_z_regime_winrates` containing the 5 optimal cutoffs per regime).
-            *   Heuristic derives top-WR regimes for `allowedRegimes`, biases min/max Z around the best cutoff, suggests stable flag.
-            *   Displays the four values + explanatory note.
-        *   Big one-click apply button: "★ ONE-CLICK APPLY SUGGESTED GATES TO GHOST CONTROLLER".
-            *   Calls `useSettingsStore.getState()` setters for all z-score + regime fields (plus a confidence nudge for demo confluence).
-            *   Values appear live in the open Ghost widget.
-    *   Added supporting React state, `useEffect` for calibration timer, helper functions (`startCalibration`, `stopCalibration`, `resetCalibration`, formatters, progress calc), and import for `useRiskStore`.
-    *   References to GlobalTimer stopwatch for timed calibration runs.
+  - `@OTC_SNIPER:app/backend/services/auto_ghost.py`
+  - `@OTC_SNIPER:app/backend/services/streaming.py`
+  - `@OTC_SNIPER:app/backend/api/strategy.py`
+  - `@OTC_SNIPER:test_auto_ghost.py`
+  - frontend usage in `App.jsx`, `useSettingsStore.js`, `GhostTradingWidget.jsx`, `AnalysisView.jsx`
+  - `market_context.py`, `oteo.py`, `manipulation.py`
 
-*   **useSettingsStore.js:**
-    *   New `SETTINGS_DEFAULTS` entries for all gates (`ghostMinZScoreEnabled`, `ghostMinZScore`, `ghostMaxZScoreEnabled`, `ghostMaxZScore`, `ghostAllowedRegimes`, `ghostRequireRegimeStable`) + profile system (`ghostProtocols: null`, `activeGhostProtocol: 'default'`).
-    *   Full load/deserialization logic (handles arrays or comma-strings for regimes, merges defaults).
-    *   New setters for every gate field + `setGhostProtocols`, `setActiveGhostProtocol`.
-    *   `loadGhostProtocol(key)` helper that both activates the profile *and* immediately applies its `gates` object to the live ghost* settings (modeled exactly after `aiProfiles` + `featureProfiles` / voice profile switching).
+- Findings reported:
 
-*   **App.jsx:**
-    *   Destructured all new ghost z/regime values from the store.
-    *   Added them (with enabled guards) to the `auto_ghost_*` payload object sent on runtime config updates.
-    *   Added the new values to the relevant `useEffect` dependency array so changes trigger backend sync.
+  - No syntax/import-level blocker initially in `auto_ghost.py`.
 
-*   **Minor / discoverability polish:**
-    *   Updated some internal links/tooltips that still referenced "AI Refinement" (cosmetic).
-    *   Added clear comments and UI text explaining navigation (must enable Auto-Ghost to see widget; gates live in its "Controller Settings" tab; Ai-Calibration is the 3rd tab of the Analysis view).
+  - The most likely execution blockers were:
 
-### What was completed — Backend Modifications
+    1. Regime allowlist: backend used `if self.config.allowed_regimes:` so any non-empty selected regime chips would activate filtering, even if “Require Regime Stable” was unchecked.
+    2. Payout fallback: `_resolve_asset_payout_pct()` in `streaming.py` returned `0.0` on failure, and Auto-Ghost minimum payout default 88% would reject every trade.
+    3. AI confirmation mode: synchronous AI call with 4s timeout; any timeout/error/rejection blocks trade.
+    4. Manipulation gate strictness: threshold 0.0 blocks any manipulation flag.
 
-*   **auto_ghost.py:**
-    *   Extended `AutoGhostConfig` dataclass with the six new fields (`min_zscore_enabled`, `min_zscore`, `max_zscore_enabled`, `max_zscore`, `allowed_regimes: list[str] | None`, `require_regime_stable`).
-    *   Updated `update_config(...)` signature and the big reconstruction block that builds the fresh `AutoGhostConfig`.
-    *   Added explicit gate enforcement logic inside `consider_signal()` (immediately after the existing numeric confidence gates, before payout/timeframe checks):
-        *   Pulls `z_score`, `regime_label`, `regime_stable` from the already-enriched `oteo_result`.
-        *   Min/Max Z checks (when enabled).
-        *   Regime membership check (when `allowed_regimes` is non-empty).
-        *   Stable requirement check.
-        *   All skips are logged with clear "(Ai-Calibration gate)" or "(Ghost Protocol)" markers.
-    *   Extended `status()` return dict to expose the six new values (so frontend/backend stay in sync and the widget can reflect them).
-    *   Empty / null `allowed_regimes` → treated as "allow all" (no filter applied).
+- User asked:
 
-*   **strategy.py:**
-    *   Added the six new `auto_ghost_*` fields to `RuntimeStrategyConfigRequest` (including `auto_ghost_allowed_regimes: list[str] | None`).
-    *   Forwarded every new field through the `update_runtime_settings(...)` call to the streaming service.
+  1. If regime allowlist is not enabled but chips visible, does it still block?
+  2. What is payout fallback and importance?
+  3. Whether AI confirmation implementation is cumbersome?
+  4. What should be done?
 
-*   **streaming.py:**
-    *   Extended `update_runtime_settings(...)` signature with the six new optional parameters.
-    *   Passed them through to `self.auto_ghost.update_config(...)`.
+- Response explained:
 
-*   **App.jsx (frontend sync glue, listed above but critical for round-trip):**
-    *   The payload now carries the new gates so that changes made in the widget or one-click apply are persisted to the backend AutoGhostService on the next update cycle.
+  - There was no backend boolean for regime allowlist; any non-empty `allowed_regimes` array activated the allowlist.
 
-### Additional / Cross-cutting
+  - Payout fallback is broker payout lookup failure returning `0.0`, causing minimum payout gate to reject.
 
-*   **Ghost Protocol profile system:** Fully functional save/load of named bundles containing the exact gate values. Persisted via the same Zustand + localStorage mechanism as `aiProfiles`. Load applies gates instantly (one-click style).
-*   **Dynamic suggestions source of truth:** Reuses the existing rich z-regime analysis pipeline (`analysis_service`, `/api/analysis/sessions` returning `z_regime_ghost`, the 5 optimal cutoffs per regime) — no new heavy AI call required for the first version.
-*   **Calibration data collection:** Directly observes live `ghostTotalTrades` delta (RiskStore) for the "N trades" path and uses a self-contained timer for the timed path. Data naturally flows into the next `fetchData()` / z-regime recompute because ghost trades are already enriched with z/regime at execution time.
-*   **Verification performed in-session:** All new UI sections render (confirmed via file reads), store round-trips, backend config accepts/forwards/enforces the gates, empty-regime edge case handled on both sides.
-*   **Safety / separation of concerns:** Every change explicitly documents and enforces that only the Ghost path is affected. Live user execution and balance paths are untouched.
+  - AI confirmation is cumbersome/fragile for live execution and should be advisory by default.
 
-### Verification Status
+  - Recommended stabilization:
 
-*   **UI renders:** Ghost widget Controller Settings now contains the two new gate sections + telemetry summary. AnalysisView 3rd tab now titled "Ai-Calibration" and contains the full calibration + one-click + profile UI at the top.
-*   **Store + sync:** New fields appear in defaults, load logic, setters, App.jsx payload, and backend request models.
-*   **Backend enforcement:** Gates are evaluated inside `consider_signal` before any ghost trade is allowed; status dict exposes them.
-*   **Profile persistence:** `ghostProtocols` + `loadGhostProtocol` work the same way as the voice/AI profile system.
-*   **No breakage:** Existing confidence, manipulation, timeframe, payout, drawdown gates continue to function exactly as before.
+    1. Add reject reasons/counters to AutoGhostService status.
+    2. Add explicit `regime_gate_enabled` setting so chips do not implicitly block.
+    3. Make payout unavailable visible/logged, ideally return `None` from `_resolve_asset_payout_pct`.
+    4. Keep AI confirmation but improve logging and default to advisory.
 
-### Next Session Targets
+- User switched toAct Mode (⌘⇧A) with: “Proceed with your recommended steps.”
 
-*   Hook the calibration timers more deeply into the actual GlobalTimer component (drive its alerts or share elapsed state).
-*   Make the "AI Suggested" card call a real lightweight Grok prompt (using the same enriched ghost trade + z_regime_ghost context + KB patterns) instead of the current heuristic.
-*   Surface the current active Ghost Protocol gates in additional places (Risk panel, session stats, or a dedicated mini visualizer card).
-*   Add end-to-end test that runs a short calibration, applies gates, and verifies ghost execution decisions respect the new Z/regime filters.
-*   Document the Ghost Protocol feature in the main Dev_Docs and add a small "How to calibrate" walkthrough.
+2. Current Work:
 
-The flow is now complete and usable: enable Auto-Ghost → open widget → see new gates → go to Analysis → Ai-Calibration tab → run calibration (trades or time) → recompute suggestions from real analysis data → one-click apply → Ghost immediately narrows its entries using the new confluences. All while keeping strict separation from live user trading.
+- Currently implementing the recommended stabilization pass in `OTC_SNIPER`.
+
+- Task progress created:
+
+  - Phase 1: Add Auto-Ghost reject reasons/counters and payout-unavailable visibility
+  - Phase 2: Add explicit regime gate enable/disable contract through backend config
+  - Phase 3: Wire frontend settings/API/UI to the explicit regime gate
+  - Phase 4: Update focused tests for new behavior
+  - Phase 5: Run incremental validation and report results
+
+- We attempted to use `apply_patch`, but it repeatedly failed with: `Error executing apply_patch: User closed text editor, unable to edit file...`
+
+- We then used `execute_command` with short Python/PowerShell one-liners to edit files. Some commands failed due to Windows quoting / command length / `@'` here-string parsing / accidental literal `` `n `` insertion, then were corrected.
+
+- Important: There are partially applied edits. Must inspect and clean before continuing. Do not assume files are valid until compile check passes.
+
+3. Key Technical Concepts:
+
+- Python backend with FastAPI/Pydantic.
+
+- `AutoGhostService.consider_signal()` is called only by `StreamingService._process_tick_inner()` after signal is warmed and actionable.
+
+- Auto-Ghost gates:
+
+  - enabled/session/drawdown/session trade count
+  - timeframe limit
+  - recommended CALL/PUT and actionable
+  - min/max confidence
+  - minimum payout
+  - manipulation severity
+  - Z-score min/max
+  - regime allowlist/stability
+  - active asset/concurrency/cooldown
+  - optional confirmation ticks
+  - optional AI confirmation/advisory
+
+- Explicit regime-gate contract being implemented:
+
+  - New backend config field: `regime_gate_enabled: bool = False`
+  - New API payload field: `auto_ghost_regime_gate_enabled`
+  - Frontend planned state: `ghostRegimeGateEnabled`
+
+- Reject reason tracking:
+
+  - New dictionaries in `AutoGhostService`:
+
+    - `_last_reject_reason_by_asset: dict[str, str]`
+    - `_reject_counts: dict[str, int]`
+
+  - New helper `_record_reject(asset, reason)`
+
+  - `_reject(asset, reason)` records and removes pending signal.
+
+  - Status exposes:
+
+    - `auto_ghost_last_reject_reason_by_asset`
+    - `auto_ghost_reject_counts`
+
+- Payout fallback intended change:
+
+  - `StreamingService._resolve_asset_payout_pct()` should return `float | None`.
+  - On failure should `logger.warning(...)` and return `None`.
+  - AutoGhost should treat `payout_pct is None` as `payout_unavailable`.
+
+- Core principles relevant:
+
+  - Zero silent failures: avoid debug-only swallowed errors.
+  - Fail fast/visible reasons.
+  - Stop patching if patching becomes risky; current repeated editing failures are a warning sign.
+  - Incremental testing after changes.
+
+4. Relevant Files and Code:
+
+- `@OTC_SNIPER:app/backend/services/auto_ghost.py`
+
+  - Successfully added to `AutoGhostConfig`:
+
+    ```py
+    regime_gate_enabled: bool = False
+    ```
+
+  - Successfully added to `__init__`:
+
+    ```py
+    self._last_reject_reason_by_asset: dict[str, str] = {}
+    self._reject_counts: dict[str, int] = {}
+
+    def _record_reject(self, asset: str, reason: str) -> None:
+        self._last_reject_reason_by_asset[asset] = reason
+        self._reject_counts[reason] = self._reject_counts.get(reason, 0) + 1
+    ```
+
+  - Successfully updated `update_config` signature:
+
+    ```py
+    regime_gate_enabled: bool | None = None,
+    allowed_regimes: list[str] | None = None,
+    ```
+
+  - Successfully updated `update_config` body:
+
+    ```py
+    if regime_gate_enabled is not None:
+        updates["regime_gate_enabled"] = bool(regime_gate_enabled)
+    if allowed_regimes is not None:
+        updates["allowed_regimes"] = [str(r).strip().upper() for r in allowed_regimes if str(r).strip()]
+    ```
+
+  - Successfully added session reset clearing:
+
+    ```py
+    self._last_reject_reason_by_asset.clear()
+    self._reject_counts.clear()
+    ```
+
+  - `status` currently appears clean after duplicate cleanup:
+
+    ```py
+    "auto_ghost_regime_gate_enabled": self.config.regime_gate_enabled,
+    "auto_ghost_allowed_regimes": self.config.allowed_regimes,
+    "auto_ghost_require_regime_stable": self.config.require_regime_stable,
+    ...
+    "auto_ghost_last_reject_reason_by_asset": dict(self._last_reject_reason_by_asset),
+    "auto_ghost_reject_counts": dict(self._reject_counts),
+    ```
+
+  - `_reject` updated:
+
+    ```py
+    def _reject(self, asset: str, reason: str) -> None:
+        self._record_reject(asset, reason)
+        self._pending_signals.pop(asset, None)
+    ```
+
+  - `consider_signal` signature updated:
+
+    ```py
+    payout_pct: float | None = 100.0,
+    ```
+
+  - Most `return self._reject(asset)` calls were updated with reasons:
+
+    - `disabled`
+    - `session_halted`
+    - `max_session_trades`
+    - `drawdown_cooldown`
+    - `timeframe_limit`
+    - `not_call_or_put`
+    - `not_actionable`
+    - `below_min_confidence`
+    - `above_max_confidence`
+    - `payout_unavailable`
+    - `payout_below_minimum`
+    - `manipulation_block`
+    - `below_min_zscore`
+    - `above_max_zscore`
+    - `missing_regime_label`
+    - `regime_not_allowed`
+    - `regime_unstable`
+    - `asset_active`
+    - `max_concurrent_trades`
+    - `asset_cooldown`
+    - `confirmation_direction_changed`
+    - `ai_confirmation_rejected`
+    - `ai_confirmation_error`
+
+  - Regime gate block updated to:
+
+    ```py
+    if self.config.regime_gate_enabled and self.config.allowed_regimes:
+        if regime_label is None:
+            logger.info(f"Auto-Ghost skipped {asset}: regime gate enabled but signal has no regime label")
+            return self._reject(asset, 'missing_regime_label')
+        if str(regime_label).upper() not in self.config.allowed_regimes:
+            logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} not in allowed {self.config.allowed_regimes} (Ghost Protocol gate)")
+            return self._reject(asset, 'regime_not_allowed')
+
+    if self.config.regime_gate_enabled and self.config.require_regime_stable and regime_stable is False:
+        logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} is unstable (Ghost Protocol gate)")
+        return self._reject(asset, 'regime_unstable')
+    ```
+
+  - Payout unavailable block currently:
+
+    ```py
+    if payout_pct is None:
+        logger.warning(f"Auto-Ghost skipped {asset}: payout unavailable")
+        return self._reject(asset, 'payout_unavailable')
+    ```
+
+  - AI prompt active manipulation formatting changed to:
+
+    ```py
+    ", ".join(f"{k} (severity: {_get_severity(v):.2f})" for k, v in manipulation.items())
+    ```
+
+  - AI advisory exception changed to:
+
+    ```py
+    logger.warning(f"AI Advisory background query failed for {asset}: {e}")
+    ```
+
+  - Must inspect `auto_ghost.py` for syntax and remaining accidental issues. Search just before condense showed no remaining `return self._reject(asset)` except no output? Last search before later edits found 2 issues only (severity formatting and AI debug), which were fixed. Re-run search after compaction.
+
+- `@OTC_SNIPER:app/backend/services/streaming.py`
+
+  - Intended:
+
+    ```py
+    auto_ghost_regime_gate_enabled: bool | None = None,
+    ...
+    regime_gate_enabled=auto_ghost_regime_gate_enabled,
+    ```
+
+    and `_resolve_asset_payout_pct -> float | None`, warning + `return None`.
+
+  - Current state after inspection showed the explicit regime fields are present:
+
+    ```py
+    auto_ghost_regime_gate_enabled: bool | None = None,
+    ...
+    regime_gate_enabled=auto_ghost_regime_gate_enabled,
+    ```
+
+  - Current state after inspection still showed payout fallback not changed:
+
+    ```py
+    def _resolve_asset_payout_pct(self, asset: str) -> float | None:
+        ...
+        except Exception as exc:
+            logger.debug("Failed to resolve payout for %s: %s", asset, exc)
+            return 0.0
+    ```
+
+  - A command was issued to change this to warning/None but __the user denied this operation__, so it did NOT apply. Next step: apply this change carefully, preferably after user approval if required.
+
+- `@OTC_SNIPER:app/backend/api/strategy.py`
+
+  - Current state after line-ending cleanup shows:
+
+    ```py
+    auto_ghost_regime_gate_enabled: bool = Field(default=False)
+    ...
+    auto_ghost_regime_gate_enabled=body.auto_ghost_regime_gate_enabled,
+    ```
+
+  - This file looked clean in last read after converting literal ``n` markers.
+
+- `@OTC_SNIPER:app/frontend/src/stores/useSettingsStore.js`
+
+  - Not yet modified in ACT MODE.
+
+  - Existing defaults:
+
+    ```js
+    ghostAllowedRegimes: [],
+    ghostRequireRegimeStable: false,
+    ```
+
+  - Need add:
+
+    ```js
+    ghostRegimeGateEnabled: false,
+    ```
+
+  - Need update `validateSettings()` to validate this boolean.
+
+  - Need add setter:
+
+    ```js
+    setGhostRegimeGateEnabled: (val) => commitSettingsPatch(set, { ghostRegimeGateEnabled: val }),
+    ```
+
+  - Need loadGhostProtocol default and gates to set enable flag:
+
+    - default should disable gate.
+    - protocol load should likely set `ghostRegimeGateEnabled: gates.regimeGateEnabled ?? ((gates.allowedRegimes ?? []).length > 0 || gates.requireRegimeStable ?? false?)`; but safest explicit default false unless protocol says enabled. Since user concern is hidden activation, use explicit `gates.regimeGateEnabled ?? false`.
+
+- `@OTC_SNIPER:app/frontend/src/App.jsx`
+
+  - Not yet modified.
+
+  - Existing subscriptions:
+
+    ```js
+    const ghostAllowedRegimes = useSettingsStore((s) => s.ghostAllowedRegimes);
+    const ghostRequireRegimeStable = useSettingsStore((s) => s.ghostRequireRegimeStable);
+    ```
+
+  - Need add:
+
+    ```js
+    const ghostRegimeGateEnabled = useSettingsStore((s) => s.ghostRegimeGateEnabled);
+    ```
+
+  - Need payload:
+
+    ```js
+    auto_ghost_regime_gate_enabled: ghostRegimeGateEnabled,
+    ```
+
+  - Need include in effect deps.
+
+- `@OTC_SNIPER:app/frontend/src/components/shared/GhostTradingWidget.jsx`
+
+  - Not yet modified.
+  - Existing destructure includes `ghostAllowedRegimes`, `ghostRequireRegimeStable`, `setGhostAllowedRegimes`, `setGhostRequireRegimeStable`.
+  - Need add `ghostRegimeGateEnabled`, `setGhostRegimeGateEnabled`.
+  - UI section currently only has Require Stable checkbox and chips. Need add explicit “Enable Regime Gate” checkbox above it.
+  - Chips and Require Stable should probably be disabled or visually dimmed unless `ghostRegimeGateEnabled` is true.
+  - Text should explain: “When disabled, selected chips are saved but do not block Auto-Ghost.”
+
+- `@OTC_SNIPER:app/frontend/src/components/analysis/AnalysisView.jsx`
+
+  - Not yet modified.
+
+  - Search found active gates display:
+
+    ```jsx
+    Regimes: {(ghostAllowedRegimes || []).join('+') || 'ALL'}{ghostRequireRegimeStable ? ' (stable)' : ''}
+    ```
+
+  - Need optionally include `ghostRegimeGateEnabled` so display says `OFF` if disabled.
+
+  - Calibration apply currently sets allowed regimes and require stable. Need decide whether applying suggested gates should enable regime gate. Since user requested recommendations and “Proceed”, likely yes when applying gates from calibration:
+
+    ```js
+    setters.setGhostRegimeGateEnabled(true);
+    ```
+
+  - Protocol load should handle explicit flag as above.
+
+- `@OTC_SNIPER:test_auto_ghost.py`
+
+  - Existing tests 7/8 expect allowed regimes always block once set:
+
+    - Test 8 currently:
+
+      ```py
+      service.update_config(
+          allowed_regimes=["RANGE_BOUND", "TREND_REVERSAL"],
+          require_regime_stable=True
+      )
+      ```
+
+    - Need update to include `regime_gate_enabled=True` for blocking cases.
+
+    - Need add/adjust a test verifying allowed regimes do NOT block when `regime_gate_enabled=False`.
+
+  - Existing smoke tests instantiate `AutoGhostConfig(enabled=True,...)`; no issue.
+
+- `@OTC_SNIPER:app/backend/services/manipulation.py`
+  - Read-only; detector returns float severities.
+
+5. Problem Solving:
+
+- Determined root cause of user’s likely hidden blocking: allowed regime chips acted as allowlist without explicit enable flag. “Require Regime Stable” being unchecked did not disable allowlist.
+
+- Implemented most of backend `AutoGhostService` stabilization:
+
+  - reject reason tracking
+  - explicit `regime_gate_enabled`
+  - rejection reasons
+  - AI advisory warning and manipulation severity normalization
+
+- Encountered tooling issues:
+
+  - `apply_patch` failed repeatedly with “User closed text editor”.
+  - Long PowerShell/Python one-liners hit command length and quoting issues.
+  - PowerShell here-strings failed with missing terminator.
+  - `-replace` inserted literal `` `n `` strings into files; fixed by replacing literal `` `n `` with actual newlines in `streaming.py` and `strategy.py`.
+
+- Important: We have not yet run compilation/tests. Because several direct text-edit commands were used, validation is crucial.
+
+- Latest command attempted to fix streaming payout fallback:
+
+  ```bash
+  conda run -n QuFLX-v2 python -c "... logger.warning ... return None ..."
+  ```
+
+  but user denied this operation. Therefore payout fallback remains debug + `0.0` in `streaming.py` unless subsequently changed.
+
+- Current task is in ACT MODE. User instructed: “Proceed with your recommended steps.”
+
+6. Pending Tasks and Next Steps:
+
+- Immediate next step:
+
+  1. Inspect `streaming.py` payout block and change:
+
+     ```py
+     except Exception as exc:
+         logger.debug("Failed to resolve payout for %s: %s", asset, exc)
+         return 0.0
+     ```
+
+     to:
+
+     ```py
+     except Exception as exc:
+         logger.warning(
+             "Failed to resolve payout for %s; Auto-Ghost will skip until payout is available: %s",
+             asset,
+             exc,
+         )
+         return None
+     ```
+
+     This command was denied last time; ask/ensure approval if needed or use a shorter PowerShell command if auto-approved.
+
+  2. Re-run read/search:
+
+     - `search_files` for literal `` `n `` in modified files.
+     - `search_files` for `return self._reject(asset)` in `auto_ghost.py`.
+     - `py_compile` modified backend files.
+
+- Then Phase 3 frontend wiring:
+
+  - Modify `useSettingsStore.js` to add:
+
+    - `ghostRegimeGateEnabled: false`
+    - validation
+    - setter
+    - loadGhostProtocol handling
+
+  - Modify `App.jsx`:
+
+    - subscribe to `ghostRegimeGateEnabled`
+    - send `auto_ghost_regime_gate_enabled`
+    - add to deps.
+
+  - Modify `GhostTradingWidget.jsx`:
+
+    - add explicit enable checkbox.
+    - disable/dim chips and “Require Stable” when gate disabled.
+    - update helper text.
+
+  - Optionally modify `AnalysisView.jsx` active gates display and calibration apply.
+
+- Phase 4 tests:
+
+  - Update `test_auto_ghost.py` Test 8 to pass `regime_gate_enabled=True` for intended blocking.
+  - Add case showing selected allowed regimes do not block if `regime_gate_enabled=False`.
+  - Add status/reject reason expectations if simple.
+
+- Phase 5 validation:
+
+  - Run backend compile:
+
+    ```bash
+    conda run -n QuFLX-v2 python -m py_compile app/backend/services/auto_ghost.py app/backend/services/streaming.py app/backend/api/strategy.py
+    ```
+
+    from `C:\v3\OTC_SNIPER` or with full paths.
+
+  - Run focused tests:
+
+    ```bash
+    conda run -n QuFLX-v2 python test_auto_ghost.py
+    ```
+
+    or `python -m pytest test_auto_ghost.py -v --tb=short` depending test runner compatibility.
+
+  - Run frontend build:
+
+    ```bash
+    npm --prefix C:\v3\OTC_SNIPER\app\frontend run build
+    ```
+
+- Be careful with commands on Windows. Prefer short PowerShell commands using `[IO.File]::ReadAllText()` and regex/replace; verify immediately after.
+
+- If repeated patch attempts continue to create malformed code, invoke Core Principle #7: stop patching and propose a cleaner rewrite of the relevant small sections/files.

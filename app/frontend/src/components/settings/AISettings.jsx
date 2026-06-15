@@ -11,8 +11,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Copy, Play, Save, Zap, Volume2 } from 'lucide-react';
+import { Plus, Trash2, Copy, Play, Save, Zap, Volume2, ChevronDown } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { SectionCard, InputGroup, Tooltip } from '../shared/StitchComponents.jsx';
 
 // Default profile template (fast, cheap, good for speed-critical paths)
 const DEFAULT_PROFILE = {
@@ -50,6 +51,9 @@ export default function AISettings() {
     setFeatureProfile,
     aiDevMode,
     setAiDevMode,
+    oteoAiEnabled,
+    oteoAiExecutionMode,
+    setOteoAiExecutionMode,
   } = useSettingsStore();
 
   const [availableVoices, setAvailableVoices] = useState([]);
@@ -244,7 +248,7 @@ export default function AISettings() {
             <Zap size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-black uppercase tracking-[1.5px] text-white">AI &amp; Voice Settings</h3>
+            <h3 className="text-lg font-black uppercase tracking-[1.5px] text-white">AI Settings</h3>
             <p className="text-[11px] text-gray-500">Manage models, reasoning strategy, knowledge base usage, and voice playback. Add/remove profiles easily.</p>
           </div>
         </div>
@@ -269,6 +273,84 @@ export default function AISettings() {
           </div>
         </div>
       </div>
+
+      {/* Global AI Configuration */}
+      <SectionCard 
+        title="Global AI Configuration" 
+        subtitle="Manage the global AI model, execution protocol mode, and developer mode."
+        icon={Zap}
+      >
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <InputGroup label="AI Model Select" tooltip="Model selector for signal refinement and trade confirmation">
+              <div className="relative">
+                <select
+                  value={aiModel}
+                  onChange={(e) => setAiModel(e.target.value)}
+                  className="h-14 w-full appearance-none rounded-lg bg-[#25282f] px-4 pr-10 text-xs font-black uppercase tracking-widest text-[#e3e6e7] outline-none border border-white/5"
+                >
+                  <option value="grok-4.3-fast">Grok 4.3 Fast (Non-Reasoning - Recommended for speed)</option>
+                  <option value="grok-4.3-balanced">Grok 4.3 Balanced (Light Reasoning - Reviews & Analysis)</option>
+                  <option value="grok-4-1-fast-non-reasoning">Grok 4.1 Fast Non-Reasoning (Legacy)</option>
+                  <option value="grok-4-1-fast-reasoning">Grok 4.1 Fast Reasoning (Legacy)</option>
+                </select>
+                <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              </div>
+            </InputGroup>
+
+            <InputGroup label="AI Mode Protocol" tooltip="Advisory: AI analyzes signals but does not block trades. Confirmation: AI must confirm the signal before execution.">
+              {oteoAiEnabled ? (
+                <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1 h-14 items-center">
+                  <button
+                    type="button"
+                    onClick={() => setOteoAiExecutionMode('advisory')}
+                    className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                      oteoAiExecutionMode === 'advisory'
+                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                        : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    Advisory (Informational)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOteoAiExecutionMode('confirmation')}
+                    className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
+                      oteoAiExecutionMode === 'confirmation'
+                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                        : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    Execution Confirmation
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center rounded-lg bg-[#1e222b]/50 border border-white/5 px-4 h-14 text-center">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">
+                    Inactive — OTEO AI Layer is disabled in App Settings
+                  </span>
+                </div>
+              )}
+            </InputGroup>
+          </div>
+
+          <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
+            <div className="flex flex-col text-left">
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-white">Developer Mode</p>
+                <Tooltip content="Enable developer mode to query Grok for platform upgrades, code design, and prompt analysis." />
+              </div>
+              <p className="mt-1 text-[9px] text-gray-500 font-medium">Chat with Grok about project insights and feature implementations.</p>
+            </div>
+            <button
+              onClick={() => setAiDevMode(!aiDevMode)}
+              className={`h-5 w-10 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+            >
+              <div className={`h-3 w-3 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+        </div>
+      </SectionCard>
 
       {/* Profiles Manager */}
       <div>
@@ -570,20 +652,6 @@ export default function AISettings() {
         <div className="mt-4 text-[10px] text-gray-500">
           Tip: Map "confirmation" to a fast non-reasoning profile. Map "review" and "analysis" to balanced reasoning profiles.
         </div>
-      </div>
-
-      {/* Developer Mode quick toggle (kept for compatibility) */}
-      <div className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/5 p-4">
-        <div>
-          <div className="font-black text-sm">Developer Mode</div>
-          <div className="text-[10px] text-gray-500">Gives Grok platform/architecture context in chats.</div>
-        </div>
-        <button
-          onClick={() => setAiDevMode(!aiDevMode)}
-          className={`h-5 w-10 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-        >
-          <div className={`h-3 w-3 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-6' : 'translate-x-1'}`} />
-        </button>
       </div>
     </div>
   );

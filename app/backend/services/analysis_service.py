@@ -636,7 +636,13 @@ class AnalysisService:
             f"where you list specific repeating characteristics (e.g. 'Level 2 False Reversals'). "
             f"Also analyze the optimal z-score thresholds per regime shown above and recommend which z-score cutoffs + regimes "
             f"would be best to add as filters in the Ghost Controller for execution quality. Suggest specific 5 optimal combinations "
-            f"and expected impact on win rate. Conclude with a concise audio-friendly summary script."
+            f"and expected impact on win rate.\n\n"
+            f"Conclude with a concise audio-friendly summary script. "
+            f"IMPORTANT FOR VOICE: At the very end of your response, output ONLY the short spoken briefing version (natural, conversational, "
+            f"under ~550 characters preferred) delimited EXACTLY as follows (do not add extra commentary outside the delimiters):\n"
+            f"---VOICE_SCRIPT_START---\n"
+            f"[Your concise spoken summary script here. Use short sentences suitable for listening. Focus on key insights, optimal filters, and actionable advice.]\n"
+            f"---VOICE_SCRIPT_END---"
         )
 
         ai_service = get_ai_service()
@@ -663,6 +669,28 @@ class AnalysisService:
         
         ai_res = await ai_service.chat(chat_req)
         ai_text = ai_res.text
+
+        # Extract dedicated short voice script (for fast/low-cost Grok TTS playback)
+        # The prompt forces a clear delimited section so we can serve a concise version
+        # to the voice path without sending the entire verbose report to TTS.
+        voice_script = None
+        try:
+            if "---VOICE_SCRIPT_START---" in ai_text and "---VOICE_SCRIPT_END---" in ai_text:
+                after_start = ai_text.split("---VOICE_SCRIPT_START---", 1)[1]
+                candidate = after_start.split("---VOICE_SCRIPT_END---", 1)[0].strip()
+                if candidate:
+                    # Basic clean for speaking (remove leftover markdown)
+                    voice_script = candidate.replace('*', '').replace('#', '').replace('`', '').strip()
+        except Exception as ex:
+            logger.warning("Failed to extract VOICE_SCRIPT: %s", ex)
+
+        if not voice_script:
+            # Fallback: take a reasonable tail of the response (last few sentences)
+            try:
+                tail = ai_text.strip().split('\n')[-6:]
+                voice_script = ' '.join(tail).replace('*', '').replace('#', '').replace('`', '').strip()[:600]
+            except Exception:
+                voice_script = None
 
         # Extract patterns and save to pattern memory
         # We can scan the AI response for bullet points or lists of patterns
@@ -692,6 +720,7 @@ class AnalysisService:
         return {
             "session_id": session_id,
             "report": ai_text,
+            "voice_script": voice_script,
             "patterns": self.load_patterns(),
         }
 

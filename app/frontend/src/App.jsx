@@ -45,6 +45,7 @@ export default function App() {
   const ghostMinZScoreEnabled = useSettingsStore((s) => s.ghostMinZScoreEnabled);
   const ghostMaxZScore = useSettingsStore((s) => s.ghostMaxZScore);
   const ghostMaxZScoreEnabled = useSettingsStore((s) => s.ghostMaxZScoreEnabled);
+  const ghostRegimeGateEnabled = useSettingsStore((s) => s.ghostRegimeGateEnabled);
   const ghostAllowedRegimes = useSettingsStore((s) => s.ghostAllowedRegimes);
   const ghostRequireRegimeStable = useSettingsStore((s) => s.ghostRequireRegimeStable);
 
@@ -260,6 +261,7 @@ export default function App() {
           auto_ghost_min_zscore_enabled: ghostMinZScoreEnabled,
           auto_ghost_max_zscore: ghostMaxZScoreEnabled ? ghostMaxZScore : null,
           auto_ghost_max_zscore_enabled: ghostMaxZScoreEnabled,
+          auto_ghost_regime_gate_enabled: ghostRegimeGateEnabled,
           auto_ghost_allowed_regimes: ghostAllowedRegimes,
           auto_ghost_require_regime_stable: ghostRequireRegimeStable,
         });
@@ -304,6 +306,7 @@ export default function App() {
     ghostMinZScoreEnabled,
     ghostMaxZScore,
     ghostMaxZScoreEnabled,
+    ghostRegimeGateEnabled,
     ghostAllowedRegimes,
     ghostRequireRegimeStable,
   ]);

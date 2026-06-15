@@ -129,6 +129,7 @@ class Level3Phase3AutoGhostTests(unittest.IsolatedAsyncioTestCase):
                 block_on_manipulation=False,
             ),
         )
+        self.service.CONFIRMATION_TICKS = 3
         self.service.update_config(enabled=True, minimum_payout_pct=0.0)
 
         async def _instant_release(asset: str, delay_seconds: int) -> None:

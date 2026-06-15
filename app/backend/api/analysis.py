@@ -46,6 +46,7 @@ async def get_sessions():
 async def run_ai_refinement(request: AIAnalysisRequest):
     """Run Grok 4.3 evaluation over a session's log results.
     Supports optional filters (z_cutoff, regimes) that are applied to trades and passed for optimal z-score/regime analysis.
+    Response includes 'report' (full text) + optional 'voice_script' (short delimited audio-friendly version for TTS).
     """
     try:
         service = get_analysis_service()

@@ -72,12 +72,14 @@ export default function GhostTradingWidget() {
     ghostMinZScoreEnabled,
     ghostMaxZScore,
     ghostMaxZScoreEnabled,
+    ghostRegimeGateEnabled,
     ghostAllowedRegimes,
     ghostRequireRegimeStable,
     setGhostMinZScore,
     setGhostMinZScoreEnabled,
     setGhostMaxZScore,
     setGhostMaxZScoreEnabled,
+    setGhostRegimeGateEnabled,
     setGhostAllowedRegimes,
     setGhostRequireRegimeStable,
     setGhostAmount,
@@ -315,6 +317,35 @@ export default function GhostTradingWidget() {
                   </div>
                 )}
               </div>
+
+              {/* Copy Ghost Trades */}
+              <div className="border-t border-white/5 pt-3">
+                <label className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-1">Copy Ghost Trades</label>
+                <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setAutoGhostCopyMode('copy')}
+                    className={`flex-1 rounded-md py-1.5 text-[8.5px] font-black uppercase tracking-widest transition-all ${
+                      autoGhostCopyMode === 'copy'
+                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                        : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    Only Copy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAutoGhostCopyMode('execute')}
+                    className={`flex-1 rounded-md py-1.5 text-[8.5px] font-black uppercase tracking-widest transition-all ${
+                      autoGhostCopyMode === 'execute'
+                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                        : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    Copy & Execute
+                  </button>
+                </div>
+              </div>
             </div>
           ) : (
             /* Settings Controls Tab */
@@ -349,35 +380,6 @@ export default function GhostTradingWidget() {
                     </select>
                     <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                   </div>
-                </div>
-              </div>
-
-              {/* Copy Ghost Trades */}
-              <div>
-                <label className="text-[9px] font-black uppercase tracking-wider text-gray-500 block mb-1">Copy Ghost Trades</label>
-                <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setAutoGhostCopyMode('copy')}
-                    className={`flex-1 rounded-md py-1.5 text-[8.5px] font-black uppercase tracking-widest transition-all ${
-                      autoGhostCopyMode === 'copy'
-                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Only Copy
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutoGhostCopyMode('execute')}
-                    className={`flex-1 rounded-md py-1.5 text-[8.5px] font-black uppercase tracking-widest transition-all ${
-                      autoGhostCopyMode === 'execute'
-                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Copy & Execute
-                  </button>
                 </div>
               </div>
 
@@ -567,46 +569,67 @@ export default function GhostTradingWidget() {
 
               {/* Regime Gate — multi-confluence for Ghost Protocol */}
               <div className="space-y-2 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
-                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Regime Gate (Ai-Calibration)</span>
-
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">Regime Gate (Ai-Calibration)</span>
                   <label className="flex items-center gap-1.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
-                      checked={ghostRequireRegimeStable}
-                      onChange={(e) => setGhostRequireRegimeStable(e.target.checked)}
+                      checked={ghostRegimeGateEnabled}
+                      onChange={(e) => setGhostRegimeGateEnabled(e.target.checked)}
                       className="accent-[#ffb800] rounded h-3 w-3"
                     />
-                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${ghostRequireRegimeStable ? 'text-[#ffb800]' : 'text-gray-500'}`}>
-                      Require Regime Stable
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${ghostRegimeGateEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      {ghostRegimeGateEnabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </label>
                 </div>
 
-                <div>
-                  <div className="text-[8px] font-black uppercase tracking-wider text-gray-500 mb-1">Allowed Regimes (click to toggle)</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'CHOPPY'].map(r => {
-                      const active = (ghostAllowedRegimes || []).includes(r);
-                      return (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => {
-                            const current = ghostAllowedRegimes || [];
-                            const next = active ? current.filter(x => x !== r) : [...current, r];
-                            setGhostAllowedRegimes(next);
-                          }}
-                          className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border transition ${active
-                            ? 'bg-[#ffb800]/20 text-[#ffb800] border-[#ffb800]/40'
-                            : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/30'}`}
-                        >
-                          {r.replace('_', ' ')}
-                        </button>
-                      );
-                    })}
+                <div className={`space-y-2 transition-opacity duration-200 ${ghostRegimeGateEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        disabled={!ghostRegimeGateEnabled}
+                        checked={ghostRequireRegimeStable}
+                        onChange={(e) => setGhostRequireRegimeStable(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${ghostRequireRegimeStable ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                        Require Regime Stable
+                      </span>
+                    </label>
                   </div>
-                  <div className="text-[8px] text-gray-500 mt-1">Ghost only executes in selected regimes{ghostRequireRegimeStable ? ' when stable' : ''}. {(!ghostAllowedRegimes || ghostAllowedRegimes.length === 0) ? ' (All regimes allowed if empty)' : ''}</div>
+
+                  <div>
+                    <div className="text-[8px] font-black uppercase tracking-wider text-gray-500 mb-1">Allowed Regimes (click to toggle)</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'CHOPPY'].map(r => {
+                        const active = (ghostAllowedRegimes || []).includes(r);
+                        return (
+                          <button
+                            key={r}
+                            type="button"
+                            disabled={!ghostRegimeGateEnabled}
+                            onClick={() => {
+                              const current = ghostAllowedRegimes || [];
+                              const next = active ? current.filter(x => x !== r) : [...current, r];
+                              setGhostAllowedRegimes(next);
+                            }}
+                            className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border transition ${active
+                              ? 'bg-[#ffb800]/20 text-[#ffb800] border-[#ffb800]/40'
+                              : 'bg-white/5 text-gray-400 border-white/10 hover:border-white/30'}`}
+                          >
+                            {r.replace('_', ' ')}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[8px] text-gray-500 mt-1">
+                  {ghostRegimeGateEnabled
+                    ? `Ghost only executes in selected regimes${ghostRequireRegimeStable ? ' when stable' : ''}.${(!ghostAllowedRegimes || ghostAllowedRegimes.length === 0) ? ' (All regimes allowed if empty)' : ''}`
+                    : 'When disabled, selected chips and stability check do not block Auto-Ghost.'}
                 </div>
               </div>
             </div>

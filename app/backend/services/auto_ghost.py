@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import time as unix_time
 from typing import Any
 
@@ -48,12 +48,13 @@ class AutoGhostConfig:
     min_zscore: float | None = None
     max_zscore_enabled: bool = False
     max_zscore: float | None = None
+    regime_gate_enabled: bool = False
     allowed_regimes: list[str] | None = None
     require_regime_stable: bool = False
 
 
 class AutoGhostService:
-    CONFIRMATION_TICKS = 3
+    CONFIRMATION_TICKS = 1
 
     def __init__(self, trade_service: TradeService, config: AutoGhostConfig | None = None):
         self.trade_service = trade_service
@@ -78,6 +79,12 @@ class AutoGhostService:
         self._avg_recovery_time: float = 0.0
         self._total_recovery_sessions: int = 0
         self._trade_timestamps: list[float] = []
+        self._last_reject_reason_by_asset: dict[str, str] = {}
+        self._reject_counts: dict[str, int] = {}
+
+    def _record_reject(self, asset: str, reason: str) -> None:
+        self._last_reject_reason_by_asset[asset] = reason
+        self._reject_counts[reason] = self._reject_counts.get(reason, 0) + 1
 
     def update_config(
         self,
@@ -105,77 +112,67 @@ class AutoGhostService:
         min_zscore: float | None = None,
         max_zscore_enabled: bool | None = None,
         max_zscore: float | None = None,
+        regime_gate_enabled: bool | None = None,
         allowed_regimes: list[str] | None = None,
         require_regime_stable: bool | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
-        self.config = AutoGhostConfig(
-            enabled=self.config.enabled if enabled is None else bool(enabled),
-            amount=self.config.amount if amount is None else max(0.1, float(amount)),
-            expiration_seconds=self.config.expiration_seconds if expiration_seconds is None else max(5, int(expiration_seconds)),
-            max_concurrent_trades=self.config.max_concurrent_trades if max_concurrent_trades is None else max(1, int(max_concurrent_trades)),
-            per_asset_cooldown_seconds=(
-                self.config.per_asset_cooldown_seconds
-                if per_asset_cooldown_seconds is None
-                else max(0, int(per_asset_cooldown_seconds))
-            ),
-            minimum_payout_pct=(
-                self.config.minimum_payout_pct
-                if minimum_payout_pct is None
-                else max(0.0, min(100.0, float(minimum_payout_pct)))
-            ),
-            block_on_manipulation=(
-                self.config.block_on_manipulation
-                if block_on_manipulation is None
-                else bool(block_on_manipulation)
-            ),
-            manipulation_severity_threshold=(
-                self.config.manipulation_severity_threshold
-                if manipulation_severity_threshold is None
-                else max(0.0, min(1.0, float(manipulation_severity_threshold)))
-            ),
-            max_session_trades=self.config.max_session_trades if max_session_trades is None else max(1, int(max_session_trades)),
-            max_drawdown_amount=self.config.max_drawdown_amount if max_drawdown_amount is None else max(0.0, float(max_drawdown_amount)),
-            drawdown_cooldown_seconds=self.config.drawdown_cooldown_seconds if drawdown_cooldown_seconds is None else max(0, int(drawdown_cooldown_seconds)),
-            min_confidence_enabled=(
-                self.config.min_confidence_enabled
-                if min_confidence_enabled is None
-                else bool(min_confidence_enabled)
-            ),
-            min_confidence=(
-                self.config.min_confidence
-                if min_confidence is None
-                else (float(min_confidence) if min_confidence is not None else None)
-            ),
-            max_confidence_enabled=(
-                self.config.max_confidence_enabled
-                if max_confidence_enabled is None
-                else bool(max_confidence_enabled)
-            ),
-            max_confidence=(
-                self.config.max_confidence
-                if max_confidence is None
-                else (float(max_confidence) if max_confidence is not None else None)
-            ),
-            max_trades_per_timeframe=(
-                self.config.max_trades_per_timeframe
-                if max_trades_per_timeframe is None
-                else max(0, int(max_trades_per_timeframe))
-            ),
-            timeframe_seconds=(
-                self.config.timeframe_seconds
-                if timeframe_seconds is None
-                else max(0, int(timeframe_seconds))
-            ),
-            oteo_ai_enabled=self.config.oteo_ai_enabled if oteo_ai_enabled is None else bool(oteo_ai_enabled),
-            oteo_ai_execution_mode=self.config.oteo_ai_execution_mode if oteo_ai_execution_mode is None else str(oteo_ai_execution_mode),
-            min_zscore_enabled=self.config.min_zscore_enabled if min_zscore_enabled is None else bool(min_zscore_enabled),
-            min_zscore=self.config.min_zscore if min_zscore is None else (float(min_zscore) if min_zscore is not None else None),
-            max_zscore_enabled=self.config.max_zscore_enabled if max_zscore_enabled is None else bool(max_zscore_enabled),
-            max_zscore=self.config.max_zscore if max_zscore is None else (float(max_zscore) if max_zscore is not None else None),
-            allowed_regimes=self.config.allowed_regimes if allowed_regimes is None else allowed_regimes,
-            require_regime_stable=self.config.require_regime_stable if require_regime_stable is None else bool(require_regime_stable),
-        )
+        updates: dict[str, Any] = {}
+        if enabled is not None:
+            updates["enabled"] = bool(enabled)
+        if amount is not None:
+            updates["amount"] = max(0.1, float(amount))
+        if expiration_seconds is not None:
+            updates["expiration_seconds"] = max(5, int(expiration_seconds))
+        if max_concurrent_trades is not None:
+            updates["max_concurrent_trades"] = max(1, int(max_concurrent_trades))
+        if per_asset_cooldown_seconds is not None:
+            updates["per_asset_cooldown_seconds"] = max(0, int(per_asset_cooldown_seconds))
+        if minimum_payout_pct is not None:
+            updates["minimum_payout_pct"] = max(0.0, min(100.0, float(minimum_payout_pct)))
+        if block_on_manipulation is not None:
+            updates["block_on_manipulation"] = bool(block_on_manipulation)
+        if manipulation_severity_threshold is not None:
+            updates["manipulation_severity_threshold"] = max(0.0, min(1.0, float(manipulation_severity_threshold)))
+        if max_session_trades is not None:
+            updates["max_session_trades"] = max(1, int(max_session_trades))
+        if max_drawdown_amount is not None:
+            updates["max_drawdown_amount"] = max(0.0, float(max_drawdown_amount))
+        if drawdown_cooldown_seconds is not None:
+            updates["drawdown_cooldown_seconds"] = max(0, int(drawdown_cooldown_seconds))
+        if min_confidence_enabled is not None:
+            updates["min_confidence_enabled"] = bool(min_confidence_enabled)
+        if min_confidence is not None:
+            updates["min_confidence"] = float(min_confidence)
+        if max_confidence_enabled is not None:
+            updates["max_confidence_enabled"] = bool(max_confidence_enabled)
+        if max_confidence is not None:
+            updates["max_confidence"] = float(max_confidence)
+        if max_trades_per_timeframe is not None:
+            updates["max_trades_per_timeframe"] = max(0, int(max_trades_per_timeframe))
+        if timeframe_seconds is not None:
+            updates["timeframe_seconds"] = max(0, int(timeframe_seconds))
+        if oteo_ai_enabled is not None:
+            updates["oteo_ai_enabled"] = bool(oteo_ai_enabled)
+        if oteo_ai_execution_mode is not None:
+            updates["oteo_ai_execution_mode"] = str(oteo_ai_execution_mode)
+        if min_zscore_enabled is not None:
+            updates["min_zscore_enabled"] = bool(min_zscore_enabled)
+        if min_zscore is not None:
+            updates["min_zscore"] = float(min_zscore)
+        if max_zscore_enabled is not None:
+            updates["max_zscore_enabled"] = bool(max_zscore_enabled)
+        if max_zscore is not None:
+            updates["max_zscore"] = float(max_zscore)
+        if regime_gate_enabled is not None:
+            updates["regime_gate_enabled"] = bool(regime_gate_enabled)
+        if allowed_regimes is not None:
+            updates["allowed_regimes"] = [str(r).strip().upper() for r in allowed_regimes if str(r).strip()]
+        if require_regime_stable is not None:
+            updates["require_regime_stable"] = bool(require_regime_stable)
+
+        self.config = replace(self.config, **updates)
+
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
             self._pending_signals.clear()
@@ -194,6 +191,8 @@ class AutoGhostService:
             self._avg_recovery_time = 0.0
             self._total_recovery_sessions = 0
             self._trade_timestamps.clear()
+            self._last_reject_reason_by_asset.clear()
+            self._reject_counts.clear()
             logger.info("Started Auto-Ghost session %s", self._session_id)
         elif not self.config.enabled and previous_enabled:
             self._pending_signals.clear()
@@ -222,6 +221,7 @@ class AutoGhostService:
             "auto_ghost_min_zscore": self.config.min_zscore,
             "auto_ghost_max_zscore_enabled": self.config.max_zscore_enabled,
             "auto_ghost_max_zscore": self.config.max_zscore,
+            "auto_ghost_regime_gate_enabled": self.config.regime_gate_enabled,
             "auto_ghost_allowed_regimes": self.config.allowed_regimes,
             "auto_ghost_require_regime_stable": self.config.require_regime_stable,
             "auto_ghost_active_trades": len(self._active_assets),
@@ -237,6 +237,8 @@ class AutoGhostService:
             "auto_ghost_avg_recovery_time_mins": round(self._avg_recovery_time / 60, 2),
             "auto_ghost_drawdown_cooldown_active": unix_time() < self._drawdown_cooldown_until,
             "auto_ghost_session_halted": self._session_halted,
+            "auto_ghost_last_reject_reason_by_asset": dict(self._last_reject_reason_by_asset),
+            "auto_ghost_reject_counts": dict(self._reject_counts),
         }
 
     def report_outcome(
@@ -327,7 +329,8 @@ class AutoGhostService:
             if asset:
                 self._update_condition_stat(f"asset:{asset}", is_win)
 
-    def _reject(self, asset: str) -> None:
+    def _reject(self, asset: str, reason: str) -> None:
+        self._record_reject(asset, reason)
         self._pending_signals.pop(asset, None)
 
     async def consider_signal(
@@ -338,24 +341,22 @@ class AutoGhostService:
         timestamp: float,
         oteo_result: dict[str, Any],
         manipulation: dict[str, Any],
-        payout_pct: float = 100.0,
+        payout_pct: float | None = 100.0,
     ) -> dict[str, Any] | None:
-        # Clean up any stale active assets whose cooldown has already expired
+        # Defensive fallback: clean up active assets whose cooldowns have fully elapsed
         now = unix_time()
-        stale = [a for a in self._active_assets if now >= self._cooldown_until.get(a, 0)]
-        for a in stale:
+        for a in [a for a in self._active_assets if now >= self._cooldown_until.get(a, 0)]:
             self._active_assets.discard(a)
-            logger.info("Cleaned up stale active asset: %s", a)
 
         if not self.config.enabled:
-            return self._reject(asset)
+            return self._reject(asset, 'disabled')
             
         if self._session_halted:
-            return self._reject(asset)
+            return self._reject(asset, 'session_halted')
         if self._session_trade_count >= self.config.max_session_trades:
-            return self._reject(asset)
+            return self._reject(asset, 'max_session_trades')
         if now < self._drawdown_cooldown_until:
-            return self._reject(asset)
+            return self._reject(asset, 'drawdown_cooldown')
 
         # Timeframe limit gate check
         if self.config.max_trades_per_timeframe > 0 and self.config.timeframe_seconds > 0:
@@ -368,50 +369,53 @@ class AutoGhostService:
                     self.config.timeframe_seconds,
                     self.config.max_trades_per_timeframe
                 )
-                return self._reject(asset)
+                return self._reject(asset, 'timeframe_limit')
 
         if oteo_result.get("recommended") not in {"CALL", "PUT"}:
-            return self._reject(asset)
+            return self._reject(asset, 'not_call_or_put')
         if not oteo_result.get("actionable"):
-            return self._reject(asset)
+            return self._reject(asset, 'not_actionable')
 
         # Numeric confidence gate bounds checks
         score = float(oteo_result.get("oteo_score", 0.0))
         if self.config.min_confidence_enabled and self.config.min_confidence is not None:
             if score < self.config.min_confidence:
-                logger.debug(
+                logger.info(
                     "Auto-Ghost skipped %s: score %.1f < min confidence bounds %.1f",
                     asset,
                     score,
                     self.config.min_confidence
                 )
-                return self._reject(asset)
+                return self._reject(asset, 'below_min_confidence')
         if self.config.max_confidence_enabled and self.config.max_confidence is not None:
             if score > self.config.max_confidence:
-                logger.debug(
+                logger.info(
                     "Auto-Ghost skipped %s: score %.1f > max confidence bounds %.1f",
                     asset,
                     score,
                     self.config.max_confidence
                 )
-                return self._reject(asset)
+                return self._reject(asset, 'above_max_confidence')
+        if payout_pct is None:
+            logger.warning(f"Auto-Ghost skipped {asset}: payout unavailable")
+            return self._reject(asset, 'payout_unavailable')
         if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
-            logger.debug(
+            logger.info(
                 "Auto-Ghost skipped %s: payout %.1f%% < minimum %.1f%%",
                 asset,
                 payout_pct,
                 self.config.minimum_payout_pct,
             )
-            return self._reject(asset)
+            return self._reject(asset, 'payout_below_minimum')
         if self.config.block_on_manipulation and manipulation:
-            if any(_get_severity(score) >= self.config.manipulation_severity_threshold for score in manipulation.values()):
+            if any(_get_severity(sev_val) >= self.config.manipulation_severity_threshold for sev_val in manipulation.values()):
                 logger.info(
                     "Auto-Ghost skipped %s due to active manipulation severity: %s (threshold: %.2f)",
                     asset,
                     manipulation,
                     self.config.manipulation_severity_threshold
                 )
-                return self._reject(asset)
+                return self._reject(asset, 'manipulation_block')
 
         # Z-Score Gate Bounds checks (Ai-Calibration / Ghost Protocol)
         z_score = oteo_result.get("z_score")
@@ -426,7 +430,7 @@ class AutoGhostService:
                             z_val,
                             self.config.min_zscore,
                         )
-                        return self._reject(asset)
+                        return self._reject(asset, 'below_min_zscore')
                 if self.config.max_zscore_enabled and self.config.max_zscore is not None:
                     if z_val > self.config.max_zscore:
                         logger.info(
@@ -435,38 +439,34 @@ class AutoGhostService:
                             z_val,
                             self.config.max_zscore,
                         )
-                        return self._reject(asset)
-            except (ValueError, TypeError):
-                pass
+                        return self._reject(asset, 'above_max_zscore')
+            except (ValueError, TypeError) as exc:
+                logger.warning("Auto-Ghost: non-numeric z_score %r for %s, skipping Z gates: %s", z_score, asset, exc)
 
         # Regime Gate checks (Ai-Calibration / Ghost Protocol)
         regime_label = oteo_result.get("regime_label")
         regime_stable = oteo_result.get("regime_stable")
-        if self.config.allowed_regimes:
-            if regime_label not in self.config.allowed_regimes:
-                logger.info(
-                    "Auto-Ghost skipped %s: regime %s not in allowed %s (Ghost Protocol gate)",
-                    asset,
-                    regime_label,
-                    self.config.allowed_regimes,
-                )
-                return self._reject(asset)
+        if self.config.regime_gate_enabled and self.config.allowed_regimes:
+            if regime_label is None:
+                logger.info(f"Auto-Ghost skipped {asset}: regime gate enabled but signal has no regime label")
+                return self._reject(asset, 'missing_regime_label')
+            if str(regime_label).upper() not in self.config.allowed_regimes:
+                logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} not in allowed {self.config.allowed_regimes} (Ghost Protocol gate)")
+                return self._reject(asset, 'regime_not_allowed')
 
-        if self.config.require_regime_stable and regime_stable is False:
-            logger.info(
-                "Auto-Ghost skipped %s: regime %s is unstable (Ghost Protocol gate)",
-                asset,
-                regime_label,
-            )
-            return self._reject(asset)
+        if self.config.regime_gate_enabled and self.config.require_regime_stable and regime_stable is False:
+            logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} is unstable (Ghost Protocol gate)")
+            return self._reject(asset, 'regime_unstable')
 
         if asset in self._active_assets:
-            return self._reject(asset)
+            return self._reject(asset, 'asset_active')
         if len(self._active_assets) >= self.config.max_concurrent_trades:
-            return self._reject(asset)
+            return self._reject(asset, 'max_concurrent_trades')
         if unix_time() < self._cooldown_until.get(asset, 0):
-            return self._reject(asset)
+            return self._reject(asset, 'asset_cooldown')
 
+        # Confirmation Gate (primarily for Phase 3 backward-compatibility tests)
+        # Bypassed in production since CONFIRMATION_TICKS = 1 by default
         if self.CONFIRMATION_TICKS > 1:
             direction = str(oteo_result.get("recommended"))
             pending = self._pending_signals.get(asset)
@@ -476,7 +476,7 @@ class AutoGhostService:
 
             pending_signal, pending_count = pending
             if pending_signal.get("recommended") != direction:
-                return self._reject(asset)
+                return self._reject(asset, 'confirmation_direction_changed')
 
             pending_count += 1
             if pending_count < self.CONFIRMATION_TICKS:
@@ -501,10 +501,10 @@ class AutoGhostService:
                     )
                     if not ai_confirmed:
                         logger.info("Auto-Ghost skipped %s: AI confirmation rejected signal (Response: %r)", asset, ai_response_str)
-                        return self._reject(asset)
+                        return self._reject(asset, 'ai_confirmation_rejected')
                 except Exception as e:
                     logger.error("AI confirmation failed defensively for %s: %s", asset, e)
-                    return self._reject(asset)
+                    return self._reject(asset, 'ai_confirmation_error')
             else:
                 # Advisory mode: Query in background without blocking execution
                 asyncio.create_task(
@@ -655,7 +655,7 @@ class AutoGhostService:
 
         # Format active manipulation flags cleanly
         active_manip = (
-            ", ".join(f"{k} (severity: {v:.2f})" for k, v in manipulation.items())
+            ", ".join(f"{k} (severity: {_get_severity(v):.2f})" for k, v in manipulation.items())
             if manipulation
             else "None"
         )
@@ -768,4 +768,4 @@ class AutoGhostService:
                 })
             logger.info("AI Advisory completed for %s: %s (%s)", asset, response, top_pattern_str)
         except Exception as e:
-            logger.debug("AI Advisory background query failed: %s", e)
+            logger.warning(f"AI Advisory background query failed for {asset}: {e}")

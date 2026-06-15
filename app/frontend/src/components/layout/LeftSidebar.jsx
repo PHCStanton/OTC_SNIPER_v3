@@ -52,6 +52,7 @@ export default function LeftSidebar() {
   const assetAutoRefreshEnabled = useSettingsStore((s) => s.assetAutoRefreshEnabled);
   const setAssetAutoRefreshEnabled = useSettingsStore((s) => s.setAssetAutoRefreshEnabled);
   const assetAutoRefreshInterval = useSettingsStore((s) => s.assetAutoRefreshInterval);
+  const autoFocusOnSignal = useSettingsStore((s) => s.autoFocusOnSignal);
 
   const handleRefreshAssets = async (silent = false) => {
     try {
@@ -251,6 +252,7 @@ export default function LeftSidebar() {
                       isStarred={true}
                       onSelect={() => setSelectedAsset(asset)}
                       onToggleStar={() => toggleStarredAsset(asset)}
+                      autoFocusOnSignal={autoFocusOnSignal}
                     />
                   ))}
                 </ul>
@@ -274,6 +276,7 @@ export default function LeftSidebar() {
                     isStarred={false}
                     onSelect={() => setSelectedAsset(asset)}
                     onToggleStar={() => toggleStarredAsset(asset)}
+                    autoFocusOnSignal={autoFocusOnSignal}
                   />
                 ))}
               </ul>
@@ -300,7 +303,7 @@ export default function LeftSidebar() {
   );
 }
 
-function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar }) {
+function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar, autoFocusOnSignal }) {
   const payoutLabel = payout != null ? `${Math.round(payout * 100)}%` : null;
   const displayName = asset.replace('_otc', '').toUpperCase();
   const isOTC = asset.toLowerCase().includes('_otc');
@@ -316,7 +319,8 @@ function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar
         `}
       >
         <button
-          onClick={onSelect}
+          onClick={autoFocusOnSignal ? onSelect : undefined}
+          onDoubleClick={!autoFocusOnSignal ? onSelect : undefined}
           className="flex-1 flex items-center gap-1.5 text-left py-0.5 overflow-hidden"
         >
           <span className={`truncate font-black uppercase tracking-wide ${isSelected ? 'text-white' : ''}`}>

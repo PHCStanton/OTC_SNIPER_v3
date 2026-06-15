@@ -8,6 +8,7 @@ export const useLayoutStore = create()(
       rightSidebarOpen: true,
       activeView: 'trading',
       dashboardMode: 'trading', // 'trading' | 'risk' (for the dashboard toggle)
+      activeSettingsTab: 'account',
 
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
@@ -15,6 +16,7 @@ export const useLayoutStore = create()(
       setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
       setActiveView: (view) => set({ activeView: view }),
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
+      setActiveSettingsTab: (tab) => set({ activeSettingsTab: tab }),
     }),
     {
       name: 'otc-sniper-layout-storage',

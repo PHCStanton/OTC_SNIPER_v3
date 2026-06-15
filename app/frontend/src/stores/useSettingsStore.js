@@ -41,10 +41,18 @@ export const SETTINGS_DEFAULTS = {
   ghostMinZScoreEnabled: false,
   ghostMaxZScore: 1.5,
   ghostMaxZScoreEnabled: false,
+  ghostRegimeGateEnabled: false,
   ghostAllowedRegimes: [],
   ghostRequireRegimeStable: false,
   ghostProtocols: null,
   activeGhostProtocol: 'default',
+
+  // Calibration Timer (shared state for deep integration with GlobalTimer in Ai-Calibration / Ghost Protocol)
+  // Allows Ai-Calibration time-based runs to drive the global stopwatch, alerts, and share elapsed
+  calibTimerTargetMinutes: 0,
+  calibTimerActive: false,
+  calibTimerElapsedMs: 0,
+  calibTimerAlertTriggered: false,
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -172,10 +180,17 @@ export function validateSettings(input = {}) {
     ghostMinZScoreEnabled: toBoolean(input.ghostMinZScoreEnabled, SETTINGS_DEFAULTS.ghostMinZScoreEnabled),
     ghostMaxZScore: toNumber(input.ghostMaxZScore, SETTINGS_DEFAULTS.ghostMaxZScore, { min: -3.0, max: 3.0, integer: false }),
     ghostMaxZScoreEnabled: toBoolean(input.ghostMaxZScoreEnabled, SETTINGS_DEFAULTS.ghostMaxZScoreEnabled),
+    ghostRegimeGateEnabled: toBoolean(input.ghostRegimeGateEnabled, SETTINGS_DEFAULTS.ghostRegimeGateEnabled),
     ghostAllowedRegimes: Array.isArray(input.ghostAllowedRegimes) ? input.ghostAllowedRegimes : SETTINGS_DEFAULTS.ghostAllowedRegimes,
     ghostRequireRegimeStable: toBoolean(input.ghostRequireRegimeStable, SETTINGS_DEFAULTS.ghostRequireRegimeStable),
     ghostProtocols: input.ghostProtocols && typeof input.ghostProtocols === 'object' ? input.ghostProtocols : null,
     activeGhostProtocol: typeof input.activeGhostProtocol === 'string' ? input.activeGhostProtocol : 'default',
+
+    // Calibration Timer shared state
+    calibTimerTargetMinutes: toNumber(input.calibTimerTargetMinutes, SETTINGS_DEFAULTS.calibTimerTargetMinutes, { min: 0, max: 120, integer: true }),
+    calibTimerActive: toBoolean(input.calibTimerActive, SETTINGS_DEFAULTS.calibTimerActive),
+    calibTimerElapsedMs: toNumber(input.calibTimerElapsedMs, SETTINGS_DEFAULTS.calibTimerElapsedMs, { min: 0, max: 1000 * 60 * 120, integer: true }),
+    calibTimerAlertTriggered: toBoolean(input.calibTimerAlertTriggered, SETTINGS_DEFAULTS.calibTimerAlertTriggered),
 
     showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
     showLiveEntryMarkers: toBoolean(input.showLiveEntryMarkers, SETTINGS_DEFAULTS.showLiveEntryMarkers),
@@ -289,6 +304,7 @@ export const useSettingsStore = create()(
       setGhostMinZScoreEnabled: (val) => commitSettingsPatch(set, { ghostMinZScoreEnabled: val }),
       setGhostMaxZScore: (val) => commitSettingsPatch(set, { ghostMaxZScore: val }),
       setGhostMaxZScoreEnabled: (val) => commitSettingsPatch(set, { ghostMaxZScoreEnabled: val }),
+      setGhostRegimeGateEnabled: (val) => commitSettingsPatch(set, { ghostRegimeGateEnabled: val }),
       setGhostAllowedRegimes: (val) => commitSettingsPatch(set, { ghostAllowedRegimes: val }),
       setGhostRequireRegimeStable: (val) => commitSettingsPatch(set, { ghostRequireRegimeStable: val }),
       setGhostProtocols: (val) => commitSettingsPatch(set, { ghostProtocols: val }),
@@ -306,6 +322,7 @@ export const useSettingsStore = create()(
                   activeGhostProtocol: 'default',
                   ghostMinZScoreEnabled: false,
                   ghostMaxZScoreEnabled: false,
+                  ghostRegimeGateEnabled: false,
                   ghostAllowedRegimes: [],
                   ghostRequireRegimeStable: false,
                 })
@@ -323,12 +340,27 @@ export const useSettingsStore = create()(
               ghostMinZScore: gates.minZScore ?? -0.5,
               ghostMaxZScoreEnabled: gates.maxZScoreEnabled ?? false,
               ghostMaxZScore: gates.maxZScore ?? 1.5,
+              ghostRegimeGateEnabled: gates.regimeGateEnabled ?? false,
               ghostAllowedRegimes: gates.allowedRegimes ?? [],
               ghostRequireRegimeStable: gates.requireRegimeStable ?? false,
             })
           };
         });
       },
+      // Calibration Timer controls - deep hook into GlobalTimer for Ai-Calibration time runs
+      // The Ai-Calibration tab can call these to drive the global stopwatch, alerts and shared elapsed
+      setCalibTimerTargetMinutes: (val) => commitSettingsPatch(set, { calibTimerTargetMinutes: val }),
+      setCalibTimerActive: (val) => commitSettingsPatch(set, { calibTimerActive: val }),
+      setCalibTimerElapsedMs: (val) => commitSettingsPatch(set, { calibTimerElapsedMs: val }),
+      setCalibTimerAlertTriggered: (val) => commitSettingsPatch(set, { calibTimerAlertTriggered: val }),
+      startCalibTimer: (minutes) => set((state) => ({
+        calibTimerTargetMinutes: minutes || state.calibTimerTargetMinutes,
+        calibTimerActive: true,
+        calibTimerElapsedMs: 0,
+        calibTimerAlertTriggered: false,
+      })),
+      stopCalibTimer: () => commitSettingsPatch(set, { calibTimerActive: false }),
+      resetCalibTimer: () => commitSettingsPatch(set, { calibTimerElapsedMs: 0, calibTimerAlertTriggered: false }),
       setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),
       setShowLiveEntryMarkers: (val) => commitSettingsPatch(set, { showLiveEntryMarkers: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),

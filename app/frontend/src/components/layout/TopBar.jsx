@@ -19,6 +19,8 @@ import {
   Bot,
   Zap,
   Save,
+  UserRound,
+  LayoutGrid,
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
@@ -31,10 +33,18 @@ import logoImg from '../../../assets/GOLD_TARGET_LOGO1_RM.png';
 
 export default function TopBar() {
   const { chromeStatus, sessionStatus, balance, accountType, setChromeStatus } = useOpsStore();
-  const { activeView, dashboardMode, setDashboardMode, setActiveView } = useLayoutStore();
+  const { 
+    activeView, 
+    dashboardMode, 
+    setDashboardMode, 
+    setActiveView,
+    activeSettingsTab,
+    setActiveSettingsTab,
+  } = useLayoutStore();
   const [showConnect, setShowConnect] = useState(false);
   const [chromeLoading, setChromeLoading] = useState(false);
   const [showAiDropdown, setShowAiDropdown] = useState(false);
+  const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   const { 
     aiDevMode, 
     setAiDevMode, 
@@ -42,11 +52,15 @@ export default function TopBar() {
     setOteoAiExecutionMode,
   } = useSettingsStore();
   const dropdownRef = useRef(null);
+  const settingsDropdownRef = useRef(null);
 
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setShowAiDropdown(false);
+      }
+      if (settingsDropdownRef.current && !settingsDropdownRef.current.contains(event.target)) {
+        setShowSettingsDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -295,14 +309,100 @@ export default function TopBar() {
           </div>
  
           <div className="flex items-center gap-2 border-l border-white/5 pl-4">
-            <TopBarIconButton
-              onClick={() => setActiveView('settings')}
-              title="Settings"
-              ariaLabel="Open settings"
-              active={isSettings}
-            >
-              <Settings size={22} strokeWidth={2} />
-            </TopBarIconButton>
+            <div className="relative" ref={settingsDropdownRef}>
+              <TopBarIconButton
+                onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
+                title="Settings"
+                ariaLabel="Open settings"
+                active={isSettings || showSettingsDropdown}
+              >
+                <Settings size={22} strokeWidth={2} />
+              </TopBarIconButton>
+
+              {showSettingsDropdown && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-white/10 bg-[#161920] p-2 shadow-2xl z-[100] space-y-1 text-left">
+                  <div className="border-b border-white/5 px-2 pb-1.5 pt-0.5 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Settings Portal</span>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('account');
+                      setActiveView('settings');
+                      setShowSettingsDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isSettings && activeSettingsTab === 'account'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <UserRound size={14} className={isSettings && activeSettingsTab === 'account' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Account Settings</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">SSID, Broker, Session Identity</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('app');
+                      setActiveView('settings');
+                      setShowSettingsDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isSettings && activeSettingsTab === 'app'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <LayoutGrid size={14} className={isSettings && activeSettingsTab === 'app' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>App Settings</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">OTEO, Ghost Trading, UI Prefs</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('ai');
+                      setActiveView('settings');
+                      setShowSettingsDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isSettings && activeSettingsTab === 'ai'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <Zap size={14} className={isSettings && activeSettingsTab === 'ai' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>AI Settings</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Models, Voices, KB Patterns</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('risk');
+                      setActiveView('settings');
+                      setShowSettingsDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isSettings && activeSettingsTab === 'risk'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <ShieldAlert size={14} className={isSettings && activeSettingsTab === 'risk' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Risk Settings</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Capital, Payout, Sizing, Guardrails</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
  
             <button
               type="button"
