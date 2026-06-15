@@ -93,7 +93,43 @@ export default function GhostTradingWidget() {
     setGhostMaxConfidenceEnabled,
     setAutoGhostManipulationSeverityThreshold,
     setAutoGhostBlockOnManipulation,
+    // AI Advisory & Pulse settings
+    oteoAiEnabled,
+    aiPulseEnabled,
+    aiPulseIntervalSeconds,
+    aiTradeInterval,
+    setAiPulseEnabled,
+    setAiPulseIntervalSeconds,
+    setAiTradeInterval,
   } = useSettingsStore();
+
+  const [requestingInsight, setRequestingInsight] = useState(false);
+
+  const handleRequestManualInsight = async () => {
+    if (requestingInsight) return;
+    setRequestingInsight(true);
+    try {
+      const res = await fetch('/api/strategy/manual-advisory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      useToastStore.getState().addToast({
+        type: 'success',
+        message: 'Manual AI Advisory triggered successfully',
+        duration: 3000
+      });
+    } catch (err) {
+      console.error('Failed to trigger manual insight:', err);
+      useToastStore.getState().addToast({
+        type: 'error',
+        message: `Failed to trigger insight: ${err.message}`,
+        duration: 3000
+      });
+    } finally {
+      setRequestingInsight(false);
+    }
+  };
 
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('telemetry'); // 'telemetry' | 'settings'
@@ -224,7 +260,7 @@ export default function GhostTradingWidget() {
           {/* Navigation Tabs */}
           <div className="flex bg-[#25282f]/50 border border-white/5 p-1 rounded-xl mb-4 select-none">
             <button 
-              className={`flex-1 text-[10px] font-black uppercase tracking-wider py-2 rounded-lg transition-all ${
+              className={`flex-1 text-[9px] font-black uppercase tracking-wider py-2 rounded-lg transition-all ${
                 activeTab === 'telemetry' 
                   ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
                   : 'text-gray-500 hover:text-white border border-transparent'
@@ -234,18 +270,31 @@ export default function GhostTradingWidget() {
               Telemetry
             </button>
             <button 
-              className={`flex-1 text-[10px] font-black uppercase tracking-wider py-2 rounded-lg transition-all ${
+              className={`flex-1 text-[9px] font-black uppercase tracking-wider py-2 rounded-lg transition-all ${
                 activeTab === 'settings' 
                   ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
                   : 'text-gray-500 hover:text-white border border-transparent'
               }`} 
               onClick={() => setActiveTab('settings')}
             >
-              Controller Settings
+              Controller
+            </button>
+            <button 
+              disabled={!oteoAiEnabled}
+              className={`flex-1 text-[9px] font-black uppercase tracking-wider py-2 rounded-lg transition-all ${
+                !oteoAiEnabled
+                  ? 'text-gray-700 cursor-not-allowed opacity-40 border border-transparent'
+                  : activeTab === 'ai' 
+                    ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
+                    : 'text-gray-500 hover:text-white border border-transparent'
+              }`} 
+              onClick={() => setActiveTab('ai')}
+            >
+              AI Tools
             </button>
           </div>
 
-          {activeTab === 'telemetry' ? (
+          {activeTab === 'telemetry' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <StatBox label="Ghost PnL" value={formatCurrency(ghostPnl)} tone={ghostPnl >= 0 ? 'emerald' : 'rose'} icon={ghostPnl >= 0 ? TrendingUp : TrendingDown} />
@@ -347,7 +396,9 @@ export default function GhostTradingWidget() {
                 </div>
               </div>
             </div>
-          ) : (
+          )}
+
+          {activeTab === 'settings' && (
             /* Settings Controls Tab */
             <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1 select-none scrollbar-thin">
               {/* Simulated Amount & Expiry Times */}
@@ -631,6 +682,86 @@ export default function GhostTradingWidget() {
                     ? `Ghost only executes in selected regimes${ghostRequireRegimeStable ? ' when stable' : ''}.${(!ghostAllowedRegimes || ghostAllowedRegimes.length === 0) ? ' (All regimes allowed if empty)' : ''}`
                     : 'When disabled, selected chips and stability check do not block Auto-Ghost.'}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'ai' && (
+            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1 select-none scrollbar-thin">
+              {/* AI Pulse Enable/Disable */}
+              <div className="space-y-2 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">AI Pulse Insights</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={aiPulseEnabled}
+                      onChange={(e) => setAiPulseEnabled(e.target.checked)}
+                      className="accent-[#ffb800] rounded h-3 w-3"
+                    />
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${aiPulseEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      {aiPulseEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </label>
+                </div>
+
+                <div className={`space-y-1 transition-opacity duration-200 ${aiPulseEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">
+                      Pulse Interval
+                    </span>
+                    <span className="text-[10px] font-black font-mono text-white">
+                      {aiPulseIntervalSeconds}s
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="30"
+                    max="300"
+                    step="10"
+                    disabled={!aiPulseEnabled}
+                    value={aiPulseIntervalSeconds}
+                    onChange={(e) => setAiPulseIntervalSeconds(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                  />
+                </div>
+              </div>
+
+              {/* Trade Interval Suggestions */}
+              <div className="space-y-2 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">AI Suggestions Trigger</span>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">
+                      Trigger Every
+                    </span>
+                    <span className="text-[10px] font-black font-mono text-white">
+                      {aiTradeInterval} {aiTradeInterval === 1 ? 'Trade' : 'Trades'}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="50"
+                    step="1"
+                    value={aiTradeInterval}
+                    onChange={(e) => setAiTradeInterval(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                  />
+                </div>
+              </div>
+
+              {/* Request Manual Advisory */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleRequestManualInsight}
+                  disabled={requestingInsight}
+                  className="w-full h-10 rounded-lg bg-[#ffb800] text-black font-black uppercase tracking-widest text-[9px] hover:bg-white transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Zap size={12} className={requestingInsight ? 'animate-bounce' : ''} />
+                  {requestingInsight ? 'Requesting Insight...' : 'Request Manual Insight'}
+                </button>
               </div>
             </div>
           )}

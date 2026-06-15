@@ -65,6 +65,8 @@ class StreamingService:
         self._consumer_task = None
         # Phase 4: AI Review Service (attached externally when AI is enabled)
         self._ai_review: AIReviewService | None = None
+        self._ai_pulse_task: asyncio.Task | None = None
+        self._last_prices: Dict[str, float] = {}
 
     def _clear_level3_state(self, *, reset_classifiers: bool) -> None:
         """Clear cached Level 3 regime state."""
@@ -114,6 +116,9 @@ class StreamingService:
         auto_ghost_regime_gate_enabled: bool | None = None,
         auto_ghost_allowed_regimes: list[str] | None = None,
         auto_ghost_require_regime_stable: bool | None = None,
+        ai_trade_interval: int | None = None,
+        ai_pulse_enabled: bool | None = None,
+        ai_pulse_interval_seconds: int | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -159,7 +164,19 @@ class StreamingService:
             require_regime_stable=auto_ghost_require_regime_stable,
             oteo_ai_enabled=self.oteo_ai_enabled,
             oteo_ai_execution_mode=self.oteo_ai_execution_mode,
+            ai_trade_interval=ai_trade_interval,
+            ai_pulse_enabled=ai_pulse_enabled,
+            ai_pulse_interval_seconds=ai_pulse_interval_seconds,
         )
+
+        if self._streaming_active:
+            should_run_pulse = self.oteo_ai_enabled and self.auto_ghost.config.ai_pulse_enabled
+            if should_run_pulse and (self._ai_pulse_task is None or self._ai_pulse_task.done()):
+                self._ai_pulse_task = asyncio.create_task(self._ai_pulse_loop())
+            elif not should_run_pulse and self._ai_pulse_task is not None:
+                self._ai_pulse_task.cancel()
+                self._ai_pulse_task = None
+
         return {
             "oteo_level2_enabled": self.level2_enabled,
             "oteo_level3_enabled": self.level3_enabled,
@@ -196,6 +213,9 @@ class StreamingService:
         self._consumer_task = asyncio.create_task(self._tick_consumer_loop())
         if self.level3_enabled and self._ai_review:
             self._ai_review.start()
+        if self.oteo_ai_enabled and self.auto_ghost.config.ai_pulse_enabled:
+            if self._ai_pulse_task is None or self._ai_pulse_task.done():
+                self._ai_pulse_task = asyncio.create_task(self._ai_pulse_loop())
         logger.info("StreamingService started — tick processing enabled")
 
     def stop(self) -> None:
@@ -208,6 +228,9 @@ class StreamingService:
         if self._ai_review:
             self._ai_review.stop()
             self._ai_review.clear_all()
+        if self._ai_pulse_task:
+            self._ai_pulse_task.cancel()
+            self._ai_pulse_task = None
         
         # Drain the queue
         while not self._tick_queue.empty():
@@ -330,6 +353,7 @@ class StreamingService:
         if asset not in self._allowed_assets:
             return
 
+        self._last_prices[asset] = price
         oteo, market_context_engine, manip_detector = self._get_or_create_engines(asset)
         
         oteo_result = oteo.update_tick(price, timestamp=timestamp)
@@ -526,3 +550,85 @@ class StreamingService:
             self._manip_engines[asset].velocities.clear()
             self._manip_engines[asset].price_history.clear()
             logger.debug("Cleared detector buffers for %s", asset)
+
+    async def _ai_pulse_loop(self) -> None:
+        """Background loop querying the AI provider for periodic market insights (AI Pulse)."""
+        logger.info("AI Pulse background loop started.")
+        while self._streaming_active:
+            interval = self.auto_ghost.config.ai_pulse_interval_seconds
+            await asyncio.sleep(max(10, interval))
+            if not self._streaming_active or not self.oteo_ai_enabled or not self.auto_ghost.config.ai_pulse_enabled:
+                break
+            try:
+                await self._run_ai_pulse_insight()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"AI Pulse execution failed: {e}")
+
+    async def _run_ai_pulse_insight(self) -> None:
+        """Gather active asset metrics and request a real-time AI insight."""
+        from .ai_service import get_ai_service
+        from ..models.ai_models import AIChatRequest, AIMessage
+
+        ai_service = get_ai_service()
+        if not ai_service.status().enabled:
+            return
+
+        asset_summaries = []
+        for asset in sorted(self._allowed_assets):
+            if asset in self._oteo_engines:
+                price = self._last_prices.get(asset, "N/A")
+                mc_engine = self._market_context_engines[asset]
+                c = mc_engine._cached_context or {}
+                
+                regime = self._last_regime.get(asset, {}).get("regime_label", "UNKNOWN") if self.level3_enabled else c.get("adx_regime", "UNKNOWN")
+                
+                # Fetch recent manipulation
+                manip_engine = self._manip_engines[asset]
+                manip = manip_engine.update(time.time(), price) if isinstance(price, (int, float)) else {}
+                max_sev = max(manip.values()) if manip and manip.values() else 0.0
+                
+                asset_summaries.append(
+                    f"- {asset}: Price={price}, Regime={regime}, Manipulation Severity={max_sev:.2f}, "
+                    f"ADX={c.get('adx', 'N/A')}, CCI={c.get('cci', 'N/A')} ({c.get('cci_state', 'N/A')})"
+                )
+
+        if not asset_summaries:
+            return
+
+        summaries_str = "\n".join(asset_summaries)
+
+        system_msg = (
+            "You are OTC SNIPER's real-time AI market pulse assistant. "
+            "You analyze the current active market state summary and write a highly informative, concise insight. "
+            "Point out specific conditions, spotted manipulation severity to watch out for (asset specific), "
+            "or potential upcoming trade direction entries with exiries. "
+            "Keep the entire output under 65 words. Tone should be professional, alert, and actionable."
+        )
+
+        user_msg = (
+            f"Active OTC Asset Data Summaries:\n"
+            f"{summaries_str}\n\n"
+            f"Formulate a brief market pulse update based on this data."
+        )
+
+        chat_req = AIChatRequest(
+            messages=[
+                AIMessage(role="system", content=system_msg),
+                AIMessage(role="user", content=user_msg),
+            ],
+            model=ai_service.settings.ai_model,
+        )
+
+        res = await ai_service.chat(chat_req)
+        pulse_insight = res.text.strip()
+
+        logger.info("AI Pulse Insight generated: %s", pulse_insight)
+
+        if self.sio:
+            await self.sio.emit("notification", {
+                "type": "ai_pulse",
+                "message": pulse_insight,
+                "timestamp": time.time(),
+            })

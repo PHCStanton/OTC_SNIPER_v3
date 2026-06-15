@@ -52,8 +52,6 @@ export default function AISettings() {
     aiDevMode,
     setAiDevMode,
     oteoAiEnabled,
-    oteoAiExecutionMode,
-    setOteoAiExecutionMode,
   } = useSettingsStore();
 
   const [availableVoices, setAvailableVoices] = useState([]);
@@ -298,34 +296,15 @@ export default function AISettings() {
               </div>
             </InputGroup>
 
-            <InputGroup label="AI Mode Protocol" tooltip="Advisory: AI analyzes signals but does not block trades. Confirmation: AI must confirm the signal before execution.">
+            <InputGroup label="AI Mode Protocol" tooltip="Advisory: AI analyzes signals but does not block trades.">
               {oteoAiEnabled ? (
-                <div className="flex rounded-lg bg-[#1a1c22] border border-white/5 p-1 h-14 items-center">
-                  <button
-                    type="button"
-                    onClick={() => setOteoAiExecutionMode('advisory')}
-                    className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
-                      oteoAiExecutionMode === 'advisory'
-                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Advisory (Informational)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOteoAiExecutionMode('confirmation')}
-                    className={`flex-1 rounded-md py-2 text-[10px] font-black uppercase tracking-widest transition-all ${
-                      oteoAiExecutionMode === 'confirmation'
-                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Execution Confirmation
-                  </button>
+                <div className="flex items-center justify-center rounded-lg bg-[#ffb800]/5 border border-[#ffb800]/20 px-4 h-14 w-full text-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800]">
+                    Advisory Mode (Active)
+                  </span>
                 </div>
               ) : (
-                <div className="flex items-center justify-center rounded-lg bg-[#1e222b]/50 border border-white/5 px-4 h-14 text-center">
+                <div className="flex items-center justify-center rounded-lg bg-[#1e222b]/50 border border-white/5 px-4 h-14 w-full text-center">
                   <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">
                     Inactive — OTEO AI Layer is disabled in App Settings
                   </span>

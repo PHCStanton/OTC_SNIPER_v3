@@ -40,6 +40,9 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_regime_gate_enabled: bool = Field(default=False)
     auto_ghost_allowed_regimes: list[str] | None = Field(default=None)
     auto_ghost_require_regime_stable: bool = Field(default=False)
+    ai_trade_interval: int = Field(default=10, ge=1, le=100)
+    ai_pulse_enabled: bool = Field(default=False)
+    ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
 
 
 @router.get("/runtime-config")
@@ -90,10 +93,25 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             auto_ghost_regime_gate_enabled=body.auto_ghost_regime_gate_enabled,
             auto_ghost_allowed_regimes=body.auto_ghost_allowed_regimes,
             auto_ghost_require_regime_stable=body.auto_ghost_require_regime_stable,
+            ai_trade_interval=body.ai_trade_interval,
+            ai_pulse_enabled=body.ai_pulse_enabled,
+            ai_pulse_interval_seconds=body.ai_pulse_interval_seconds,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:
         logger.error("Failed to update runtime config: %s", exc)
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+
+
+@router.post("/manual-advisory")
+async def trigger_manual_advisory(request: Request) -> JSONResponse:
+    try:
+        streaming_service = request.app.state.streaming_service
+        # Trigger trade count suggestion logic immediately in the background
+        asyncio.create_task(streaming_service.auto_ghost._run_trade_count_suggestions())
+        return JSONResponse(content={"ok": True, "message": "Manual advisory run queued."})
+    except Exception as exc:
+        logger.error("Failed to trigger manual advisory: %s", exc)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
 
 

@@ -27,6 +27,7 @@ import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useAIStore } from '../../stores/useAIStore.js';
+import { useNotificationStore } from '../../stores/useNotificationStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
 import ConnectDialog from '../auth/ConnectDialog.jsx';
 import logoImg from '../../../assets/GOLD_TARGET_LOGO1_RM.png';
@@ -48,11 +49,15 @@ export default function TopBar() {
   const { 
     aiDevMode, 
     setAiDevMode, 
-    oteoAiExecutionMode, 
-    setOteoAiExecutionMode,
+    oteoAiEnabled,
   } = useSettingsStore();
   const dropdownRef = useRef(null);
   const settingsDropdownRef = useRef(null);
+  const notificationsDropdownRef = useRef(null);
+
+  const { notifications, markAllAsRead, clearAll } = useNotificationStore();
+  const unreadCount = notifications.filter((n) => n.unread).length;
+  const [showNotifications, setShowNotifications] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -61,6 +66,9 @@ export default function TopBar() {
       }
       if (settingsDropdownRef.current && !settingsDropdownRef.current.contains(event.target)) {
         setShowSettingsDropdown(false);
+      }
+      if (notificationsDropdownRef.current && !notificationsDropdownRef.current.contains(event.target)) {
+        setShowNotifications(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -96,9 +104,7 @@ export default function TopBar() {
     }
   }
 
-  function handleNotificationsPlaceholder() {
-    useToastStore.getState().addToast({ type: 'info', message: 'Notifications placeholder — system not wired yet.' });
-  }
+  // Deprecated notifications placeholder removed in favor of real store connection
 
   return (
     <>
@@ -208,28 +214,15 @@ export default function TopBar() {
                 <div className="absolute right-0 mt-2 w-80 rounded-xl border-2 border-[#1a1c22] bg-gradient-to-br from-[#f5df19] to-[#ffb800] p-3 shadow-[0_10px_30px_rgba(245,223,25,0.25)] z-[100] space-y-3 text-left">
                   <div className="flex items-center justify-between border-b border-black/10 pb-2">
                     <span className="text-[10px] font-black uppercase tracking-widest text-[#1a1c22]">AI Assistant Menu</span>
-                    <div className="flex rounded bg-[#1a1c22] p-0.5 border border-black/10 shrink-0">
-                      <button
-                        onClick={() => setOteoAiExecutionMode('advisory')}
-                        className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest rounded transition-all ${
-                          oteoAiExecutionMode === 'advisory'
-                            ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
-                            : 'text-gray-500 hover:text-white border border-transparent'
-                        }`}
-                      >
-                        Advise
-                      </button>
-                      <button
-                        onClick={() => setOteoAiExecutionMode('confirmation')}
-                        className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest rounded transition-all ${
-                          oteoAiExecutionMode === 'confirmation'
-                            ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
-                            : 'text-gray-500 hover:text-white border border-transparent'
-                        }`}
-                      >
-                        Confirm
-                      </button>
-                    </div>
+                    {oteoAiEnabled ? (
+                      <span className="rounded bg-black/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#1a1c22] border border-black/10">
+                        Active Advisor
+                      </span>
+                    ) : (
+                      <span className="rounded bg-black/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-black/50 border border-black/10">
+                        Inactive
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <button
@@ -423,13 +416,81 @@ export default function TopBar() {
               <span className="text-md font-black tracking-tight text-white">{balanceLabel}</span>
             </div>
  
-            <TopBarIconButton
-              onClick={handleNotificationsPlaceholder}
-              title="Notifications placeholder"
-              ariaLabel="Notifications placeholder"
-            >
-              <Bell size={20} strokeWidth={2} />
-            </TopBarIconButton>
+            <div className="relative" ref={notificationsDropdownRef}>
+              <TopBarIconButton
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  if (!showNotifications) {
+                    markAllAsRead();
+                  }
+                }}
+                title="System Notifications"
+                ariaLabel="System Notifications"
+                active={showNotifications}
+              >
+                <Bell size={20} strokeWidth={2} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500"></span>
+                  </span>
+                )}
+              </TopBarIconButton>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 rounded-xl border border-white/10 bg-[#161920] p-3 shadow-2xl z-[100] text-left">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">AI Notifications</span>
+                    <button 
+                      onClick={clearAll}
+                      className="text-[8px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+
+                  {notifications.length === 0 ? (
+                    <div className="py-6 text-center text-xs font-bold text-gray-600 uppercase italic">
+                      No notifications
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-0.5 scrollbar-thin">
+                      {notifications.map((n) => {
+                        const Icon = n.type === 'ai_pulse' ? Zap : Bot;
+                        const iconColor = n.type === 'ai_pulse' ? 'text-amber-400' : 'text-[#ffb800]';
+                        
+                        const elapsedSecs = Math.max(0, Math.floor(Date.now() / 1000 - n.timestamp));
+                        let timeStr = 'now';
+                        if (elapsedSecs >= 60) {
+                          timeStr = `${Math.floor(elapsedSecs / 60)}m ago`;
+                        } else if (elapsedSecs > 5) {
+                          timeStr = `${elapsedSecs}s ago`;
+                        }
+
+                        return (
+                          <div
+                            key={n.id}
+                            className="flex items-start gap-2.5 rounded-lg border p-2.5 transition bg-white/[0.01] border-white/5"
+                          >
+                            <div className={`mt-0.5 shrink-0 ${iconColor}`}>
+                              <Icon size={14} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] text-gray-300 font-medium leading-relaxed break-words">
+                                {n.message}
+                              </p>
+                              <span className="text-[8px] text-gray-600 font-bold uppercase mt-1 block">
+                                {timeStr}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>

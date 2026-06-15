@@ -14,6 +14,7 @@ import { soundManager } from './utils/soundUtils.js';
 import MainLayout from './components/layout/MainLayout.jsx';
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
 import ComponentsPage from './components/dev/ComponentsPage.jsx';
+import { useNotificationStore } from './stores/useNotificationStore.js';
 
 const VALID_TRADE_OUTCOMES = new Set(['win', 'loss', 'void']);
 
@@ -48,6 +49,11 @@ export default function App() {
   const ghostRegimeGateEnabled = useSettingsStore((s) => s.ghostRegimeGateEnabled);
   const ghostAllowedRegimes = useSettingsStore((s) => s.ghostAllowedRegimes);
   const ghostRequireRegimeStable = useSettingsStore((s) => s.ghostRequireRegimeStable);
+
+  // New AI advisory settings
+  const aiTradeInterval = useSettingsStore((s) => s.aiTradeInterval);
+  const aiPulseEnabled = useSettingsStore((s) => s.aiPulseEnabled);
+  const aiPulseIntervalSeconds = useSettingsStore((s) => s.aiPulseIntervalSeconds);
 
   useStreamConnection();
 
@@ -216,6 +222,22 @@ export default function App() {
       }
     });
 
+    socket.on('notification', (data) => {
+      useNotificationStore.getState().addNotification({
+        type: data.type || 'info',
+        message: data.message,
+        timestamp: data.timestamp,
+      });
+
+      useToastStore.getState().addToast({
+        type: data.type === 'warning' ? 'warning' : 'info',
+        message: data.message,
+        duration: 6000,
+      });
+
+      soundManager.playNotification();
+    });
+
     // Poll every 5 seconds
     const poll = () => socket.emit('check_status');
     poll();
@@ -227,6 +249,7 @@ export default function App() {
       socket.off('status_update');
       socket.off('trade_entry');
       socket.off('trade_result');
+      socket.off('notification');
     };
   }, [setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType]);
 
@@ -264,6 +287,9 @@ export default function App() {
           auto_ghost_regime_gate_enabled: ghostRegimeGateEnabled,
           auto_ghost_allowed_regimes: ghostAllowedRegimes,
           auto_ghost_require_regime_stable: ghostRequireRegimeStable,
+          ai_trade_interval: aiTradeInterval,
+          ai_pulse_enabled: aiPulseEnabled,
+          ai_pulse_interval_seconds: aiPulseIntervalSeconds,
         });
       } catch (err) {
         if (isMounted) {
@@ -309,6 +335,9 @@ export default function App() {
     ghostRegimeGateEnabled,
     ghostAllowedRegimes,
     ghostRequireRegimeStable,
+    aiTradeInterval,
+    aiPulseEnabled,
+    aiPulseIntervalSeconds,
   ]);
 
   return (

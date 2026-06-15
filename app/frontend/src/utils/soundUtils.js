@@ -10,7 +10,7 @@ class SoundManager {
       GHOST_EXECUTE: new Audio('/AUDIO/GHOST_EXECUTE1.ogg'),
       GHOST_WIN: new Audio('/AUDIO/GHOST_WIN2.ogg'),
       GHOST_LOSS: new Audio('/AUDIO/GHOST_LOSS1.ogg'),
-      NOTIFICATION: new Audio('/AUDIO/NOTIFICATIONS.ogg'),
+      NOTIFICATION: new Audio('/AUDIO/NOTIFICATION_#2.mp3'),
       TIMER_ALERT: new Audio('/AUDIO/iPhone_haptic.mp3'),
     };
 

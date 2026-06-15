@@ -44,6 +44,9 @@ class AutoGhostConfig:
     timeframe_seconds: int = 0
     oteo_ai_enabled: bool = False
     oteo_ai_execution_mode: str = "advisory"
+    ai_trade_interval: int = 10
+    ai_pulse_enabled: bool = False
+    ai_pulse_interval_seconds: int = 120
     min_zscore_enabled: bool = False
     min_zscore: float | None = None
     max_zscore_enabled: bool = False
@@ -108,6 +111,9 @@ class AutoGhostService:
         timeframe_seconds: int | None = None,
         oteo_ai_enabled: bool | None = None,
         oteo_ai_execution_mode: str | None = None,
+        ai_trade_interval: int | None = None,
+        ai_pulse_enabled: bool | None = None,
+        ai_pulse_interval_seconds: int | None = None,
         min_zscore_enabled: bool | None = None,
         min_zscore: float | None = None,
         max_zscore_enabled: bool | None = None,
@@ -156,6 +162,12 @@ class AutoGhostService:
             updates["oteo_ai_enabled"] = bool(oteo_ai_enabled)
         if oteo_ai_execution_mode is not None:
             updates["oteo_ai_execution_mode"] = str(oteo_ai_execution_mode)
+        if ai_trade_interval is not None:
+            updates["ai_trade_interval"] = max(1, int(ai_trade_interval))
+        if ai_pulse_enabled is not None:
+            updates["ai_pulse_enabled"] = bool(ai_pulse_enabled)
+        if ai_pulse_interval_seconds is not None:
+            updates["ai_pulse_interval_seconds"] = max(10, int(ai_pulse_interval_seconds))
         if min_zscore_enabled is not None:
             updates["min_zscore_enabled"] = bool(min_zscore_enabled)
         if min_zscore is not None:
@@ -217,6 +229,9 @@ class AutoGhostService:
             "auto_ghost_timeframe_seconds": self.config.timeframe_seconds,
             "oteo_ai_enabled": self.config.oteo_ai_enabled,
             "oteo_ai_execution_mode": self.config.oteo_ai_execution_mode,
+            "ai_trade_interval": self.config.ai_trade_interval,
+            "ai_pulse_enabled": self.config.ai_pulse_enabled,
+            "ai_pulse_interval_seconds": self.config.ai_pulse_interval_seconds,
             "auto_ghost_min_zscore_enabled": self.config.min_zscore_enabled,
             "auto_ghost_min_zscore": self.config.min_zscore,
             "auto_ghost_max_zscore_enabled": self.config.max_zscore_enabled,
@@ -328,6 +343,11 @@ class AutoGhostService:
             self._update_condition_stat(f"tick_health:{tick_health}", is_win)
             if asset:
                 self._update_condition_stat(f"asset:{asset}", is_win)
+
+        if self.config.oteo_ai_enabled and self.config.ai_trade_interval > 0:
+            if self._session_trade_count > 0 and self._session_trade_count % self.config.ai_trade_interval == 0:
+                logger.info("Trade count interval reached (%d trades). Triggering AI Suggestions in background.", self._session_trade_count)
+                asyncio.create_task(self._run_trade_count_suggestions())
 
     def _reject(self, asset: str, reason: str) -> None:
         self._record_reject(asset, reason)
@@ -485,38 +505,20 @@ class AutoGhostService:
 
             self._pending_signals.pop(asset, None)
 
-        # AI Confirmation Gate
+        # AI Advisory Gate (Advisory only - Confirmation mode is deprecated)
         if self.config.oteo_ai_enabled:
             strategy_level = "level3" if oteo_result.get("level3_enabled") else "level2" if oteo_result.get("level2_enabled") else "level1"
-            if self.config.oteo_ai_execution_mode == "confirmation":
-                logger.info("Requesting AI execution confirmation for %s...", asset)
-                try:
-                    ai_confirmed, ai_response_str = await self._query_ai_confirmation(
-                        asset=asset,
-                        direction=oteo_result.get("recommended"),
-                        oteo_score=score,
-                        market_context=oteo_result.get("market_context") or {},
-                        manipulation=manipulation,
-                        strategy_level=strategy_level,
-                    )
-                    if not ai_confirmed:
-                        logger.info("Auto-Ghost skipped %s: AI confirmation rejected signal (Response: %r)", asset, ai_response_str)
-                        return self._reject(asset, 'ai_confirmation_rejected')
-                except Exception as e:
-                    logger.error("AI confirmation failed defensively for %s: %s", asset, e)
-                    return self._reject(asset, 'ai_confirmation_error')
-            else:
-                # Advisory mode: Query in background without blocking execution
-                asyncio.create_task(
-                    self._run_ai_advisory(
-                        asset=asset,
-                        direction=oteo_result.get("recommended"),
-                        oteo_score=score,
-                        market_context=oteo_result.get("market_context") or {},
-                        manipulation=manipulation,
-                        strategy_level=strategy_level,
-                    )
+            # Advisory mode: Query in background without blocking execution
+            asyncio.create_task(
+                self._run_ai_advisory(
+                    asset=asset,
+                    direction=oteo_result.get("recommended"),
+                    oteo_score=score,
+                    market_context=oteo_result.get("market_context") or {},
+                    manipulation=manipulation,
+                    strategy_level=strategy_level,
                 )
+            )
 
         entry_context = {
             "asset": asset,
@@ -769,3 +771,75 @@ class AutoGhostService:
             logger.info("AI Advisory completed for %s: %s (%s)", asset, response, top_pattern_str)
         except Exception as e:
             logger.warning(f"AI Advisory background query failed for {asset}: {e}")
+
+    async def _run_trade_count_suggestions(self) -> None:
+        """Query AI for controller gates optimization suggestions based on session statistics."""
+        try:
+            from .ai_service import get_ai_service
+            from ..models.ai_models import AIChatRequest, AIMessage, AIContext
+
+            ai_service = get_ai_service()
+            if not ai_service.status().enabled:
+                return
+
+            condition_stats = self.get_condition_stats()
+            # Format condition stats for prompt
+            stats_str = ""
+            for key, stat in condition_stats.items():
+                stats_str += f"- {key}: Wins={stat['wins']}, Losses={stat['losses']}, WinRate={stat['win_rate']}%\n"
+            if not stats_str:
+                stats_str = "No trades recorded for specific conditions yet."
+
+            allowed_regimes = self.config.allowed_regimes or []
+            min_z = self.config.min_zscore if self.config.min_zscore_enabled else "Disabled"
+            max_z = self.config.max_zscore if self.config.max_zscore_enabled else "Disabled"
+            manip_threshold = self.config.manipulation_severity_threshold if self.config.block_on_manipulation else "Disabled"
+
+            system_msg = (
+                "You are an expert algorithmic trading advisor for the OTC SNIPER Auto-Ghost system. "
+                "You review session statistics and recommend optimization tweaks to the Ghost Controller gate settings "
+                "or suggest which assets to focus on or avoid. "
+                "Provide a constructive, highly actionable suggestion (maximum 80 words)."
+            )
+
+            user_msg = (
+                f"Active Controller Gates:\n"
+                f"- Allowed Regimes: {allowed_regimes}\n"
+                f"- Min Z-Score: {min_z}\n"
+                f"- Max Z-Score: {max_z}\n"
+                f"- Block on Manipulation: {self.config.block_on_manipulation} (Threshold: {manip_threshold})\n\n"
+                f"Session Performance:\n"
+                f"- Total Trades: {self._session_trade_count}\n"
+                f"- Wins: {self._session_wins}, Losses: {self._session_losses} (Win Rate: {self._session_wins / max(1, self._session_trade_count) * 100.0:.1f}%)\n"
+                f"- PnL: ${self._session_pnl:.2f}\n\n"
+                f"Performance by Condition:\n"
+                f"{stats_str}\n\n"
+                f"Based on the data above, recommend specific tweaks to win rates (e.g. tightening Z-Score bounds, adjusting whitelisted regimes) or specify assets/regimes to avoid/focus on."
+            )
+
+            chat_req = AIChatRequest(
+                messages=[
+                    AIMessage(role="system", content=system_msg),
+                    AIMessage(role="user", content=user_msg),
+                ],
+                model=ai_service.settings.ai_model,
+                context=AIContext(
+                    session_pnl=self._session_pnl,
+                    win_rate=self._session_wins / max(1, self._session_trade_count) * 100.0,
+                    total_trades=self._session_trade_count,
+                )
+            )
+
+            res = await ai_service.chat(chat_req)
+            ai_suggestion = res.text.strip()
+
+            logger.info("AI Trade Count Suggestion generated: %s", ai_suggestion)
+
+            if self.trade_service.sio:
+                await self.trade_service.sio.emit("notification", {
+                    "type": "ai_advisory",
+                    "message": ai_suggestion,
+                    "timestamp": unix_time(),
+                })
+        except Exception as e:
+            logger.warning(f"AI Trade Count Suggestion background query failed: {e}")

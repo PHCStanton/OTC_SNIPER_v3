@@ -78,6 +78,9 @@ export const SETTINGS_DEFAULTS = {
   aiModel: 'grok-4.3-fast',
   aiDevMode: false,
   oteoAiExecutionMode: 'advisory',
+  aiTradeInterval: 10,
+  aiPulseEnabled: false,
+  aiPulseIntervalSeconds: 120,
 
   // Rich AI Profiles (dedicated AI tab) — easy add/remove/manage various settings + voices here
   // voice now supports Grok Native TTS:
@@ -214,6 +217,9 @@ export function validateSettings(input = {}) {
       : SETTINGS_DEFAULTS.aiModel,
     aiDevMode: toBoolean(input.aiDevMode, SETTINGS_DEFAULTS.aiDevMode),
     oteoAiExecutionMode: ['advisory', 'confirmation'].includes(input.oteoAiExecutionMode) ? input.oteoAiExecutionMode : 'advisory',
+    aiTradeInterval: toNumber(input.aiTradeInterval, SETTINGS_DEFAULTS.aiTradeInterval, { min: 1, max: 100, integer: true }),
+    aiPulseEnabled: toBoolean(input.aiPulseEnabled, SETTINGS_DEFAULTS.aiPulseEnabled),
+    aiPulseIntervalSeconds: toNumber(input.aiPulseIntervalSeconds, SETTINGS_DEFAULTS.aiPulseIntervalSeconds, { min: 10, max: 3600, integer: true }),
 
     // AI Profiles (including Grok Native TTS voice settings)
     aiProfiles: input.aiProfiles && typeof input.aiProfiles === 'object' ? input.aiProfiles : null,
@@ -378,6 +384,9 @@ export const useSettingsStore = create()(
       setAiModel: (val) => commitSettingsPatch(set, { aiModel: val }),
       setAiDevMode: (val) => commitSettingsPatch(set, { aiDevMode: val }),
       setOteoAiExecutionMode: (val) => commitSettingsPatch(set, { oteoAiExecutionMode: val }),
+      setAiTradeInterval: (val) => commitSettingsPatch(set, { aiTradeInterval: val }),
+      setAiPulseEnabled: (val) => commitSettingsPatch(set, { aiPulseEnabled: val }),
+      setAiPulseIntervalSeconds: (val) => commitSettingsPatch(set, { aiPulseIntervalSeconds: val }),
 
       // Rich AI profiles management (dedicated AI Settings)
       setAiProfiles: (profiles) => commitSettingsPatch(set, { aiProfiles: profiles }),
