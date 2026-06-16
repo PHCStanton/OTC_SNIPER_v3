@@ -67,7 +67,7 @@ export default function GhostTradingWidget() {
     ghostMaxConfidenceEnabled,
     autoGhostManipulationSeverityThreshold,
     autoGhostBlockOnManipulation,
-    // New Z-Score + Regime gates for Ai-Calibration / Ghost Protocol
+    // New Z-Score + Regime gates for Ghost Protocol
     ghostMinZScore,
     ghostMinZScoreEnabled,
     ghostMaxZScore,
@@ -247,6 +247,9 @@ export default function GhostTradingWidget() {
             <div className="flex items-center gap-2 text-[#ffb800]">
               <Zap size={18} />
               <h3 className="text-sm font-black uppercase tracking-wider text-white">Auto Ghost Controller</h3>
+              <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider" title="GHOST SESSION - simulated execution">
+                Ghost
+              </span>
               <Tooltip content="These stats reflect the simulated performance of the ghost trader module. Live account balances remain completely unaffected. Auto-Ghost mode is active on streamed nodes." />
             </div>
             <button
@@ -556,9 +559,9 @@ export default function GhostTradingWidget() {
                 </div>
               </div>
 
-              {/* Z-Score Gate Bounds — new for Ai-Calibration / Ghost Protocol confluence */}
+              {/* Z-Score Gate Bounds — new for Ghost Protocol confluence */}
               <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
-                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Z-Score Gate Bounds (Ai-Calibration)</span>
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Z-Score Gate Bounds (Ghost Protocol)</span>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -621,7 +624,7 @@ export default function GhostTradingWidget() {
               {/* Regime Gate — multi-confluence for Ghost Protocol */}
               <div className="space-y-2 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
                 <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
-                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">Regime Gate (Ai-Calibration)</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">Regime Gate (Ghost Protocol)</span>
                   <label className="flex items-center gap-1.5 cursor-pointer select-none">
                     <input
                       type="checkbox"

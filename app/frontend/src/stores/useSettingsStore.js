@@ -36,7 +36,7 @@ export const SETTINGS_DEFAULTS = {
   ghostMaxConfidence: 95,
   ghostMaxConfidenceEnabled: false,
 
-  // Ghost Z-Score & Regime gates (Ai-Calibration / Ghost Protocol)
+  // Ghost Z-Score & Regime gates (Ghost Protocol)
   ghostMinZScore: -0.5,
   ghostMinZScoreEnabled: false,
   ghostMaxZScore: 1.5,
@@ -46,13 +46,6 @@ export const SETTINGS_DEFAULTS = {
   ghostRequireRegimeStable: false,
   ghostProtocols: null,
   activeGhostProtocol: 'default',
-
-  // Calibration Timer (shared state for deep integration with GlobalTimer in Ai-Calibration / Ghost Protocol)
-  // Allows Ai-Calibration time-based runs to drive the global stopwatch, alerts, and share elapsed
-  calibTimerTargetMinutes: 0,
-  calibTimerActive: false,
-  calibTimerElapsedMs: 0,
-  calibTimerAlertTriggered: false,
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -81,6 +74,7 @@ export const SETTINGS_DEFAULTS = {
   aiTradeInterval: 10,
   aiPulseEnabled: false,
   aiPulseIntervalSeconds: 120,
+
 
   // Rich AI Profiles (dedicated AI tab) — easy add/remove/manage various settings + voices here
   // voice now supports Grok Native TTS:
@@ -189,11 +183,7 @@ export function validateSettings(input = {}) {
     ghostProtocols: input.ghostProtocols && typeof input.ghostProtocols === 'object' ? input.ghostProtocols : null,
     activeGhostProtocol: typeof input.activeGhostProtocol === 'string' ? input.activeGhostProtocol : 'default',
 
-    // Calibration Timer shared state
-    calibTimerTargetMinutes: toNumber(input.calibTimerTargetMinutes, SETTINGS_DEFAULTS.calibTimerTargetMinutes, { min: 0, max: 120, integer: true }),
-    calibTimerActive: toBoolean(input.calibTimerActive, SETTINGS_DEFAULTS.calibTimerActive),
-    calibTimerElapsedMs: toNumber(input.calibTimerElapsedMs, SETTINGS_DEFAULTS.calibTimerElapsedMs, { min: 0, max: 1000 * 60 * 120, integer: true }),
-    calibTimerAlertTriggered: toBoolean(input.calibTimerAlertTriggered, SETTINGS_DEFAULTS.calibTimerAlertTriggered),
+
 
     showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
     showLiveEntryMarkers: toBoolean(input.showLiveEntryMarkers, SETTINGS_DEFAULTS.showLiveEntryMarkers),
@@ -220,6 +210,7 @@ export function validateSettings(input = {}) {
     aiTradeInterval: toNumber(input.aiTradeInterval, SETTINGS_DEFAULTS.aiTradeInterval, { min: 1, max: 100, integer: true }),
     aiPulseEnabled: toBoolean(input.aiPulseEnabled, SETTINGS_DEFAULTS.aiPulseEnabled),
     aiPulseIntervalSeconds: toNumber(input.aiPulseIntervalSeconds, SETTINGS_DEFAULTS.aiPulseIntervalSeconds, { min: 10, max: 3600, integer: true }),
+
 
     // AI Profiles (including Grok Native TTS voice settings)
     aiProfiles: input.aiProfiles && typeof input.aiProfiles === 'object' ? input.aiProfiles : null,
@@ -353,20 +344,7 @@ export const useSettingsStore = create()(
           };
         });
       },
-      // Calibration Timer controls - deep hook into GlobalTimer for Ai-Calibration time runs
-      // The Ai-Calibration tab can call these to drive the global stopwatch, alerts and shared elapsed
-      setCalibTimerTargetMinutes: (val) => commitSettingsPatch(set, { calibTimerTargetMinutes: val }),
-      setCalibTimerActive: (val) => commitSettingsPatch(set, { calibTimerActive: val }),
-      setCalibTimerElapsedMs: (val) => commitSettingsPatch(set, { calibTimerElapsedMs: val }),
-      setCalibTimerAlertTriggered: (val) => commitSettingsPatch(set, { calibTimerAlertTriggered: val }),
-      startCalibTimer: (minutes) => set((state) => ({
-        calibTimerTargetMinutes: minutes || state.calibTimerTargetMinutes,
-        calibTimerActive: true,
-        calibTimerElapsedMs: 0,
-        calibTimerAlertTriggered: false,
-      })),
-      stopCalibTimer: () => commitSettingsPatch(set, { calibTimerActive: false }),
-      resetCalibTimer: () => commitSettingsPatch(set, { calibTimerElapsedMs: 0, calibTimerAlertTriggered: false }),
+
       setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),
       setShowLiveEntryMarkers: (val) => commitSettingsPatch(set, { showLiveEntryMarkers: val }),
       setInitialBalance: (val) => commitSettingsPatch(set, { initialBalance: val }),
@@ -387,6 +365,7 @@ export const useSettingsStore = create()(
       setAiTradeInterval: (val) => commitSettingsPatch(set, { aiTradeInterval: val }),
       setAiPulseEnabled: (val) => commitSettingsPatch(set, { aiPulseEnabled: val }),
       setAiPulseIntervalSeconds: (val) => commitSettingsPatch(set, { aiPulseIntervalSeconds: val }),
+
 
       // Rich AI profiles management (dedicated AI Settings)
       setAiProfiles: (profiles) => commitSettingsPatch(set, { aiProfiles: profiles }),

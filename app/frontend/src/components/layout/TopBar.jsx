@@ -21,6 +21,8 @@ import {
   Save,
   UserRound,
   LayoutGrid,
+  Play,
+  Pause,
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
@@ -58,6 +60,73 @@ export default function TopBar() {
   const { notifications, markAllAsRead, clearAll } = useNotificationStore();
   const unreadCount = notifications.filter((n) => n.unread).length;
   const [showNotifications, setShowNotifications] = useState(false);
+  const [playingNotifId, setPlayingNotifId] = useState(null);
+  const currentNotifAudioRef = useRef(null);
+
+  async function playNotifVoice(notif) {
+    if (!notif || !(notif.type === 'ai_pulse' || notif.type === 'ai_advisory')) return;
+    if (playingNotifId === notif.id) {
+      if (currentNotifAudioRef.current) {
+        currentNotifAudioRef.current.pause();
+        currentNotifAudioRef.current = null;
+      }
+      setPlayingNotifId(null);
+      return;
+    }
+    const { activeAiProfile, aiProfiles } = useSettingsStore.getState();
+    const prof = (aiProfiles || {})[activeAiProfile] || {};
+    const v = prof.voice || {};
+    const useGrok = v.provider === 'grok';
+    const text = notif.message || '';
+    if (!text) return;
+    setPlayingNotifId(notif.id);
+    try {
+      if (useGrok) {
+        const voiceId = v.voiceId || v.customVoiceId || 'rex';
+        const speed = v.speed ?? 1.0;
+        const language = v.language || 'en';
+        const res = await fetch('/api/ai/speak', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voice_id: voiceId, language, speed, profile_key: activeAiProfile }),
+        });
+        if (!res.ok) throw new Error('TTS');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentNotifAudioRef.current = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          currentNotifAudioRef.current = null;
+          setPlayingNotifId(null);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          currentNotifAudioRef.current = null;
+          setPlayingNotifId(null);
+        };
+        await audio.play();
+      } else {
+        if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+          const ut = new SpeechSynthesisUtterance(text);
+          ut.onend = () => setPlayingNotifId(null);
+          setPlayingNotifId(notif.id);
+          window.speechSynthesis.speak(ut);
+        } else {
+          setPlayingNotifId(null);
+        }
+      }
+    } catch (e) {
+      console.warn('Notif voice failed, browser fallback', e);
+      if (window.speechSynthesis) {
+        const ut = new SpeechSynthesisUtterance(text);
+        ut.onend = () => setPlayingNotifId(null);
+        window.speechSynthesis.speak(ut);
+      }
+      setPlayingNotifId(null);
+    }
+  }
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -73,6 +142,16 @@ export default function TopBar() {
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (currentNotifAudioRef.current) {
+        currentNotifAudioRef.current.pause();
+        currentNotifAudioRef.current = null;
+      }
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    };
   }, []);
 
   const isTrading = activeView !== 'journal' && activeView !== 'settings' && activeView !== 'ai' && dashboardMode === 'trading';
@@ -483,6 +562,15 @@ export default function TopBar() {
                                 {timeStr}
                               </span>
                             </div>
+                            {(n.type === 'ai_pulse' || n.type === 'ai_advisory') && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); playNotifVoice(n); }}
+                                className="ml-1 shrink-0 text-[#ffb800] hover:text-white p-0.5 rounded hover:bg-white/10"
+                                title={playingNotifId === n.id ? 'Stop voice readback' : 'Read back advisory with Grok voice'}
+                              >
+                                {playingNotifId === n.id ? <Pause size={13} /> : <Play size={13} />}
+                              </button>
+                            )}
                           </div>
                         );
                       })}

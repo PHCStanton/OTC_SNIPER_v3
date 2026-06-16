@@ -437,7 +437,7 @@ class AutoGhostService:
                 )
                 return self._reject(asset, 'manipulation_block')
 
-        # Z-Score Gate Bounds checks (Ai-Calibration / Ghost Protocol)
+        # Z-Score Gate Bounds checks (Ghost Protocol)
         z_score = oteo_result.get("z_score")
         if z_score is not None:
             try:
@@ -445,7 +445,7 @@ class AutoGhostService:
                 if self.config.min_zscore_enabled and self.config.min_zscore is not None:
                     if z_val < self.config.min_zscore:
                         logger.info(
-                            "Auto-Ghost skipped %s: z-score %.2f < min gate %.2f (Ai-Calibration gate)",
+                            "Auto-Ghost skipped %s: z-score %.2f < min gate %.2f (Ghost Protocol gate)",
                             asset,
                             z_val,
                             self.config.min_zscore,
@@ -454,7 +454,7 @@ class AutoGhostService:
                 if self.config.max_zscore_enabled and self.config.max_zscore is not None:
                     if z_val > self.config.max_zscore:
                         logger.info(
-                            "Auto-Ghost skipped %s: z-score %.2f > max gate %.2f (Ai-Calibration gate)",
+                            "Auto-Ghost skipped %s: z-score %.2f > max gate %.2f (Ghost Protocol gate)",
                             asset,
                             z_val,
                             self.config.max_zscore,
@@ -463,7 +463,7 @@ class AutoGhostService:
             except (ValueError, TypeError) as exc:
                 logger.warning("Auto-Ghost: non-numeric z_score %r for %s, skipping Z gates: %s", z_score, asset, exc)
 
-        # Regime Gate checks (Ai-Calibration / Ghost Protocol)
+        # Regime Gate checks (Ghost Protocol)
         regime_label = oteo_result.get("regime_label")
         regime_stable = oteo_result.get("regime_stable")
         if self.config.regime_gate_enabled and self.config.allowed_regimes:

@@ -1,5 +1,7 @@
 # Active Context
 
+- **Calibration Feature Deprecated & Completely Removed (2026-06-16).** Stripped all backend properties (`ai_calibration_phase`), FastAPI request parameters (`calib_context`), and session metadata checks from `auto_ghost.py`, `streaming.py`, `strategy.py`, `analysis.py`, and `analysis_service.py`. Decoupled settings stores (`useSettingsStore.js`), sync layers (`App.jsx`), and Layout Timers (`GlobalTimer.jsx`). Removed the calibration trigger UI panel from `AnalysisView.jsx` and renamed the tab to **AI Refinement**. Verified backend compilation and pytest suite (`test_auto_ghost.py`) passed cleanly.
+- **Calibration AI Advisory Alignment & Bug Fixes are fully complete and verified (2026-06-15).** Fixed Zustand settings store validation bug in `useSettingsStore.js` to allow `aiCalibrationPhase` changes to persist and sync. Added session-level `is_calibration` parsing in `analysis_service.py` to auto-tag calibration sessions. Added clear `Calib` and `Tuned` status badges to session logs list (`AnalysisView.jsx`) and floating controller widget header (`GhostTradingWidget.jsx`). Verified clean frontend production builds and automated test suite execution (`test_auto_ghost.py`).
 - **Z-Score & Regime Gates (Ghost Protocol) Integration & Stale Tick Filtering is now fully complete and verified (2026-06-14).** Resolved the JSX compilation syntax error, calibration stopwatch auto-stop, and Grok audio overlapping in `AnalysisView.jsx`. Implemented settings, validation, and `loadGhostProtocol` actions in `useSettingsStore.js` and wired them to sync via `App.jsx`. Configured FastAPI strategy router, streaming service updates, and implemented the actual Z-Score and Market Regime confluences validation checks inside `auto_ghost.py`. Applied a 15-minute (900s) age limit constraint on historical ticks loaded during engine pre-seeding in `streaming.py` to prevent stale context data from corrupting initialization state.
 - **Level 3 Phases 4 and 5 are complete (2026-06-11).** AI Advisory Review Loop (`ai_review.py`) is wired into the streaming pipeline and available via `GET /api/strategy/ai-review`. Frontend L3 regime visualization is live in `OTEORing.jsx` and `MultiChartView.jsx`, covering all 6 `Market_Regimes.md` labels with color-coded badges. 3 codebase bug fixes applied (logger import, `_get_severity` DRY, AI prompt regime enrichment).
 - **L123 Optimization and AI Knowledge Base Plan (2026-06-13) — 100% COMPLETE ✅ (Phases 1-3, 5, 6).** `scripts/analyze_trade_intelligence.py` refactored into composable phase functions. Full-corpus run: 9,999/10,207 trades joined (97.96%), 66 assets, 3 strategy levels, 1,029 knowledge-base patterns generated. Phase 6 (AI Advisory Contract) implemented: loaded condition patterns into AI confirmation prompts and background advisory loops, integrated active manipulation severity formatting, and embedded the OTC microstructure manipulation patterns taxonomy. All 5 new retrieval unit tests and existing auto-ghost smoke tests pass cleanly.
@@ -13,6 +15,26 @@
 - The next valid implementation target is **Phase 6: Volatility-Adaptive Expiry** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
 
 ## Latest Changes
+
+### Applied on 2026-06-16 — Deprecation & Removal of Calibration Feature (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| CALIB-1 | Backend API | `strategy.py`, `analysis.py` | Removed `ai_calibration_phase` request config fields and `calib_context` analysis refinement parameters. |
+| CALIB-2 | Backend Services | `streaming.py`, `auto_ghost.py`, `analysis_service.py` | Stripped calibration checks from streaming updates, Auto-Ghost configs, log parsing, and Grok prompt generation. |
+| CALIB-3 | Zustand Store | `useSettingsStore.js`, `App.jsx` | Removed state defaults and validation mappings for `aiCalibrationPhase` and `calibTimer`. Wired out of config synchronization. |
+| CALIB-4 | Layout Components | `GlobalTimer.jsx`, `GhostTradingWidget.jsx` | Decoupled stopwatch timers, removed `CALIB` state sync alerts, and replaced conditional badges with clean simulated `Ghost` markers. |
+| CALIB-5 | Analysis Panel | `AnalysisView.jsx` | Removed local calibration states, effects, suggest gates, dynamic calculations, and renamed tab to **AI Refinement**. |
+| CALIB-6 | Verification | `test_auto_ghost.py` | Executed backend tests in `QuFLX-v2` conda environment. **1 test passed in 0.32s** successfully. |
+
+### Applied on 2026-06-15 — Calibration AI Advisory Alignment and Bug Fixes (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| CAL-1 | Zustand Store | `useSettingsStore.js` | Fixed serialization bug by adding `aiCalibrationPhase` to the `validateSettings()` return schema. |
+| CAL-2 | Backend Parser | `analysis_service.py` | Added session-level `is_calibration` boolean check to `parse_session_file` by scanning trade entry contexts. |
+| CAL-3 | Badging UI | `AnalysisView.jsx`, `GhostTradingWidget.jsx` | Placed `Calib` and `Tuned` status badges on session log rows and floating controller widget title bar. |
+| CAL-4 | Verification | `test_auto_ghost.py` | Verified backend compilation and full ghost suite tests with zero failures. |
 
 ### Applied on 2026-06-14 — Z-Score & Regime Gates (Ghost Protocol) Integration & Stale Tick Filtering (VERIFIED ✅)
 

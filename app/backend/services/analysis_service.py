@@ -637,6 +637,7 @@ class AnalysisService:
             f"Also analyze the optimal z-score thresholds per regime shown above and recommend which z-score cutoffs + regimes "
             f"would be best to add as filters in the Ghost Controller for execution quality. Suggest specific 5 optimal combinations "
             f"and expected impact on win rate.\n\n"
+            f"Explicitly call out FAVORABLE assets (high win-rate in the observed regimes/Z bands during the session, good for tuned ghost/live) and UNFAVORABLE ones (to avoid or watch closely) with concrete specifics (e.g. asset, regime, Z context, WR, why useful for real sessions). "
             f"Conclude with a concise audio-friendly summary script. "
             f"IMPORTANT FOR VOICE: At the very end of your response, output ONLY the short spoken briefing version (natural, conversational, "
             f"under ~550 characters preferred) delimited EXACTLY as follows (do not add extra commentary outside the delimiters):\n"

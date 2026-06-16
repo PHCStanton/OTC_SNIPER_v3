@@ -4,6 +4,7 @@
 - This file tracks completed milestones, recent delivered work, and remaining validation targets.
 
 ## Completed Milestones
+- Project Cleanup: Deprecation of Calibration Feature — Stripped calibration controllers, timed runners, and config parameters fully from backend and frontend.
 - Architecture separation (Workspace vs App Root)
 - Phase 0: Ops Layer — Chrome lifecycle management + manual SSID input
 - Phase 1: Backend Foundation (FastAPI, session manager, broker registry)
@@ -32,10 +33,19 @@
 - **Level 3 Phase 3 Remediation Pass (2026-05-02, COMPLETED)** — Closed all 11 low-severity review findings across `trade_service.py`, `auto_ghost.py`, `market_context.py`, and `test_level3_phase3.py`.
 - **OTEO Level Backtest Plan (2026-05-15, CLOSED ✅)** — 4-phase plan fully implemented and signed off.
 - **L1/L2/L3 Optimization and AI Knowledge Base Plan — Phases 1-3, 5, 6 (2026-06-13, 100% COMPLETE ✅)** — Refactored offline analyzer, executed 10,207 trades full-corpus analysis, generated 1,029 KB patterns, created lazy-loading KnowledgeBaseLoader singleton, integrated microstructure manipulation taxonomy, mapped live active manipulation flags, and wired KB matching context into verification prompts and advisory logs. All tests pass cleanly.
+- **Calibration AI Advisory Alignment & Bug Fixes (2026-06-15, SIGNED OFF & CLOSED ✅)** — Resolved the Zustand settings store validation bug for `aiCalibrationPhase`, implemented backend calibration run parsing inside `parse_session_file`, and integrated inline `Calib` and `Tuned` visual status badges in the logs table (`AnalysisView.jsx`) and float widget title (`GhostTradingWidget.jsx`). Verified production build and Z-score/regime gates automated test suite.
 - **Z-Score & Regime Gates (Ghost Protocol) Integration & Stale Tick Filtering (2026-06-14, SIGNED OFF & CLOSED ✅)** — Resolved the JSX compilation syntax error, Grok audio overlapping, and calibration stopwatch auto-stop running leak in `GlobalTimer.jsx`. Resolved React Rules of Hooks violation in `AnalysisView.jsx`. Implemented settings, validation, and loadGhostProtocol actions in `useSettingsStore.js` and wired them to sync via `App.jsx`. Configured FastAPI strategy router, streaming service updates, and implemented the actual Z-Score and Market Regime confluences validation checks inside `auto_ghost.py`. Applied a 15-minute (900s) age limit constraint on historical ticks loaded during engine pre-seeding in `streaming.py` to prevent stale context data from corrupting initialization state. Added Test 7 and Test 8 smoke tests in `test_auto_ghost.py` for full gates verification.
 - **Grok Native TTS (Text-to-Speech) Integration (2026-06-13+)** — Full stack: backend provider/service/config/API for /v1/tts with voice profiles (grok vs browser), speed, custom voice_ids. Frontend AISettings with toggle/selectors/test playback. Integrated into AnalysisView and voice-over flows.
+- **UI Sound Updates and Progress Tracking Consolidation (2026-06-15, SIGNED OFF & CLOSED ✅)** — Replaced standard Click, Ghost Win, and Ghost Loss sounds with updated premium audio files. Consolidated development progress tracking in `.agent-memory/progress.md` by removing duplicate root-level `progress.md`.
 
 ## Recent Delivery Snapshot
+- **Deprecation & removal of Calibration Feature (2026-06-16):**
+  - **Backend Clean:** Removed `ai_calibration_phase` from strategy configuration schemas and endpoints (`strategy.py`), strategy runtime sync logic (`streaming.py`), Auto-Ghost config attributes (`auto_ghost.py`), and session parsing/Grok prompts builder (`analysis_service.py`). Removed `calib_context` analysis refinement parameters (`analysis.py`).
+  - **Store & App Sync:** Decoupled `aiCalibrationPhase` and `calibTimer` fields from settings store defaults, schema validations, and state actions (`useSettingsStore.js`). Wired out of main synchronization hook in `App.jsx`.
+  - **UI Widgets Decoupling:** Stripped stopwatch event triggers from `GlobalTimer.jsx` and renamed Results Analysis selector to **AI Refinement**. Cleaned up calibration badges from `AnalysisView.jsx` and `GhostTradingWidget.jsx`, replacing them with static simulated `Ghost` markers.
+- **UI Sound Upgrades and Cleanup (2026-06-15):**
+  - **Sound Manager Update:** Updated sound references in `soundUtils.js` to point to `Generic_UI__Click#3mp3.mp3` for UI clicks, `WIN_SOUND_#1.mp3` for ghost wins, and `Quick_broom#2.mp3` for ghost losses.
+  - **Progress Tracking Cleanup:** Removed the duplicate root-level `progress.md` file and consolidated all documentation in `.agent-memory/progress.md`.
 - **L123 Phase 6 (AI Advisory Contract):**
   - **KnowledgeBaseLoader:** Created singleton to load patterns lazily and query top matching templates using symbol normalizations, regime, and score band.
   - **Microstructure Taxonomy:** Embedded table containing Liquidity Sweeps, Pinning, Push & Snap, Fake Breakouts, Whipsaws, Low Liquidity, and Multi-Asset Coordination definitions into prompts.
@@ -58,9 +68,8 @@
   - **FastAPI Routing & Streaming:** Updated FastApi schemas, backend settings, and Socket.IO emission loops to accept and route `oteo_ai_enabled`.
  
 ## Verification Status
+- `conda activate QuFLX-v2; pytest test_auto_ghost.py` -> ✅ passed (1 test clean in 0.32s)
 - `conda run -n QuFLX-v2 python -m unittest test_knowledge_base_retrieval.py` -> ✅ passed (5/5 tests clean)
-- `conda run -n QuFLX-v2 python test_auto_ghost.py` -> ✅ passed (all 8 smoke tests clean)
-- `conda run -n QuFLX-v2 python -m py_compile app/backend/main.py app/backend/api/analysis.py app/backend/services/analysis_service.py` -> ✅ passed
 - `npm --prefix app/frontend run build` -> ✅ passed (built successfully in 4.23s)
 - `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` -> ✅ passed (39/39 tests clean)
 - **Browser Subagent layout check** -> Navigated to `/analysis` route via TopBar AI dropdown and verified tabs, custom SVG charts, and interactive AI evaluation control panel -> ✅ verified.

@@ -55,6 +55,7 @@ export default function App() {
   const aiPulseEnabled = useSettingsStore((s) => s.aiPulseEnabled);
   const aiPulseIntervalSeconds = useSettingsStore((s) => s.aiPulseIntervalSeconds);
 
+
   useStreamConnection();
 
   // Connect Socket.IO on mount and start status polling

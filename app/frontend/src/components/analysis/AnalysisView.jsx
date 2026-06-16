@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useRiskStore } from '../../stores/useRiskStore.js';
+import { useNotificationStore } from '../../stores/useNotificationStore.js';
 import {
   TrendingUp,
   TrendingDown,
@@ -79,16 +80,6 @@ export default function AnalysisView() {
   // This ensures the WR info on the Z buttons updates when you switch ghost <-> live tabs.
   const currentZRegimeData = dataKind === 'ghost' ? (sessions.z_regime_ghost || zRegimeData || {}) : (sessions.z_regime_live || zRegimeData || {});
 
-  // Ai-Calibration state (local in-tab calibration timer + counters for Ghost Protocol)
-  const [calibMode, setCalibMode] = useState('trades'); // 'trades' | 'time'
-  const [calibTarget, setCalibTarget] = useState(30);
-  const [calibRunning, setCalibRunning] = useState(false);
-  const [calibStartTrades, setCalibStartTrades] = useState(0);
-  const [calibStartTime, setCalibStartTime] = useState(0);
-  const [calibElapsedMs, setCalibElapsedMs] = useState(0);
-  const [calibCollectedTrades, setCalibCollectedTrades] = useState(0);
-  const calibIntervalRef = useRef(null);
-
   const ghostTotalTrades = useRiskStore((s) => s.ghostTotalTrades);
 
   // Settings store hooks (called at top-level to satisfy Rules of Hooks)
@@ -134,159 +125,9 @@ export default function AnalysisView() {
     return () => document.removeEventListener('mousedown', clickOutside);
   }, []);
 
-  // Calibration timer effect (in-tab for Ghost Protocol calibration, references GlobalTimer concept)
-  // For time mode, we now primarily drive via the shared store + GlobalTimer (deep hook)
-  // This effect still runs for trades mode and as fallback/sync
-  useEffect(() => {
-    if (calibRunning) {
-      calibIntervalRef.current = setInterval(() => {
-        const now = Date.now();
-        const elapsed = now - calibStartTime;
-        setCalibElapsedMs(elapsed);
 
-        // For trades mode, live compute collected from risk store delta
-        if (calibMode === 'trades') {
-          const collected = Math.max(0, ghostTotalTrades - calibStartTrades);
-          setCalibCollectedTrades(collected);
-          // Auto stop if target reached
-          if (collected >= calibTarget) {
-            stopCalibration(true);
-          }
-        } else if (calibMode === 'time') {
-          // For time mode, read the authoritative elapsed from the GlobalTimer-driven store
-          const storeElapsed = useSettingsStore.getState().calibTimerElapsedMs || elapsed;
-          setCalibElapsedMs(storeElapsed);
-          setCalibCollectedTrades(0); // not used for time
 
-          // If the global timer (via store) triggered alert or we locally reached target, stop
-          const storeActive = useSettingsStore.getState().calibTimerActive;
-          const storeAlert = useSettingsStore.getState().calibTimerAlertTriggered;
-          if (!storeActive || storeAlert || (storeElapsed >= calibTarget * 60 * 1000)) {
-            stopCalibration(true);
-          }
-        }
-      }, 250);
-    } else if (calibIntervalRef.current) {
-      clearInterval(calibIntervalRef.current);
-      calibIntervalRef.current = null;
-    }
-    return () => {
-      if (calibIntervalRef.current) clearInterval(calibIntervalRef.current);
-    };
-  }, [calibRunning, calibStartTime, calibMode, calibTarget, ghostTotalTrades, calibStartTrades]);
 
-  // --- Ai-Calibration helpers (Ghost Protocol timer / counter) ---
-  function startCalibration() {
-    const currentTrades = ghostTotalTrades || 0;
-    setCalibStartTrades(currentTrades);
-    setCalibStartTime(Date.now());
-    setCalibElapsedMs(0);
-    setCalibCollectedTrades(0);
-
-    if (calibMode === 'time') {
-      // Deep hook: delegate time-based calibration to the shared GlobalTimer via store
-      // This makes the global stopwatch + alert UI drive the run (see GlobalTimer integration)
-      const { startCalibTimer } = useSettingsStore.getState();
-      startCalibTimer(calibTarget);
-      setCalibRunning(true);
-    } else {
-      setCalibRunning(true);
-    }
-  }
-
-  function stopCalibration(autoFromTarget = false) {
-    setCalibRunning(false);
-    if (calibIntervalRef.current) {
-      clearInterval(calibIntervalRef.current);
-      calibIntervalRef.current = null;
-    }
-
-    if (calibMode === 'time') {
-      // Stop the shared global timer when Ai-Cal time run ends
-      const { stopCalibTimer, resetCalibTimer } = useSettingsStore.getState();
-      stopCalibTimer();
-      // keep elapsed for final display until reset
-    }
-
-    // Capture final collected
-    const finalCollected = calibMode === 'trades' 
-      ? Math.max(0, (ghostTotalTrades || 0) - calibStartTrades)
-      : calibCollectedTrades;
-    setCalibCollectedTrades(finalCollected);
-
-    // Auto compute dynamic suggestions from current analysis data (z_regime_ghost)
-    computeDynamicSuggestionsFromData(finalCollected);
-  }
-
-  function resetCalibration() {
-    setCalibRunning(false);
-    if (calibIntervalRef.current) clearInterval(calibIntervalRef.current);
-    setCalibElapsedMs(0);
-    setCalibCollectedTrades(0);
-    setCalibStartTrades(0);
-    setCalibStartTime(0);
-  }
-
-  // Format helpers
-  const formatCalibTime = (ms) => {
-    const totalSec = Math.floor(ms / 1000);
-    const m = Math.floor(totalSec / 60).toString().padStart(2, '0');
-    const s = (totalSec % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  const progressPercent = calibMode === 'trades' 
-    ? Math.min(100, Math.round(((calibCollectedTrades || 0) / Math.max(1, calibTarget)) * 100))
-    : Math.min(100, Math.round((calibElapsedMs / (calibTarget * 60 * 1000)) * 100));
-
-  // Dynamic "AI" suggestions derived from existing z_regime_ghost data + recent analysis (no new backend needed for v1)
-  const [suggestedGates, setSuggestedGates] = useState(null);
-
-  function computeDynamicSuggestionsFromData(collectedTrades = 0) {
-    const zData = currentZRegimeData || {};
-    let bestRegimes = [];
-    let suggestedMinZ = -0.7;
-    let suggestedMaxZ = 1.1;
-    let suggestStable = true;
-
-    // Heuristic from the z_regime winrate data (the "5 optimal" per regime)
-    try {
-      const regimeScores = [];
-      Object.keys(zData).forEach(regime => {
-        const cuts = zData[regime] || [];
-        if (cuts.length > 0) {
-          // Pick the cutoff with highest wr
-          const bestCut = cuts.reduce((best, c) => (c.wr || 0) > (best.wr || 0) ? c : best, cuts[0]);
-          regimeScores.push({ regime, wr: bestCut.wr || 0, cut: bestCut.cutoff });
-        }
-      });
-      regimeScores.sort((a, b) => b.wr - a.wr);
-      bestRegimes = regimeScores.slice(0, 2).map(r => r.regime); // top 2 by WR
-      if (regimeScores.length > 0) {
-        const top = regimeScores[0];
-        // Bias z gates around the best cutoff for calibration narrowing
-        suggestedMinZ = Math.max(-2.0, (top.cut || 0) - 0.8);
-        suggestedMaxZ = Math.min(2.5, (top.cut || 0) + 0.6);
-      }
-    } catch (e) {
-      // fallback to reasonable OTC ghost values
-      bestRegimes = ['RANGE_BOUND', 'TREND_REVERSAL'];
-    }
-
-    if (bestRegimes.length === 0) bestRegimes = ['RANGE_BOUND', 'TREND_REVERSAL'];
-
-    const newSug = {
-      minZScoreEnabled: true,
-      minZScore: parseFloat(suggestedMinZ.toFixed(1)),
-      maxZScoreEnabled: true,
-      maxZScore: parseFloat(suggestedMaxZ.toFixed(1)),
-      allowedRegimes: bestRegimes,
-      requireRegimeStable: suggestStable,
-      note: `Derived from ${Object.keys(zData).length ? 'live z-regime analysis' : 'fallback'} after ${collectedTrades} ghost trades. Apply to narrow Ghost entries.`
-    };
-    setSuggestedGates(newSug);
-    return newSug;
-  }
 
   useEffect(() => {
     fetchData();
@@ -408,6 +249,15 @@ export default function AnalysisView() {
     chunkQueueRef.current = [];
     revokeAllVoiceUrls();
     try {
+      // Gather light context from recent AI advisories (Pulse/Suggestions) for the Grok deep analysis
+      const store = useSettingsStore.getState();
+      const notifStore = useNotificationStore.getState ? useNotificationStore.getState() : { notifications: [] };
+      const recentAdvisories = (notifStore.notifications || [])
+        .filter(n => (n.type === 'ai_pulse' || n.type === 'ai_advisory') && (Date.now() / 1000 - (n.timestamp || 0) < 7200))
+        .slice(0, 6)
+        .map(n => n.message);
+
+
       const res = await fetch('/api/analysis/run-ai-refinement', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -926,7 +776,7 @@ export default function AnalysisView() {
             activeTab === 'ai' ? 'text-[#ffb800]' : 'text-gray-500 hover:text-gray-300'
           }`}
         >
-          Ai-Calibration
+          AI Refinement
           {activeTab === 'ai' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ffb800]" />}
         </button>
       </div>
@@ -1045,7 +895,12 @@ export default function AnalysisView() {
                         <td className="p-4 font-mono font-bold text-gray-300">
                           <div className="flex items-center gap-2">
                             <span className={`h-2 w-2 rounded-full ${dataKind === 'ghost' ? 'bg-[#ffb800]' : 'bg-emerald-400'}`} />
-                            {s.session_id}
+                            <span className="truncate max-w-[150px]" title={s.session_id}>{s.session_id}</span>
+                            {dataKind === 'ghost' && (
+                              <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider" title="Ghost Session - simulated execution">
+                                Ghost
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="p-4 text-gray-400">
@@ -1535,172 +1390,6 @@ export default function AnalysisView() {
 
       {activeTab === 'ai' && (
         <div className="space-y-6">
-          {/* ===== Ai-Calibration / Ghost Protocol (new 3rd tab per spec) ===== */}
-          <div className="rounded-2xl border border-[#ffb800]/30 bg-[#14171d] p-5">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <div className="flex items-center gap-2 text-[#ffb800]">
-                  <Bot size={18} />
-                  <span className="text-sm font-black uppercase tracking-widest">Ai-Calibration — Ghost Protocol</span>
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1 max-w-prose">
-                  AI suggests &amp; instantly applies gates only to <span className="font-bold text-[#ffb800]">Ghost</span> executions (never live user balance or trades). Ghost mirrors user for realistic simulation.
-                  Run a calibration (N trades or timed via Global Timer Bar), review Z/Regime data, one-click apply.
-                </p>
-              </div>
-            </div>
-
-            {/* Protocol + Calibration Controls (wired) */}
-            <div className="grid gap-4 md:grid-cols-2 mb-4">
-              <div className="rounded-lg border border-white/5 bg-black/30 p-3">
-                <div className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-1">Active Ghost Protocol (customisable profile)</div>
-                <div className="flex gap-2 items-center">
-                  <select 
-                    className="flex-1 bg-[#25282f] text-xs p-2 rounded border border-white/10 font-bold"
-                    value={activeGhostProtocol || 'default'}
-                    onChange={(e) => {
-                      const key = e.target.value;
-                      const load = useSettingsStore.getState().loadGhostProtocol;
-                      if (load) load(key); else useSettingsStore.getState().setActiveGhostProtocol(key);
-                    }}
-                  >
-                    <option value="default">Default OTC Ghost</option>
-                    <option value="conservative">Conservative (high confluences)</option>
-                    <option value="momentum">Momentum Edge</option>
-                  </select>
-                  <button
-                    onClick={() => {
-                      const s = useSettingsStore.getState();
-                      const currentBundle = {
-                        name: 'Calibration ' + new Date().toISOString().slice(11,16),
-                        gates: {
-                          minZScoreEnabled: s.ghostMinZScoreEnabled,
-                          minZScore: s.ghostMinZScore,
-                          maxZScoreEnabled: s.ghostMaxZScoreEnabled,
-                          maxZScore: s.ghostMaxZScore,
-                          allowedRegimes: s.ghostAllowedRegimes || [],
-                          requireRegimeStable: s.ghostRequireRegimeStable
-                        },
-                        description: 'Saved during Ai-Calibration run'
-                      };
-                      const protocols = { ...(s.ghostProtocols || {}) };
-                      const key = 'proto_' + Date.now();
-                      protocols[key] = currentBundle;
-                      s.setGhostProtocols(protocols);
-                      s.setActiveGhostProtocol(key);
-                      alert('Saved current gates as new Ghost Protocol profile (persisted in settings).');
-                    }}
-                    className="text-[10px] px-3 py-1.5 rounded border border-white/10 hover:bg-white/5 font-bold"
-                  >
-                    Save Current
-                  </button>
-                </div>
-                <div className="text-[8px] text-emerald-400 mt-1">Mirrors aiProfiles/voice profiles. Load applies gates instantly.</div>
-                {/* Live surface of current active Ghost Protocol gates (from store) */}
-                <div className="mt-2 text-[8px] bg-[#1a1c22] p-1 rounded border border-white/5">
-                  <span className="text-gray-500">Active Gates:</span> Z [{ghostMinZScoreEnabled ? ghostMinZScore.toFixed(1) : '—'}…{ghostMaxZScoreEnabled ? ghostMaxZScore.toFixed(1) : '—'}] Regimes: {ghostRegimeGateEnabled ? ((ghostAllowedRegimes || []).join('+') || 'ALL') : 'OFF'}{ghostRegimeGateEnabled && ghostRequireRegimeStable ? ' (stable)' : ''}
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-white/5 bg-black/30 p-3">
-                <div className="text-[9px] font-black uppercase tracking-wider text-gray-500 mb-1">Calibration Run (wired to ghost trades + local timer)</div>
-                <div className="flex gap-2 text-xs mb-2">
-                  <button 
-                    onClick={() => { setCalibMode('trades'); setCalibTarget(30); startCalibration(); }} 
-                    disabled={calibRunning}
-                    className="flex-1 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded font-bold disabled:opacity-50"
-                  >
-                    Start 30-trade Calib
-                  </button>
-                  <button 
-                    onClick={() => { setCalibMode('time'); setCalibTarget(10); startCalibration(); }} 
-                    disabled={calibRunning}
-                    className="flex-1 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded font-bold disabled:opacity-50"
-                  >
-                    10 min Timed (refs GlobalTimer)
-                  </button>
-                  <button onClick={resetCalibration} className="px-2 py-1.5 text-rose-400 hover:text-rose-300">Reset</button>
-                </div>
-
-                {calibRunning || calibCollectedTrades > 0 ? (
-                  <div className="text-xs bg-[#1a1c22] p-2 rounded border border-white/5">
-                    <div>Mode: <span className="font-bold">{calibMode}</span> • Target: {calibTarget} {calibMode === 'trades' ? 'trades' : 'min'}</div>
-                    <div className="font-mono mt-1">Progress: {calibMode === 'trades' ? calibCollectedTrades : formatCalibTime(calibElapsedMs)} / {calibTarget} ({progressPercent}%)</div>
-                    {calibMode === 'time' && <div className="text-[8px] text-emerald-400">Driven by Global Timer (see top bar)</div>}
-                    <button onClick={() => stopCalibration()} className="mt-1 w-full py-1 text-xs bg-rose-500/20 text-rose-300 rounded">STOP &amp; COMPUTE SUGGESTIONS</button>
-                  </div>
-                ) : (
-                  <div className="text-[8px] text-gray-500">Collects delta from live ghostTotalTrades (RiskStore) or elapsed. Feeds dynamic z-regime suggestions. Uses GlobalTimer pattern for timed runs.</div>
-                )}
-              </div>
-            </div>
-
-            {/* Dynamic AI Suggested Gates + One-Click (now driven by analysis data + calibration) */}
-            <div className="rounded-lg border border-[#ffb800]/20 bg-[#1a1c22] p-4">
-              <div className="text-xs font-black uppercase tracking-wider text-[#ffb800] mb-2 flex justify-between">
-                <span>AI Suggested Gates (dynamic from z_regime_ghost + calibration data)</span>
-                <button 
-                  onClick={() => computeDynamicSuggestionsFromData(calibCollectedTrades)} 
-                  className="text-[9px] px-2 py-0.5 border border-white/10 rounded hover:bg-white/5"
-                >
-                  Recompute from Analysis
-                </button>
-              </div>
-
-              {suggestedGates ? (
-                <>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-3">
-                    <div>
-                      <div className="text-gray-400">Min Z-Score</div>
-                      <div className="font-mono font-black text-white">{suggestedGates.minZScore}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-400">Max Z-Score</div>
-                      <div className="font-mono font-black text-white">{suggestedGates.maxZScore}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-400">Allowed Regimes</div>
-                      <div className="font-bold text-emerald-300">{suggestedGates.allowedRegimes.join(', ')}</div>
-                    </div>
-                    <div>
-                      <div className="text-gray-400">Require Stable</div>
-                      <div className="font-bold">{suggestedGates.requireRegimeStable ? 'Yes' : 'No'}</div>
-                    </div>
-                  </div>
-                  <div className="text-[9px] text-gray-400 mb-2 italic">{suggestedGates.note}</div>
-                </>
-              ) : (
-                <div className="text-xs text-gray-400 mb-2">Run a calibration or click "Recompute from Analysis" to populate suggestions from live z-regime_ghost data.</div>
-              )}
-
-              <button
-                onClick={() => {
-                  const gatesToApply = suggestedGates || computeDynamicSuggestionsFromData(calibCollectedTrades);
-                  if (!gatesToApply) return;
-
-                  const setters = useSettingsStore.getState();
-                  setters.setGhostMinZScoreEnabled(!!gatesToApply.minZScoreEnabled);
-                  setters.setGhostMinZScore(gatesToApply.minZScore);
-                  setters.setGhostMaxZScoreEnabled(!!gatesToApply.maxZScoreEnabled);
-                  setters.setGhostMaxZScore(gatesToApply.maxZScore);
-                  setters.setGhostRegimeGateEnabled(true);
-                  setters.setGhostAllowedRegimes(gatesToApply.allowedRegimes || []);
-                  setters.setGhostRequireRegimeStable(!!gatesToApply.requireRegimeStable);
-
-                  setters.setGhostMinConfidenceEnabled(true);
-                  setters.setGhostMinConfidence(76);
-
-                  alert('Applied suggested gates to Ghost Controller (live in widget). Ghost Protocol active. Live user trades 100% unaffected.');
-                }}
-                className="w-full py-3 rounded-xl bg-[#ffb800] text-[#0c0f0f] font-black uppercase tracking-[1px] text-sm shadow hover:bg-[#ffb800]/90 active:scale-[0.985] transition"
-              >
-                ★ ONE-CLICK APPLY SUGGESTED GATES TO GHOST CONTROLLER
-              </button>
-              <p className="text-center text-[9px] text-gray-500 mt-1">Directly mutates only ghost* settings (z-score, regime, etc). Safe, reversible. Mirrors user sizing for ghost.</p>
-            </div>
-          </div>
-
-          {/* Original AI Refinement content continues below (kept for continuity) */}
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Left Column: Refinement Control Center */}
           <div className="space-y-6 lg:col-span-1">
@@ -1850,9 +1539,9 @@ export default function AnalysisView() {
             </div>
           </div>
 
-          {/* close the inner grid from Ai-Calibration injection */}
+          {/* close the inner grid */}
           </div>
-        {/* close space-y-6 from Ai-Calibration injection */}
+        {/* close space-y-6 */}
         </div>
       )}
 

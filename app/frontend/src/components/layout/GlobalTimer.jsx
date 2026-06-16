@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Clock, Timer, Play, Square, RotateCcw, Bell, BellRing } from 'lucide-react';
 import { soundManager } from '../../utils/soundUtils.js';
-import { useSettingsStore } from '../../stores/useSettingsStore.js';
 
 export default function GlobalTimer() {
   const [mode, setMode] = useState('utc'); // 'utc' | 'stopwatch'
@@ -18,17 +17,7 @@ export default function GlobalTimer() {
   const [activeAlertMinutes, setActiveAlertMinutes] = useState(null);
   const [alertTriggered, setAlertTriggered] = useState(false);
 
-  // Shared Calibration Timer from store - for deep hook with Ai-Calibration Ghost Protocol
-  // When active (from Ai-Cal tab time run), GlobalTimer drives the stopwatch + alerts, and shares elapsed
-  const {
-    calibTimerTargetMinutes,
-    calibTimerActive,
-    calibTimerElapsedMs,
-    calibTimerAlertTriggered,
-    setCalibTimerElapsedMs,
-    setCalibTimerAlertTriggered,
-    stopCalibTimer,
-  } = useSettingsStore();
+
 
   // UTC Clock update
   useEffect(() => {
@@ -47,11 +36,7 @@ export default function GlobalTimer() {
       const newElapsed = Date.now() - startTimeRef.current;
       setElapsedTime(newElapsed);
 
-      // Read directly from the store to avoid stale closure values
-      const freshActive = useSettingsStore.getState().calibTimerActive;
-      if (freshActive) {
-        useSettingsStore.getState().setCalibTimerElapsedMs(newElapsed);
-      }
+
     }, 10);
   };
 
@@ -80,58 +65,7 @@ export default function GlobalTimer() {
     }
   }, [elapsedTime, activeAlertMinutes, isRunning, alertTriggered]);
 
-  // Deep hook for Ai-Calibration: sync GlobalTimer with shared calib timer state
-  // When Ai-Cal starts a time-based calibration, this drives the global stopwatch + alert UI
-  // and writes elapsed/alert back to store so the Ai tab can observe progress without duplicate timer
-  useEffect(() => {
-    if (calibTimerActive) {
-      // Force stopwatch mode for calibration visibility
-      if (mode !== 'stopwatch') setMode('stopwatch');
 
-      const targetMs = (calibTimerTargetMinutes || 0) * 60 * 1000;
-
-      // Start the global stopwatch if not running
-      if (!isRunning) {
-        startStopwatch();
-      }
-
-      // Sync alert from target if not set
-      if (calibTimerTargetMinutes && activeAlertMinutes !== calibTimerTargetMinutes) {
-        setActiveAlertMinutes(calibTimerTargetMinutes);
-        setAlertTriggered(false);
-      }
-
-      // Sync local elapsed from store if store has value (for resume or external update)
-      if (calibTimerElapsedMs > 0 && Math.abs(elapsedTime - calibTimerElapsedMs) > 100) {
-        // Adjust the internal start ref to match store elapsed
-        startTimeRef.current = Date.now() - calibTimerElapsedMs;
-        setElapsedTime(calibTimerElapsedMs);
-      }
-
-      // If store says alert triggered, play and stop calib
-      if (calibTimerAlertTriggered && !alertTriggered) {
-        setAlertTriggered(true);
-        soundManager.playTimerAlert();
-        // Optionally auto stop calib here or let Ai tab handle
-      }
-
-      // If we reached target, update store and stop
-      if (targetMs > 0 && elapsedTime >= targetMs && !calibTimerAlertTriggered) {
-        setCalibTimerAlertTriggered(true);
-        setCalibTimerElapsedMs(elapsedTime);
-        // The Ai-Calibration tab's effect will see this and stop its local run + compute suggestions
-      }
-    } else {
-      // Unconditionally stop the stopwatch if it was running and calibration deactivated
-      if (isRunning) {
-        stopStopwatch();
-      }
-      // When calib deactivates, clear our local alert if it was for calib
-      if (activeAlertMinutes && !alertTime) {
-        // leave user alerts alone
-      }
-    }
-  }, [calibTimerActive, calibTimerTargetMinutes, calibTimerElapsedMs, calibTimerAlertTriggered, mode, isRunning, elapsedTime, activeAlertMinutes, alertTriggered]);
 
   const formatStopwatch = (ms) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -179,9 +113,7 @@ export default function GlobalTimer() {
           <span className={`font-mono text-lg font-black tracking-wider ${mode === 'utc' ? 'text-[#ffb800]' : 'text-emerald-400'}`}>
             {mode === 'utc' ? formatUTC(utcTime) : formatStopwatch(elapsedTime)}
           </span>
-          {calibTimerActive && (
-            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">CALIB</span>
-          )}
+
           
           {mode === 'stopwatch' && (
             <div className="flex items-center gap-1.5">

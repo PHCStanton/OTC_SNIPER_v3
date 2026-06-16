@@ -6,11 +6,11 @@ import { useSettingsStore } from '../stores/useSettingsStore.js';
 class SoundManager {
   constructor() {
     this.sounds = {
-      CLICK: new Audio('/AUDIO/UIClick-Clean_modern_UI_butt-Elevenlabs.mp3'),
+      CLICK: new Audio('/AUDIO/Generic_UI__Click_3.mp3'),
       GHOST_EXECUTE: new Audio('/AUDIO/GHOST_EXECUTE1.ogg'),
-      GHOST_WIN: new Audio('/AUDIO/GHOST_WIN2.ogg'),
-      GHOST_LOSS: new Audio('/AUDIO/GHOST_LOSS1.ogg'),
-      NOTIFICATION: new Audio('/AUDIO/NOTIFICATION_#2.mp3'),
+      GHOST_WIN: new Audio('/AUDIO/WIN_SOUND_1.mp3'),
+      GHOST_LOSS: new Audio('/AUDIO/Quick_broom_2.mp3'),
+      NOTIFICATION: new Audio('/AUDIO/NOTIFICATION_2.mp3'),
       TIMER_ALERT: new Audio('/AUDIO/iPhone_haptic.mp3'),
     };
 
