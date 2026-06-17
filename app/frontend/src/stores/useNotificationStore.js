@@ -6,7 +6,7 @@ export const useNotificationStore = create()(
     (set) => ({
       notifications: [],
 
-      addNotification: ({ type = 'info', message, timestamp }) => {
+      addNotification: ({ type = 'info', message, timestamp, suggestions = null }) => {
         const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
         set((state) => {
           const newNotif = {
@@ -14,6 +14,7 @@ export const useNotificationStore = create()(
             type,
             message,
             timestamp: timestamp || Date.now() / 1000,
+            suggestions,
             unread: true,
           };
           return {

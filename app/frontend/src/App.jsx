@@ -228,6 +228,7 @@ export default function App() {
         type: data.type || 'info',
         message: data.message,
         timestamp: data.timestamp,
+        suggestions: data.suggestions || null,
       });
 
       useToastStore.getState().addToast({

@@ -61,6 +61,11 @@ export const useAssetStore = create()(
           };
         }),
 
+      setStarredAssets: (starredAssets) =>
+        set({
+          starredAssets: Array.isArray(starredAssets) ? starredAssets : [],
+        }),
+
       addMultiChartAsset: (asset) =>
         set((state) => {
           if (state.multiChartAssets.includes(asset)) return state;

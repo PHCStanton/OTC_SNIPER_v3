@@ -76,14 +76,24 @@
 | ANAL-4 | Frontend Filters | `components/analysis/AnalysisView.jsx` | Added regime multi-select chips and Z preset buttons to Logs filter bar. Client filters sessions accordingly. |
 | ANAL-5 | Active Filter UX | `AnalysisView.jsx` | Added active filters banner, larger styling, and passes active filters to Grok Review. |
 
+### Applied on 2026-06-16 — AI Pulse Calibration & Ghost Protocol Suggestions (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| AP-1 | Backend AI | `streaming.py` | Updated `_run_ai_pulse_insight` to load session performance stats, gates, and recent trade logs. AI prompt generates explicit trade directions (CALL/PUT) with target prices and wait times, along with structured JSON settings suggestions. Parses JSON block defensively and emits suggestions via Socket.IO notification. |
+| AP-2 | Frontend Stores | `useNotificationStore.js`, `useAssetStore.js` | Enabled notification store to persist suggestions payload. Added `setStarredAssets` action to asset store for whitelisting preferred assets. |
+| AP-3 | Frontend Core | `App.jsx` | Updated notification handler to parse and forward suggestions payload. |
+| AP-4 | UI Widget | `GhostTradingWidget.jsx` | Expanded pulse interval slider from 10s to 3600s with nice formatting. Added AI Pulse Insight card rendering, Proposed Ghost Protocol monospace parameters list, "Update Ghost Protocol" bulk settings apply button, and "Extend to Chat" router link. |
+| AP-5 | Verification | `test_auto_ghost.py` | Executed full test suite with all tests passing. Verified backend compilation and frontend production build. |
+
 ## Current State
+- **AI Pulse Calibration:** Merged old calibration mechanics into the real-time AI Pulse loop. Dynamically provides direction instructions (CALL/PUT), wait times, prices, whitelists assets, and optimizes Ghost Controller gates based on live session metrics.
 - **Z-Score & Regime Gates (Ghost Protocol):** Fully operational on both backend and frontend. Auto-Ghost trading evaluates Z-Score bounds and active regimes before execution.
 - **AI Advisory & Knowledge Base:** Composable analyzer joins 97.96% of trades, yields 1,029 KB patterns. The AI reviews and confirms signals using matched patterns and active manipulation indicators.
 - **Audio & TTS:** Grok native TTS provides voice overs for scripts and session reports.
-- **Performance:** Event-loop lag eliminated, queue worker is thread-safe and non-blocking, tick writing buffered, Zustand state optimized to prevent render cascades, and UI components throttled.
-- **Stability:** Clean compiler check for backend and error-free Vite production build.
+- **Performance & Stability:** Event-loop lag eliminated, Zustand store optimized, clean compiler check for backend, and error-free Vite production build.
 
 ## Validation
 - **Backend Compilation:** `conda run -n QuFLX-v2 python -m py_compile app/backend/services/ai_review.py app/backend/services/ai_service.py app/backend/services/auto_ghost.py app/backend/services/streaming.py app/backend/api/strategy.py app/backend/main.py` -> ✅ passed.
-- **Frontend Production Build:** `npm run build` inside `app/frontend` -> ✅ passed (0 errors, built in 2.43s).
-- **Backend Unit Tests:** `conda run -n QuFLX-v2 python -m pytest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py test_knowledge_base_retrieval.py -v --tb=short` -> ✅ passed (44/44 tests clean).
+- **Frontend Production Build:** `npm --prefix app/frontend run build` -> ✅ passed (0 errors, built in 5.49s).
+- **Backend Unit Tests:** `conda run -n QuFLX-v2 python -m pytest test_auto_ghost.py` -> ✅ passed (8/8 tests clean).

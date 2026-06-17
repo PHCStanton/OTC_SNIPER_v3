@@ -4,6 +4,9 @@ import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { useTradingStore } from '../../stores/useTradingStore.js';
+import { useNotificationStore } from '../../stores/useNotificationStore.js';
+import { useLayoutStore } from '../../stores/useLayoutStore.js';
+import { useAIStore } from '../../stores/useAIStore.js';
 import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award, ChevronDown } from 'lucide-react';
 import { Tooltip } from './StitchComponents.jsx';
 
@@ -41,6 +44,13 @@ const GHOST_ICONS = {
   'spin.gif': spin,
   'weird.gif': weird,
   'wobble.gif': wobble,
+};
+
+const formatInterval = (sec) => {
+  if (sec < 60) return `${sec}s`;
+  const mins = Math.floor(sec / 60);
+  const remainingSecs = sec % 60;
+  return remainingSecs > 0 ? `${mins}m ${remainingSecs}s` : `${mins}m`;
 };
 
 export default function GhostTradingWidget() {
@@ -129,6 +139,66 @@ export default function GhostTradingWidget() {
     } finally {
       setRequestingInsight(false);
     }
+  };
+
+  const notifications = useNotificationStore((s) => s.notifications);
+  const latestPulse = notifications.find(
+    (n) => n.type === 'ai_pulse' || n.type === 'ai_advisory'
+  );
+
+  const handleUpdateGhostProtocol = (suggestions) => {
+    if (!suggestions) return;
+
+    if (suggestions.ghostMinConfidence !== undefined) setGhostMinConfidence(suggestions.ghostMinConfidence);
+    if (suggestions.ghostMinConfidenceEnabled !== undefined) setGhostMinConfidenceEnabled(suggestions.ghostMinConfidenceEnabled);
+    if (suggestions.ghostMaxConfidence !== undefined) setGhostMaxConfidence(suggestions.ghostMaxConfidence);
+    if (suggestions.ghostMaxConfidenceEnabled !== undefined) setGhostMaxConfidenceEnabled(suggestions.ghostMaxConfidenceEnabled);
+    
+    if (suggestions.autoGhostManipulationSeverityThreshold !== undefined) setAutoGhostManipulationSeverityThreshold(suggestions.autoGhostManipulationSeverityThreshold);
+    if (suggestions.autoGhostBlockOnManipulation !== undefined) setAutoGhostBlockOnManipulation(suggestions.autoGhostBlockOnManipulation);
+    
+    if (suggestions.ghostMinZScore !== undefined) setGhostMinZScore(suggestions.ghostMinZScore);
+    if (suggestions.ghostMinZScoreEnabled !== undefined) setGhostMinZScoreEnabled(suggestions.ghostMinZScoreEnabled);
+    if (suggestions.ghostMaxZScore !== undefined) setGhostMaxZScore(suggestions.ghostMaxZScore);
+    if (suggestions.ghostMaxZScoreEnabled !== undefined) setGhostMaxZScoreEnabled(suggestions.ghostMaxZScoreEnabled);
+    
+    if (suggestions.ghostRegimeGateEnabled !== undefined) setGhostRegimeGateEnabled(suggestions.ghostRegimeGateEnabled);
+    if (suggestions.ghostRequireRegimeStable !== undefined) setGhostRequireRegimeStable(suggestions.ghostRequireRegimeStable);
+    if (suggestions.ghostAllowedRegimes !== undefined) setGhostAllowedRegimes(suggestions.ghostAllowedRegimes);
+    
+    if (suggestions.ghostAmount !== undefined) setGhostAmount(suggestions.ghostAmount);
+    if (suggestions.autoGhostExpirationSeconds !== undefined) setAutoGhostExpirationSeconds(suggestions.autoGhostExpirationSeconds);
+    if (suggestions.ghostMaxTradesPerTimeframe !== undefined) setGhostMaxTradesPerTimeframe(suggestions.ghostMaxTradesPerTimeframe);
+    if (suggestions.ghostTimeframeSeconds !== undefined) setGhostTimeframeSeconds(suggestions.ghostTimeframeSeconds);
+
+    let starredAddedCount = 0;
+    if (Array.isArray(suggestions.whitelistAssets)) {
+      const currentStarred = useAssetStore.getState().starredAssets;
+      const nextStarred = [...currentStarred];
+      suggestions.whitelistAssets.forEach((asset) => {
+        if (!nextStarred.includes(asset)) {
+          nextStarred.push(asset);
+          starredAddedCount++;
+        }
+      });
+      if (starredAddedCount > 0) {
+        useAssetStore.getState().setStarredAssets(nextStarred);
+      }
+    }
+
+    useToastStore.getState().addToast({
+      type: 'success',
+      message: `Ghost Protocol updated! Applied settings & starred ${starredAddedCount} assets.`,
+      duration: 4000,
+    });
+  };
+
+  const handleExtendToChat = (insightMessage) => {
+    if (!insightMessage) return;
+    const formattedDraft = `Regarding your recent AI Pulse update: "${insightMessage}"\n\nCould you give me more context on this setup, what confluences to look for, and why these Ghost Protocol values are recommended?`;
+    useAIStore.getState().setDraft(formattedDraft);
+    useLayoutStore.getState().setActiveView('ai');
+    setIsOpen(false);
   };
 
   const [isOpen, setIsOpen] = useState(false);
@@ -714,13 +784,13 @@ export default function GhostTradingWidget() {
                       Pulse Interval
                     </span>
                     <span className="text-[10px] font-black font-mono text-white">
-                      {aiPulseIntervalSeconds}s
+                      {formatInterval(aiPulseIntervalSeconds)}
                     </span>
                   </div>
                   <input
                     type="range"
-                    min="30"
-                    max="300"
+                    min="10"
+                    max="3600"
                     step="10"
                     disabled={!aiPulseEnabled}
                     value={aiPulseIntervalSeconds}
@@ -766,6 +836,72 @@ export default function GhostTradingWidget() {
                   {requestingInsight ? 'Requesting Insight...' : 'Request Manual Insight'}
                 </button>
               </div>
+
+              {/* AI Pulse Insight Display */}
+              {latestPulse && (
+                <div className="space-y-3 border-t border-white/5 pt-3 mt-3">
+                  <div className="rounded-xl bg-[#25282f]/30 border border-white/5 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5 text-[#ffb800] text-[9px] font-black uppercase tracking-wider">
+                        <Zap size={12} className="fill-current" />
+                        AI Pulse Insight
+                      </div>
+                      <span className="text-[8px] font-bold text-gray-500 uppercase">
+                        {new Date(latestPulse.timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-gray-300 font-medium leading-relaxed mb-3 whitespace-pre-wrap select-text">
+                      {latestPulse.message}
+                    </p>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleExtendToChat(latestPulse.message)}
+                        className="w-full h-7 rounded bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/5 text-[9px] font-black uppercase tracking-wider transition-colors flex items-center justify-center gap-1"
+                      >
+                        Extend to Chat
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Suggestions block */}
+                  {latestPulse.suggestions && Object.keys(latestPulse.suggestions).length > 0 && (
+                    <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-3">
+                      <div className="text-[#ffb800] text-[9px] font-black uppercase tracking-wider mb-2">
+                        Proposed Ghost Protocol
+                      </div>
+                      
+                      <div className="space-y-1.5 text-[9px] font-bold text-gray-400 mb-3 font-mono">
+                        {latestPulse.suggestions.ghostMinConfidence !== undefined && (
+                          <div>• MIN CONFIDENCE: <span className="text-white">{latestPulse.suggestions.ghostMinConfidence}%</span></div>
+                        )}
+                        {latestPulse.suggestions.ghostAllowedRegimes && (
+                          <div>• REGIMES: <span className="text-white">{latestPulse.suggestions.ghostAllowedRegimes.join(', ')}</span></div>
+                        )}
+                        {latestPulse.suggestions.ghostMinZScore !== undefined && (
+                          <div>• MIN Z-SCORE: <span className="text-white">{latestPulse.suggestions.ghostMinZScore}</span></div>
+                        )}
+                        {latestPulse.suggestions.autoGhostManipulationSeverityThreshold !== undefined && (
+                          <div>• MANIP THRESHOLD: <span className="text-white">{latestPulse.suggestions.autoGhostManipulationSeverityThreshold}</span></div>
+                        )}
+                        {latestPulse.suggestions.whitelistAssets && latestPulse.suggestions.whitelistAssets.length > 0 && (
+                          <div>• WHITELIST ASSETS: <span className="text-[#ffb800]">{latestPulse.suggestions.whitelistAssets.map(a => a.replace('_otc', ' OTC').toUpperCase()).join(', ')}</span></div>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateGhostProtocol(latestPulse.suggestions)}
+                        className="w-full h-8 rounded bg-[#ffb800] hover:bg-white text-black font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-[#ffb800]/10"
+                      >
+                        <Zap size={11} className="fill-current" />
+                        Update Ghost Protocol
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

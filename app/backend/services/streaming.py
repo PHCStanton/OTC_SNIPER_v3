@@ -570,11 +570,55 @@ class StreamingService:
         """Gather active asset metrics and request a real-time AI insight."""
         from .ai_service import get_ai_service
         from ..models.ai_models import AIChatRequest, AIMessage
+        from .analysis_service import get_analysis_service
+        import re
+        import json
 
         ai_service = get_ai_service()
         if not ai_service.status().enabled:
             return
 
+        # Fetch recent session trades for context (timeframe based on ai_pulse_interval_seconds)
+        session_id = self.auto_ghost._session_id
+        analysis_svc = get_analysis_service()
+        session_dir = analysis_svc.settings.data_dir / "ghost_trades" / "sessions"
+        filepath = session_dir / f"{session_id}.jsonl"
+        
+        trades = []
+        if session_id and filepath.exists():
+            try:
+                session_data = analysis_svc.parse_session_file(filepath, "ghost")
+                trades = session_data.get("trades", [])
+            except Exception as e:
+                logger.warning(f"Error parsing session file for AI Pulse: {e}")
+
+        # Filter trades that occurred within the current pulse timeframe
+        interval = max(10, self.auto_ghost.config.ai_pulse_interval_seconds)
+        now_ts = time.time()
+        recent_trades = [t for t in trades if now_ts - t.get("timestamp", 0.0) <= interval]
+        
+        is_insufficient = False
+        # Fallback if no recent trades: take last 10 session trades
+        if not recent_trades:
+            recent_trades = trades[-10:]
+            # Mark insufficient if overall session has fewer than 3 trades
+            is_insufficient = len(trades) < 3
+
+        trades_str_list = []
+        for idx, t in enumerate(recent_trades):
+            entry_ctx = t.get("entry_context") or {}
+            market_ctx = entry_ctx.get("market_context") or {}
+            manip = entry_ctx.get("manipulation") or {}
+            max_sev = max(manip.values()) if manip and manip.values() else 0.0
+            
+            trades_str_list.append(
+                f"- Trade {idx+1}: Asset={t.get('asset')}, Direction={t.get('direction')}, Outcome={t.get('outcome')}, "
+                f"PnL={t.get('pnl')}, Regime={t.get('regime_label', 'UNKNOWN')}, Z-Score={market_ctx.get('z_score', 'N/A')}, "
+                f"Manipulation Severity={max_sev:.2f}"
+            )
+        recent_trades_str = "\n".join(trades_str_list) if trades_str_list else "No trades recorded."
+
+        # Active asset summaries
         asset_summaries = []
         for asset in sorted(self._allowed_assets):
             if asset in self._oteo_engines:
@@ -599,18 +643,52 @@ class StreamingService:
 
         summaries_str = "\n".join(asset_summaries)
 
+        # Retrieve current configuration
+        config = self.auto_ghost.config
+        allowed_regimes = config.allowed_regimes or []
+        min_z = config.min_zscore if config.min_zscore_enabled else "Disabled"
+        max_z = config.max_zscore if config.max_zscore_enabled else "Disabled"
+        manip_threshold = config.manipulation_severity_threshold if config.block_on_manipulation else "Disabled"
+        min_conf = config.min_confidence if config.min_confidence_enabled else "Disabled"
+        max_conf = config.max_confidence if config.max_confidence_enabled else "Disabled"
+
         system_msg = (
-            "You are OTC SNIPER's real-time AI market pulse assistant. "
-            "You analyze the current active market state summary and write a highly informative, concise insight. "
-            "Point out specific conditions, spotted manipulation severity to watch out for (asset specific), "
-            "or potential upcoming trade direction entries with exiries. "
-            "Keep the entire output under 65 words. Tone should be professional, alert, and actionable."
+            "You are OTC SNIPER's real-time AI market pulse and calibration assistant.\n"
+            "Your job is to write a highly informative, concise market insight and recommend optimizations for the Ghost Controller gate settings.\n\n"
+            "CRITICAL INSTRUCTIONS:\n"
+            "1. Output a user-facing text insight message. Detail the current market state, spotted asset-specific manipulation, and provide EXPLICIT trade direction guidance (CALL/PUT) with target price levels/ranges and estimated wait times (e.g. 'wait 2 mins for pullback to 1.0850'). Keep this message under 75 words. Tone must be professional, alert, and highly actionable.\n"
+            "2. If you see recurring losses or clear patterns under certain conditions (e.g. low win rate in CHOPPY regime, low Z-scores, high manipulation), suggest gate adjustments for the Ghost Controller. Format the suggested adjustments inside a strict JSON code block:\n"
+            "```json\n"
+            "{\n"
+            "  \"ghostMinConfidence\": 80,\n"
+            "  \"ghostMinConfidenceEnabled\": true,\n"
+            "  \"ghostAllowedRegimes\": [\"RANGE_BOUND\", \"TREND_PULLBACK\"],\n"
+            "  \"ghostRegimeGateEnabled\": true,\n"
+            "  \"autoGhostManipulationSeverityThreshold\": 0.35,\n"
+            "  \"ghostMinZScore\": -0.8,\n"
+            "  \"ghostMinZScoreEnabled\": true,\n"
+            "  \"whitelistAssets\": [\"EURUSD_otc\"]\n"
+            "}\n"
+            "```\n"
+            "Only suggest parameters that need changing. Do NOT include unchanged parameters. Whitelisted assets under 'whitelistAssets' will be starred/favorited in the UI.\n"
+            "3. If there is insufficient data to make reliable gate suggestions (e.g., you marked it as insufficient), do not output suggested settings in the JSON block (use '{}' or omit) and explicitly state in the message text that you are waiting for more trade results to calibrate."
         )
 
         user_msg = (
             f"Active OTC Asset Data Summaries:\n"
             f"{summaries_str}\n\n"
-            f"Formulate a brief market pulse update based on this data."
+            f"Current Controller Gates:\n"
+            f"- Allowed Regimes: {allowed_regimes} (Regime Gate Enabled: {config.regime_gate_enabled}, Require Regime Stable: {config.require_regime_stable})\n"
+            f"- Min Z-Score: {min_z}, Max Z-Score: {max_z}\n"
+            f"- Manipulation Gate Enabled: {config.block_on_manipulation} (Threshold: {manip_threshold})\n"
+            f"- Confidence Bounds: Min={min_conf}, Max={max_conf}\n\n"
+            f"Active Session Performance:\n"
+            f"- Total Session Trades: {self.auto_ghost._session_trade_count}\n"
+            f"- Win/Loss/PnL: Wins={self.auto_ghost._session_wins}, Losses={self.auto_ghost._session_losses}, PnL=${self.auto_ghost._session_pnl:.2f}\n"
+            f"- Data Sufficiency Flag: {'INSUFFICIENT (Waiting for more trades)' if is_insufficient else 'SUFFICIENT'}\n\n"
+            f"Recent Session Trades under observation (Last {interval}s lookback window):\n"
+            f"{recent_trades_str}\n\n"
+            f"Formulate a brief market pulse update and calibrate settings suggestions if appropriate."
         )
 
         chat_req = AIChatRequest(
@@ -624,11 +702,28 @@ class StreamingService:
         res = await ai_service.chat(chat_req)
         pulse_insight = res.text.strip()
 
-        logger.info("AI Pulse Insight generated: %s", pulse_insight)
+        logger.info("AI Pulse Insight response received: %s", pulse_insight)
+
+        # Defensively parse the JSON suggestions block
+        suggestions = {}
+        clean_insight = pulse_insight
+
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', pulse_insight, re.DOTALL | re.IGNORECASE)
+        if not json_match:
+            json_match = re.search(r'(\{.*?\})', pulse_insight, re.DOTALL)
+
+        if json_match:
+            try:
+                json_str = json_match.group(1).strip()
+                suggestions = json.loads(json_str)
+                clean_insight = pulse_insight.replace(json_match.group(0), "").strip()
+            except Exception as parse_err:
+                logger.warning(f"Failed to parse AI pulse suggestions JSON: {parse_err}")
 
         if self.sio:
             await self.sio.emit("notification", {
                 "type": "ai_pulse",
-                "message": pulse_insight,
+                "message": clean_insight,
                 "timestamp": time.time(),
+                "suggestions": suggestions or None,
             })
