@@ -5,7 +5,7 @@ import { useState } from 'react';
 import {
   Target, Bot, Ghost, Gauge, Volume2, LayoutGrid,
   ChevronDown, ShieldAlert, Activity, Zap,
-  RefreshCcw, Save, Timer, TrendingUp, Eye, Layers
+  RefreshCcw, Save, Timer, TrendingUp, Eye, Layers, Bell
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { SectionCard, InputGroup, NumberInput, MiniModule, Tooltip } from '../shared/StitchComponents.jsx';
@@ -90,6 +90,8 @@ export default function AppSettings() {
     setUiSoundsEnabled,
     tradingSoundsEnabled,
     setTradingSoundsEnabled,
+    notificationSoundsEnabled,
+    setNotificationSoundsEnabled,
     showGlobalTimer,
     setShowGlobalTimer,
 
@@ -130,8 +132,8 @@ export default function AppSettings() {
         </div>
       </div>
 
-      {/* Quick Toggles — Interface Sounds, Trading Events, Global Timer Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Quick Toggles — Interface Sounds, Notification Sounds, Trading Events, Global Timer Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
           <div className="flex items-center gap-4">
             <Volume2 className="text-gray-500" size={20} />
@@ -145,6 +147,21 @@ export default function AppSettings() {
             className={`h-5 w-10 rounded-full transition-colors ${uiSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
           >
             <div className={`h-3 w-3 rounded-full bg-white transition-transform ${uiSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+        <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">
+          <div className="flex items-center gap-4">
+            <Bell className="text-gray-500" size={20} />
+            <div className="flex items-center gap-1.5">
+              <p className="text-[11px] font-black uppercase tracking-widest text-white">Notification Sounds</p>
+              <Tooltip content="Audible alerts triggered when receiving AI advisory updates or system notices" />
+            </div>
+          </div>
+          <button
+            onClick={() => setNotificationSoundsEnabled(!notificationSoundsEnabled)}
+            className={`h-5 w-10 rounded-full transition-colors ${notificationSoundsEnabled ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+          >
+            <div className={`h-3 w-3 rounded-full bg-white transition-transform ${notificationSoundsEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         </div>
         <div className="rounded-xl bg-[#25282f]/30 p-5 flex items-center justify-between border border-white/5">

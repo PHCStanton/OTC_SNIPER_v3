@@ -49,8 +49,8 @@ class SoundManager {
   }
 
   playNotification() {
-    const { uiSoundsEnabled } = useSettingsStore.getState();
-    if (uiSoundsEnabled) {
+    const { notificationSoundsEnabled } = useSettingsStore.getState();
+    if (notificationSoundsEnabled) {
       this._play('NOTIFICATION');
     }
   }

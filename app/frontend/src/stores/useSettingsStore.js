@@ -111,6 +111,7 @@ export const SETTINGS_DEFAULTS = {
   },
   uiSoundsEnabled: true,
   tradingSoundsEnabled: true,
+  notificationSoundsEnabled: true,
   showGlobalTimer: false,
 };
 
@@ -236,6 +237,7 @@ export function validateSettings(input = {}) {
     },
     uiSoundsEnabled: toBoolean(input.uiSoundsEnabled, SETTINGS_DEFAULTS.uiSoundsEnabled),
     tradingSoundsEnabled: toBoolean(input.tradingSoundsEnabled, SETTINGS_DEFAULTS.tradingSoundsEnabled),
+    notificationSoundsEnabled: toBoolean(input.notificationSoundsEnabled, SETTINGS_DEFAULTS.notificationSoundsEnabled),
     showGlobalTimer: toBoolean(input.showGlobalTimer, SETTINGS_DEFAULTS.showGlobalTimer),
   };
 }
@@ -383,6 +385,7 @@ export const useSettingsStore = create()(
       })),
       setUiSoundsEnabled: (val) => commitSettingsPatch(set, { uiSoundsEnabled: val }),
       setTradingSoundsEnabled: (val) => commitSettingsPatch(set, { tradingSoundsEnabled: val }),
+      setNotificationSoundsEnabled: (val) => commitSettingsPatch(set, { notificationSoundsEnabled: val }),
       setShowGlobalTimer: (val) => commitSettingsPatch(set, { showGlobalTimer: val }),
     }),
     {
