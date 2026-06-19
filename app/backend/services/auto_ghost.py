@@ -92,6 +92,7 @@ class AutoGhostService:
         self._trade_timestamps: list[float] = []
         self._last_reject_reason_by_asset: dict[str, str] = {}
         self._reject_counts: dict[str, int] = {}
+        self._session_trades: list[dict[str, Any]] = []
 
     def _record_reject(self, asset: str, reason: str) -> None:
         self._last_reject_reason_by_asset[asset] = reason
@@ -220,6 +221,7 @@ class AutoGhostService:
             self._consecutive_losses.clear()
             self._condition_stats.clear()
             self._session_pnl = 0.0
+            self._session_trades = []
             self._session_trade_count = 0
             self._session_wins = 0
             self._session_losses = 0
@@ -239,6 +241,30 @@ class AutoGhostService:
             self._pending_signals.clear()
         return self.status
  
+    @property
+    def has_premium_hurst(self) -> bool:
+        if not hasattr(self, "_has_premium_hurst"):
+            if getattr(self, "extension_manager", None) is not None:
+                self._has_premium_hurst = any(
+                    ext.__class__.__name__ == "HurstAdaptiveExpiry"
+                    for ext in self.extension_manager.get_active_extensions()
+                )
+            else:
+                return False
+        return self._has_premium_hurst
+
+    @property
+    def has_elite_hurst(self) -> bool:
+        if not hasattr(self, "_has_elite_hurst"):
+            if getattr(self, "extension_manager", None) is not None:
+                self._has_elite_hurst = any(
+                    ext.__class__.__name__ == "HurstAiNoise"
+                    for ext in self.extension_manager.get_active_extensions()
+                )
+            else:
+                return False
+        return self._has_elite_hurst
+
     @property
     def status(self) -> dict[str, Any]:
         return {
@@ -275,8 +301,8 @@ class AutoGhostService:
             "auto_ghost_min_adaptive_expiry": self.config.min_adaptive_expiry,
             "auto_ghost_hurst_min_scale_cutoff": self.config.hurst_min_scale_cutoff,
             "auto_ghost_hurst_ai_confidence_threshold": self.config.hurst_ai_confidence_threshold,
-            "hasPremiumHurst": any(ext.__class__.__name__ == "HurstAdaptiveExpiry" for ext in self.extension_manager.get_active_extensions()) if getattr(self, "extension_manager", None) is not None else False,
-            "hasEliteHurst": any(ext.__class__.__name__ == "HurstAiNoise" for ext in self.extension_manager.get_active_extensions()) if getattr(self, "extension_manager", None) is not None else False,
+            "hasPremiumHurst": self.has_premium_hurst,
+            "hasEliteHurst": self.has_elite_hurst,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -302,9 +328,24 @@ class AutoGhostService:
         *,
         asset: str | None = None,
         entry_context: dict[str, Any] | None = None,
+        direction: str | None = None,
     ) -> None:
         self._session_trade_count += 1
         self._session_pnl += profit
+        now = unix_time()
+
+        # Cache completed trade context in memory for AI Pulse
+        self._session_trades.append({
+            "timestamp": now,
+            "asset": asset,
+            "direction": direction or "unknown",
+            "outcome": outcome,
+            "pnl": profit,
+            "regime_label": entry_context.get("regime_label", "UNKNOWN") if entry_context else "UNKNOWN",
+            "entry_context": entry_context,
+        })
+        if len(self._session_trades) > 200:
+            self._session_trades.pop(0)
         now = unix_time()
 
         if outcome == "win":

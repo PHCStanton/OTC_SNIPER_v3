@@ -6,6 +6,7 @@ import asyncio
 import logging
 import time
 import statistics
+from collections import deque
 from typing import List, Optional
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class PerformanceMonitor:
         
         # Metrics
         self.loop_lag = 0.0
-        self.processing_durations: List[float] = []
+        self.processing_durations: deque = deque(maxlen=200)
         self.tick_count = 0
         self.emit_count = 0
         self.dropped_count = 0
@@ -40,9 +41,6 @@ class PerformanceMonitor:
         """Record the duration of a single tick processing event."""
         self.tick_count += 1
         self.processing_durations.append(duration)
-        # Bounded sliding window
-        if len(self.processing_durations) > 200:
-            self.processing_durations.pop(0)
 
     def record_emit(self):
         """Record a Socket.IO emission event."""

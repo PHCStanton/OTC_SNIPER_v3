@@ -21,39 +21,7 @@ const VALID_TRADE_OUTCOMES = new Set(['win', 'loss', 'void']);
 export default function App() {
   const dashboardMode = useLayoutStore((s) => s.dashboardMode);
   const { setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType } = useOpsStore();
-  const oteoLevel2Enabled = useSettingsStore((s) => s.oteoLevel2Enabled);
-  const oteoLevel3Enabled = useSettingsStore((s) => s.oteoLevel3Enabled);
-  const oteoAiEnabled = useSettingsStore((s) => s.oteoAiEnabled);
-  const ghostAmount = useSettingsStore((s) => s.ghostAmount);
-  const autoGhostEnabled = useSettingsStore((s) => s.autoGhostEnabled);
-  const autoGhostExpirationSeconds = useSettingsStore((s) => s.autoGhostExpirationSeconds);
-  const autoGhostMaxConcurrentTrades = useSettingsStore((s) => s.autoGhostMaxConcurrentTrades);
-  const autoGhostPerAssetCooldownSeconds = useSettingsStore((s) => s.autoGhostPerAssetCooldownSeconds);
-  const autoGhostMaxSessionTrades = useSettingsStore((s) => s.autoGhostMaxSessionTrades);
-  const autoGhostMaxDrawdownAmount = useSettingsStore((s) => s.autoGhostMaxDrawdownAmount);
-  const autoGhostDrawdownCooldownSeconds = useSettingsStore((s) => s.autoGhostDrawdownCooldownSeconds);
-  const autoGhostMinimumPayout = useSettingsStore((s) => s.autoGhostMinimumPayout);
-  const autoGhostManipulationSeverityThreshold = useSettingsStore((s) => s.autoGhostManipulationSeverityThreshold);
-  const autoGhostBlockOnManipulation = useSettingsStore((s) => s.autoGhostBlockOnManipulation);
-  const ghostMaxTradesPerTimeframe = useSettingsStore((s) => s.ghostMaxTradesPerTimeframe);
-  const ghostTimeframeSeconds = useSettingsStore((s) => s.ghostTimeframeSeconds);
-  const ghostMinConfidence = useSettingsStore((s) => s.ghostMinConfidence);
-  const ghostMinConfidenceEnabled = useSettingsStore((s) => s.ghostMinConfidenceEnabled);
-  const ghostMaxConfidence = useSettingsStore((s) => s.ghostMaxConfidence);
-  const ghostMaxConfidenceEnabled = useSettingsStore((s) => s.ghostMaxConfidenceEnabled);
-  const oteoAiExecutionMode = useSettingsStore((s) => s.oteoAiExecutionMode);
-  const ghostMinZScore = useSettingsStore((s) => s.ghostMinZScore);
-  const ghostMinZScoreEnabled = useSettingsStore((s) => s.ghostMinZScoreEnabled);
-  const ghostMaxZScore = useSettingsStore((s) => s.ghostMaxZScore);
-  const ghostMaxZScoreEnabled = useSettingsStore((s) => s.ghostMaxZScoreEnabled);
-  const ghostRegimeGateEnabled = useSettingsStore((s) => s.ghostRegimeGateEnabled);
-  const ghostAllowedRegimes = useSettingsStore((s) => s.ghostAllowedRegimes);
-  const ghostRequireRegimeStable = useSettingsStore((s) => s.ghostRequireRegimeStable);
 
-  // New AI advisory settings
-  const aiTradeInterval = useSettingsStore((s) => s.aiTradeInterval);
-  const aiPulseEnabled = useSettingsStore((s) => s.aiPulseEnabled);
-  const aiPulseIntervalSeconds = useSettingsStore((s) => s.aiPulseIntervalSeconds);
 
 
   useStreamConnection();
@@ -259,91 +227,64 @@ export default function App() {
   }, [setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType]);
 
   useEffect(() => {
-    let isMounted = true;
+    let timer = null;
 
-    const syncRuntimeConfig = async () => {
+    const syncRuntimeConfig = async (state) => {
       try {
         await updateRuntimeStrategyConfig({
-          oteo_level2_enabled: oteoLevel2Enabled,
-          oteo_level3_enabled: oteoLevel3Enabled,
-          oteo_ai_enabled: oteoAiEnabled,
-          oteo_ai_execution_mode: oteoAiExecutionMode,
-          auto_ghost_enabled: autoGhostEnabled,
-          auto_ghost_amount: ghostAmount,
-          auto_ghost_expiration_seconds: autoGhostExpirationSeconds,
-          auto_ghost_max_concurrent_trades: autoGhostMaxConcurrentTrades,
-          auto_ghost_per_asset_cooldown_seconds: autoGhostPerAssetCooldownSeconds,
-          auto_ghost_max_session_trades: autoGhostMaxSessionTrades,
-          auto_ghost_max_drawdown_amount: autoGhostMaxDrawdownAmount,
-          auto_ghost_drawdown_cooldown_seconds: autoGhostDrawdownCooldownSeconds,
-          auto_ghost_minimum_payout: autoGhostMinimumPayout / 100,
-          auto_ghost_manipulation_severity_threshold: autoGhostManipulationSeverityThreshold,
-          auto_ghost_block_on_manipulation: autoGhostBlockOnManipulation,
-          auto_ghost_max_trades_per_timeframe: ghostMaxTradesPerTimeframe,
-          auto_ghost_timeframe_seconds: ghostTimeframeSeconds,
-          auto_ghost_min_confidence: ghostMinConfidenceEnabled ? ghostMinConfidence : null,
-          auto_ghost_min_confidence_enabled: ghostMinConfidenceEnabled,
-          auto_ghost_max_confidence: ghostMaxConfidenceEnabled ? ghostMaxConfidence : null,
-          auto_ghost_max_confidence_enabled: ghostMaxConfidenceEnabled,
-          auto_ghost_min_zscore: ghostMinZScoreEnabled ? ghostMinZScore : null,
-          auto_ghost_min_zscore_enabled: ghostMinZScoreEnabled,
-          auto_ghost_max_zscore: ghostMaxZScoreEnabled ? ghostMaxZScore : null,
-          auto_ghost_max_zscore_enabled: ghostMaxZScoreEnabled,
-          auto_ghost_regime_gate_enabled: ghostRegimeGateEnabled,
-          auto_ghost_allowed_regimes: ghostAllowedRegimes,
-          auto_ghost_require_regime_stable: ghostRequireRegimeStable,
-          ai_trade_interval: aiTradeInterval,
-          ai_pulse_enabled: aiPulseEnabled,
-          ai_pulse_interval_seconds: aiPulseIntervalSeconds,
+          oteo_level2_enabled: state.oteoLevel2Enabled,
+          oteo_level3_enabled: state.oteoLevel3Enabled,
+          oteo_ai_enabled: state.oteoAiEnabled,
+          oteo_ai_execution_mode: state.oteoAiExecutionMode,
+          auto_ghost_enabled: state.autoGhostEnabled,
+          auto_ghost_amount: state.ghostAmount,
+          auto_ghost_expiration_seconds: state.autoGhostExpirationSeconds,
+          auto_ghost_max_concurrent_trades: state.autoGhostMaxConcurrentTrades,
+          auto_ghost_per_asset_cooldown_seconds: state.autoGhostPerAssetCooldownSeconds,
+          auto_ghost_max_session_trades: state.autoGhostMaxSessionTrades,
+          auto_ghost_max_drawdown_amount: state.autoGhostMaxDrawdownAmount,
+          auto_ghost_drawdown_cooldown_seconds: state.autoGhostDrawdownCooldownSeconds,
+          auto_ghost_minimum_payout: state.autoGhostMinimumPayout / 100,
+          auto_ghost_manipulation_severity_threshold: state.autoGhostManipulationSeverityThreshold,
+          auto_ghost_block_on_manipulation: state.autoGhostBlockOnManipulation,
+          auto_ghost_max_trades_per_timeframe: state.ghostMaxTradesPerTimeframe,
+          auto_ghost_timeframe_seconds: state.ghostTimeframeSeconds,
+          auto_ghost_min_confidence: state.ghostMinConfidenceEnabled ? state.ghostMinConfidence : null,
+          auto_ghost_min_confidence_enabled: state.ghostMinConfidenceEnabled,
+          auto_ghost_max_confidence: state.ghostMaxConfidenceEnabled ? state.ghostMaxConfidence : null,
+          auto_ghost_max_confidence_enabled: state.ghostMaxConfidenceEnabled,
+          auto_ghost_min_zscore: state.ghostMinZScoreEnabled ? state.ghostMinZScore : null,
+          auto_ghost_min_zscore_enabled: state.ghostMinZScoreEnabled,
+          auto_ghost_max_zscore: state.ghostMaxZScoreEnabled ? state.ghostMaxZScore : null,
+          auto_ghost_max_zscore_enabled: state.ghostMaxZScoreEnabled,
+          auto_ghost_regime_gate_enabled: state.ghostRegimeGateEnabled,
+          auto_ghost_allowed_regimes: state.ghostAllowedRegimes,
+          auto_ghost_require_regime_stable: state.ghostRequireRegimeStable,
+          ai_trade_interval: state.aiTradeInterval,
+          ai_pulse_enabled: state.aiPulseEnabled,
+          ai_pulse_interval_seconds: state.aiPulseIntervalSeconds,
         });
       } catch (err) {
-        if (isMounted) {
-          console.warn('[App] Failed to sync runtime strategy config:', err.message);
-        }
+        console.warn('[App] Failed to sync runtime strategy config:', err.message);
       }
     };
 
-    const timer = setTimeout(() => {
-      void syncRuntimeConfig();
-    }, 400);
+    // Initial sync
+    void syncRuntimeConfig(useSettingsStore.getState());
+
+    // Subscribe to settings changes to trigger debounced syncs without causing App re-renders
+    const unsubscribe = useSettingsStore.subscribe((state) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void syncRuntimeConfig(state);
+      }, 400);
+    });
 
     return () => {
-      isMounted = false;
-      clearTimeout(timer);
+      unsubscribe();
+      if (timer) clearTimeout(timer);
     };
-  }, [
-    oteoLevel2Enabled,
-    oteoLevel3Enabled,
-    oteoAiEnabled,
-    oteoAiExecutionMode,
-    ghostAmount,
-    autoGhostEnabled,
-    autoGhostExpirationSeconds,
-    autoGhostMaxConcurrentTrades,
-    autoGhostPerAssetCooldownSeconds,
-    autoGhostMaxSessionTrades,
-    autoGhostMaxDrawdownAmount,
-    autoGhostDrawdownCooldownSeconds,
-    autoGhostMinimumPayout,
-    autoGhostManipulationSeverityThreshold,
-    autoGhostBlockOnManipulation,
-    ghostMaxTradesPerTimeframe,
-    ghostTimeframeSeconds,
-    ghostMinConfidence,
-    ghostMinConfidenceEnabled,
-    ghostMaxConfidence,
-    ghostMaxConfidenceEnabled,
-    ghostMinZScore,
-    ghostMinZScoreEnabled,
-    ghostMaxZScore,
-    ghostMaxZScoreEnabled,
-    ghostRegimeGateEnabled,
-    ghostAllowedRegimes,
-    ghostRequireRegimeStable,
-    aiTradeInterval,
-    aiPulseEnabled,
-    aiPulseIntervalSeconds,
-  ]);
+  }, []);
 
   return (
     <div className="dark" data-dashboard-mode={dashboardMode}>

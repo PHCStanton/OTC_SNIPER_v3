@@ -54,6 +54,11 @@ export function useStreamConnection() {
   const rafIdRef = useRef(null);
   const lastTicksEmitRef = useRef({});
 
+  const selectedAssetRef = useRef(selectedAsset);
+  useEffect(() => {
+    selectedAssetRef.current = selectedAsset;
+  }, [selectedAsset]);
+
   useEffect(() => {
     const socket = initSocket();
 
@@ -67,7 +72,7 @@ export function useStreamConnection() {
            resolved[asset] = {
              ...data,
            };
-           const isSelected = asset === selectedAsset;
+           const isSelected = asset === selectedAssetRef.current;
            const interval = isSelected ? 100 : 500; // 10 FPS vs 2 FPS
            const lastEmit = lastTicksEmitRef.current[asset] || 0;
            
@@ -188,7 +193,7 @@ export function useStreamConnection() {
         rafIdRef.current = null;
       }
     };
-  }, [setIsStreaming, setWarmup, batchUpdate, selectedAsset]);
+  }, [setIsStreaming, setWarmup, batchUpdate]);
 
   useEffect(() => {
     if (!selectedAsset) return;
@@ -213,4 +218,14 @@ export function useStreamConnection() {
     watchAssets(dedupedAssets);
     updateAllowedAssets(dedupedAssets);
   }, [clearAsset, multiChartAssets, selectedAsset, setWarmup]);
+
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const assets = Object.keys(useStreamStore.getState().tradeMarkers);
+      for (const asset of assets) {
+        useStreamStore.getState().removeExpiredMarkers(asset);
+      }
+    }, 30000);
+    return () => clearInterval(cleanup);
+  }, []);
 }

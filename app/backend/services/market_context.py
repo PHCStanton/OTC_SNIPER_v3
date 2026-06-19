@@ -268,7 +268,7 @@ def calculate_single_scale_hurst(prices: list[float] | np.ndarray, window: int =
 class MarketContextEngine:
     def __init__(self, config: Level2Config | None = None):
         self.config = config or Level2Config()
-        self._closed_candles: list[Candle] = []
+        self._closed_candles: deque[Candle] = deque(maxlen=self.config.max_candles)
         self._current_candle: Candle | None = None
         self._cached_context: dict[str, Any] | None = None
         self._tick_timestamps: deque[float] = deque(maxlen=60)
@@ -300,13 +300,11 @@ class MarketContextEngine:
             self._current_candle.close = price
         else:
             self._closed_candles.append(self._current_candle)
-            if len(self._closed_candles) > self.config.max_candles:
-                self._closed_candles = self._closed_candles[-self.config.max_candles:]
             self._current_candle = Candle(candle_start, price, price, price, price)
             candle_closed = True
 
         if self._cached_context is None or candle_closed:
-            candles = [*self._closed_candles]
+            candles = list(self._closed_candles)
             if self._current_candle is not None:
                 candles.append(self._current_candle)
 

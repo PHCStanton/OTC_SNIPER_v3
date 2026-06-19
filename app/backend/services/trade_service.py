@@ -388,6 +388,7 @@ class TradeService:
                     trade.profit or 0.0,
                     asset=trade.asset,
                     entry_context=trade.entry_context,
+                    direction=trade.direction,
                 )
                 
             logger.info(

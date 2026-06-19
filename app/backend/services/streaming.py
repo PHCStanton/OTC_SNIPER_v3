@@ -53,6 +53,7 @@ class StreamingService:
         self._oteo_engines: Dict[str, OTEO] = {}
         self._market_context_engines: Dict[str, MarketContextEngine] = {}
         self._manip_engines: Dict[str, ManipulationDetector] = {}
+        self._last_manip_flags: Dict[str, dict] = {}
         self._regime_classifiers: Dict[str, RegimeClassifier] = {}
         self._last_regime: Dict[str, dict[str, Any]] = {}
         self._tick_counts: Dict[str, int] = {}
@@ -211,6 +212,7 @@ class StreamingService:
             self._oteo_engines.pop(asset, None)
             self._market_context_engines.pop(asset, None)
             self._manip_engines.pop(asset, None)
+            self._last_manip_flags.pop(asset, None)
             self._regime_classifiers.pop(asset, None)
             self._last_regime.pop(asset, None)
             self._tick_counts.pop(asset, None)
@@ -227,6 +229,7 @@ class StreamingService:
         self._loop = asyncio.get_running_loop()
         self.perf_monitor.start()
         self.tick_logger.start()
+        self.signal_logger.start()
         self._consumer_task = asyncio.create_task(self._tick_consumer_loop())
         if self.level3_enabled and self._ai_review:
             self._ai_review.start()
@@ -239,6 +242,7 @@ class StreamingService:
         self._streaming_active = False
         self.perf_monitor.stop()
         self.tick_logger.stop()
+        self.signal_logger.stop()
         if self._consumer_task:
             self._consumer_task.cancel()
             self._consumer_task = None
@@ -260,6 +264,7 @@ class StreamingService:
         self._oteo_engines.clear()
         self._market_context_engines.clear()
         self._manip_engines.clear()
+        self._last_manip_flags.clear()
         self._clear_level3_state(reset_classifiers=True)
         self._tick_counts.clear()
         self._payout_cache.clear()
@@ -295,7 +300,7 @@ class StreamingService:
             
         return self._oteo_engines[asset], self._market_context_engines[asset], self._manip_engines[asset]
 
-    def _resolve_asset_payout_pct(self, asset: str) -> float | None:
+    async def _resolve_asset_payout_pct(self, asset: str) -> float | None:
         now = time.time()
         cached = self._payout_cache.get(asset)
         if cached and (now - cached[1]) < self.PAYOUT_CACHE_TTL_SECONDS:
@@ -303,7 +308,8 @@ class StreamingService:
 
         try:
             adapter = BrokerRegistry.get_adapter(BrokerType.POCKET_OPTION, account_key="primary")
-            payout_pct = float(self.trade_service._resolve_payout_pct(adapter, asset))
+            payout_pct = await asyncio.to_thread(self.trade_service._resolve_payout_pct, adapter, asset)
+            payout_pct = float(payout_pct)
             self._payout_cache[asset] = (payout_pct, now)
             return payout_pct
         except Exception as exc:
@@ -376,6 +382,7 @@ class StreamingService:
         oteo_result = oteo.update_tick(price, timestamp=timestamp)
         market_context = market_context_engine.update_tick(price, timestamp=timestamp)
         manipulation = manip_detector.update(timestamp, price)
+        self._last_manip_flags[asset] = manipulation
         regime = None
 
         candle_closed = bool(market_context.get("candle_closed", False))
@@ -537,7 +544,7 @@ class StreamingService:
                 "manipulation_penalty": oteo_result.get("manipulation_penalty", 0.0),
                 "broker": source
             })
-            payout_pct = self._resolve_asset_payout_pct(asset)
+            payout_pct = await self._resolve_asset_payout_pct(asset)
             await self.auto_ghost.consider_signal(
                 asset=asset,
                 price=price,
@@ -587,17 +594,21 @@ class StreamingService:
     async def _ai_pulse_loop(self) -> None:
         """Background loop querying the AI provider for periodic market insights (AI Pulse)."""
         logger.info("AI Pulse background loop started.")
+        consecutive_failures = 0
         while self._streaming_active:
             interval = self.auto_ghost.config.ai_pulse_interval_seconds
-            await asyncio.sleep(max(10, interval))
+            backoff = min(300, interval * (2 ** consecutive_failures)) if consecutive_failures > 0 else interval
+            await asyncio.sleep(max(10, backoff))
             if not self._streaming_active or not self.oteo_ai_enabled or not self.auto_ghost.config.ai_pulse_enabled:
                 break
             try:
                 await self._run_ai_pulse_insight()
+                consecutive_failures = 0
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.warning(f"AI Pulse execution failed: {e}")
+                consecutive_failures += 1
+                logger.warning(f"AI Pulse execution failed (attempt {consecutive_failures}): {e}")
 
     async def _run_ai_pulse_insight(self) -> None:
         """Gather active asset metrics and request a real-time AI insight."""
@@ -611,19 +622,8 @@ class StreamingService:
         if not ai_service.status().enabled:
             return
 
-        # Fetch recent session trades for context (timeframe based on ai_pulse_interval_seconds)
-        session_id = self.auto_ghost._session_id
-        analysis_svc = get_analysis_service()
-        session_dir = analysis_svc.settings.data_dir / "ghost_trades" / "sessions"
-        filepath = session_dir / f"{session_id}.jsonl"
-        
-        trades = []
-        if session_id and filepath.exists():
-            try:
-                session_data = analysis_svc.parse_session_file(filepath, "ghost")
-                trades = session_data.get("trades", [])
-            except Exception as e:
-                logger.warning(f"Error parsing session file for AI Pulse: {e}")
+        # Fetch recent session trades from in-memory cache
+        trades = getattr(self.auto_ghost, "_session_trades", [])
 
         # Filter trades that occurred within the current pulse timeframe
         interval = max(10, self.auto_ghost.config.ai_pulse_interval_seconds)
@@ -662,8 +662,7 @@ class StreamingService:
                 regime = self._last_regime.get(asset, {}).get("regime_label", "UNKNOWN") if self.level3_enabled else c.get("adx_regime", "UNKNOWN")
                 
                 # Fetch recent manipulation
-                manip_engine = self._manip_engines[asset]
-                manip = manip_engine.update(time.time(), price) if isinstance(price, (int, float)) else {}
+                manip = self._last_manip_flags.get(asset, {})
                 max_sev = max(manip.values()) if manip and manip.values() else 0.0
                 
                 asset_summaries.append(

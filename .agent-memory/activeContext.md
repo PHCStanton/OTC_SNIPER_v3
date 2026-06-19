@@ -1,5 +1,6 @@
 # Active Context
 
+- **Streaming Pipeline Performance Audit & Optimization Complete (2026-06-19).** Conducted an extensive performance audit of the streaming pipeline and implemented 11 optimizations. Backend: converted performance monitor queue timing to O(1) deque; buffered `SignalLogger` file writes; cached manipulation detector results on each tick; lazily cached plugin status checks; added exponential backoff on AI Pulse loop failures; implemented an in-memory completed trade cache to eliminate disk reads in AI Pulse; refactored `_closed_candles` to a fixed-size `deque(maxlen=240)` in `MarketContextEngine`; and made `_resolve_asset_payout_pct` asynchronous. Frontend: stored `selectedAsset` in a Ref to stabilize Socket.IO listeners on focus switch; added a 30s expired marker auto-cleanup interval; and consolidated settings selectors in `App.jsx` using a single store `.subscribe()` subscription. All unit tests passed and Vite production builds completed successfully.
 - **Modular Plugin & Tiered Packaging Architecture Implemented and Verified (2026-06-19).** Designed and engineered the `ExtensionManager` and `BaseExtension` hooks integrated into `streaming.py` and `auto_ghost.py`. Developed two tiered packages ("Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite)) complete with backend calculations, regime state machine, microstructure cutoff noise filters, AI confidence gating, and frontend React settings components. Unified configuration across the Zustand store and backend strategy API, including dynamic license detection. All 16/16 unit tests passed and production builds verified in both installed and uninstalled states. Created `plugins/README.md` to document the architecture and developer workflow.
 - **Calibration Feature Deprecated & Completely Removed (2026-06-16).** Stripped all backend properties (`ai_calibration_phase`), FastAPI request parameters (`calib_context`), and session metadata checks from `auto_ghost.py`, `streaming.py`, `strategy.py`, `analysis.py`, and `analysis_service.py`. Decoupled settings stores (`useSettingsStore.js`), sync layers (`App.jsx`), and Layout Timers (`GlobalTimer.jsx`). Removed the calibration trigger UI panel from `AnalysisView.jsx` and renamed the tab to **AI Refinement**. Verified backend compilation and pytest suite (`test_auto_ghost.py`) passed cleanly.
 - **Calibration AI Advisory Alignment & Bug Fixes are fully complete and verified (2026-06-15).** Fixed Zustand settings store validation bug in `useSettingsStore.js` to allow `aiCalibrationPhase` changes to persist and sync. Added session-level `is_calibration` parsing in `analysis_service.py` to auto-tag calibration sessions. Added clear `Calib` and `Tuned` status badges to session logs list (`AnalysisView.jsx`) and floating controller widget header (`GhostTradingWidget.jsx`). Verified clean frontend production builds and automated test suite execution (`test_auto_ghost.py`).
@@ -16,6 +17,22 @@
 - The next valid implementation target is **Phase 6: Volatility-Adaptive Expiry** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
 
 ## Latest Changes
+
+### Applied on 2026-06-19 — Streaming Pipeline Latency & Lag Optimizations (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| OPT-1 | Performance | `perf_monitor.py` | Converted timing log tracking array to `deque(maxlen=200)` and simplified `record_tick`, changing complexity to O(1). |
+| OPT-2 | Logging | `signal_logger.py`, `streaming.py` | Implemented memory-buffered `SignalLogger` to bundle file writes asynchronously, flushing every 5s/50 entries. Wired to streaming start/stop lifecycle. |
+| OPT-3 | Correctness | `streaming.py` | Cached tick manipulation flags in `_last_manip_flags`, reusing them in AI Pulse instead of duplicate, state-mutating updates. |
+| OPT-4 | Efficiency | `auto_ghost.py` | Refactored extension status checking to use lazy properties (`has_premium_hurst`, `has_elite_hurst`), caching the results. |
+| OPT-5 | Stability | `streaming.py` | Added exponential backoff retry logic to `_ai_pulse_loop` to handle AI Pulse backend failures gracefully. |
+| OPT-6 | I/O Reduction | `streaming.py`, `auto_ghost.py`, `trade_service.py` | Maintained a small in-memory session trades cache in `AutoGhostService`, eliminating linear-growth session file re-parsing from disk in AI Pulse. |
+| OPT-7 | Memory | `market_context.py` | Refactored `_closed_candles` to a fixed-size `deque(maxlen=240)` to avoid manual slicing/trimming and reduce list copies. |
+| OPT-8 | Non-blocking | `streaming.py` | Promoted `_resolve_asset_payout_pct` to async and offloaded synchronous broker adapter checking to background thread pool via `asyncio.to_thread`. |
+| OPT-9 | Listeners | `useStreamConnection.js` | Saved `selectedAsset` inside a React Ref and removed it from socket listener hook dependencies, preventing listener rebuilds on focus switch. |
+| OPT-10| Cleanup | `useStreamConnection.js` | Integrated a 30s interval to clear expired trade markers from the Zustand store. |
+| OPT-11| Rendering | `App.jsx` | Consolidated 30+ settings selectors into a single `.subscribe()` store listener, eliminating root component re-render triggers. |
 
 ### Applied on 2026-06-19 — Modular Plugin & Tiered Packaging Architecture (VERIFIED ✅)
 
