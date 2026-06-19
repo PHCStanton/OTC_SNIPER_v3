@@ -231,13 +231,16 @@ export default function App() {
         suggestions: data.suggestions || null,
       });
 
-      useToastStore.getState().addToast({
-        type: data.type === 'warning' ? 'warning' : 'info',
-        message: data.message,
-        duration: 6000,
-      });
+      const { dontDisturbEnabled } = useSettingsStore.getState();
+      if (!dontDisturbEnabled) {
+        useToastStore.getState().addToast({
+          type: data.type === 'warning' ? 'warning' : 'info',
+          message: data.message,
+          duration: 6000,
+        });
 
-      soundManager.playNotification();
+        soundManager.playNotification();
+      }
     });
 
     // Poll every 5 seconds

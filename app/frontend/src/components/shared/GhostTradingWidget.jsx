@@ -111,6 +111,8 @@ export default function GhostTradingWidget() {
     setAiPulseEnabled,
     setAiPulseIntervalSeconds,
     setAiTradeInterval,
+    dontDisturbEnabled,
+    setDontDisturbEnabled,
   } = useSettingsStore();
 
   const [requestingInsight, setRequestingInsight] = useState(false);
@@ -317,9 +319,18 @@ export default function GhostTradingWidget() {
             <div className="flex items-center gap-2 text-[#ffb800]">
               <Zap size={18} />
               <h3 className="text-sm font-black uppercase tracking-wider text-white">Auto Ghost Controller</h3>
-              <span className="rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider" title="GHOST SESSION - simulated execution">
-                Ghost
-              </span>
+              <button
+                type="button"
+                onClick={() => setDontDisturbEnabled(!dontDisturbEnabled)}
+                className={`rounded border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider transition-colors ${
+                  dontDisturbEnabled
+                    ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                }`}
+                title={dontDisturbEnabled ? "Notifications suspended — click to activate" : "Ghost Active — click to set Don't Disturb"}
+              >
+                {dontDisturbEnabled ? "Don't Disturb" : "Ghost Active"}
+              </button>
               <Tooltip content="These stats reflect the simulated performance of the ghost trader module. Live account balances remain completely unaffected. Auto-Ghost mode is active on streamed nodes." />
             </div>
             <button
@@ -340,7 +351,7 @@ export default function GhostTradingWidget() {
               }`} 
               onClick={() => setActiveTab('telemetry')}
             >
-              Telemetry
+              Stats
             </button>
             <button 
               className={`flex-1 text-[9px] font-black uppercase tracking-wider py-2 rounded-lg transition-all ${
@@ -350,7 +361,7 @@ export default function GhostTradingWidget() {
               }`} 
               onClick={() => setActiveTab('settings')}
             >
-              Controller
+              Protocol
             </button>
             <button 
               disabled={!oteoAiEnabled}
