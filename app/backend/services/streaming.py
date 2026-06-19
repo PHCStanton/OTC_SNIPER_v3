@@ -119,6 +119,8 @@ class StreamingService:
         ai_trade_interval: int | None = None,
         ai_pulse_enabled: bool | None = None,
         ai_pulse_interval_seconds: int | None = None,
+        auto_ghost_hurst_filter_enabled: bool | None = None,
+        auto_ghost_hurst_filter_threshold: float | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -167,9 +169,11 @@ class StreamingService:
             ai_trade_interval=ai_trade_interval,
             ai_pulse_enabled=ai_pulse_enabled,
             ai_pulse_interval_seconds=ai_pulse_interval_seconds,
+            hurst_filter_enabled=auto_ghost_hurst_filter_enabled,
+            hurst_filter_threshold=auto_ghost_hurst_filter_threshold,
         )
 
-        if self._streaming_active:
+        if getattr(self, "_streaming_active", False):
             should_run_pulse = self.oteo_ai_enabled and self.auto_ghost.config.ai_pulse_enabled
             if should_run_pulse and (self._ai_pulse_task is None or self._ai_pulse_task.done()):
                 self._ai_pulse_task = asyncio.create_task(self._ai_pulse_loop())
@@ -431,6 +435,7 @@ class StreamingService:
                 "level3_suppressed_reason": enriched_result.get("level3_suppressed_reason"),
                 "manipulation_penalty": enriched_result.get("manipulation_penalty", 0.0),
                 "market_context": enriched_result["market_context"],
+                "hurst": enriched_result["market_context"].get("hurst", 0.5),
             })
             oteo_result = enriched_result
         else:
@@ -446,6 +451,7 @@ class StreamingService:
                 "level3_score_adjustment": 0.0,
                 "level3_suppressed_reason": None,
                 "market_context": market_context,
+                "hurst": market_context.get("hurst", 0.5),
             })
 
         if self.level3_enabled and regime is not None:

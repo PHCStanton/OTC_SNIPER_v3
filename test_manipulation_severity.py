@@ -109,6 +109,7 @@ class TestAutoGhostSeverityGating(unittest.IsolatedAsyncioTestCase):
             manipulation_severity_threshold=0.5
         )
         service = AutoGhostService(trade_service, config)
+        service.CONFIRMATION_TICKS = 3
         service._session_id = "test_session"
 
         oteo_result = {
@@ -188,6 +189,7 @@ class TestAutoGhostSeverityGating(unittest.IsolatedAsyncioTestCase):
             max_confidence=95.0
         )
         service = AutoGhostService(trade_service, config)
+        service.CONFIRMATION_TICKS = 3
         service._session_id = "test_session"
 
         # oteo_score = 75.0 (below min of 80) -> should be rejected

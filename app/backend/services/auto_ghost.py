@@ -54,6 +54,8 @@ class AutoGhostConfig:
     regime_gate_enabled: bool = False
     allowed_regimes: list[str] | None = None
     require_regime_stable: bool = False
+    hurst_filter_enabled: bool = False
+    hurst_filter_threshold: float = 0.48
 
 
 class AutoGhostService:
@@ -121,6 +123,8 @@ class AutoGhostService:
         regime_gate_enabled: bool | None = None,
         allowed_regimes: list[str] | None = None,
         require_regime_stable: bool | None = None,
+        hurst_filter_enabled: bool | None = None,
+        hurst_filter_threshold: float | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         updates: dict[str, Any] = {}
@@ -182,6 +186,10 @@ class AutoGhostService:
             updates["allowed_regimes"] = [str(r).strip().upper() for r in allowed_regimes if str(r).strip()]
         if require_regime_stable is not None:
             updates["require_regime_stable"] = bool(require_regime_stable)
+        if hurst_filter_enabled is not None:
+            updates["hurst_filter_enabled"] = bool(hurst_filter_enabled)
+        if hurst_filter_threshold is not None:
+            updates["hurst_filter_threshold"] = float(hurst_filter_threshold)
 
         self.config = replace(self.config, **updates)
 
@@ -239,6 +247,8 @@ class AutoGhostService:
             "auto_ghost_regime_gate_enabled": self.config.regime_gate_enabled,
             "auto_ghost_allowed_regimes": self.config.allowed_regimes,
             "auto_ghost_require_regime_stable": self.config.require_regime_stable,
+            "auto_ghost_hurst_filter_enabled": self.config.hurst_filter_enabled,
+            "auto_ghost_hurst_filter_threshold": self.config.hurst_filter_threshold,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -478,6 +488,22 @@ class AutoGhostService:
             logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} is unstable (Ghost Protocol gate)")
             return self._reject(asset, 'regime_unstable')
 
+        # Hurst Exponent Gate check (L1 Core)
+        hurst = oteo_result.get("market_context", {}).get("hurst") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("hurst")
+        if hurst is None:
+            # Fallback to direct payload key if market_context nesting is skipped
+            hurst = oteo_result.get("hurst")
+            
+        if self.config.hurst_filter_enabled and hurst is not None:
+            if hurst >= self.config.hurst_filter_threshold:
+                logger.info(
+                    "Auto-Ghost skipped %s: hurst exponent %.3f >= threshold %.3f (L1 Hurst Gate)",
+                    asset,
+                    hurst,
+                    self.config.hurst_filter_threshold,
+                )
+                return self._reject(asset, 'hurst_filter')
+
         if asset in self._active_assets:
             return self._reject(asset, 'asset_active')
         if len(self._active_assets) >= self.config.max_concurrent_trades:
@@ -546,6 +572,7 @@ class AutoGhostService:
             "regime_stable": oteo_result.get("regime_stable"),
             "regime_detail": oteo_result.get("regime_detail"),
             "market_context": oteo_result.get("market_context"),
+            "hurst": hurst,
             "manipulation": manipulation,
             "payout_pct": payout_pct,
         }

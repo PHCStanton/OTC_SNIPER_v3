@@ -47,6 +47,12 @@ export const SETTINGS_DEFAULTS = {
   ghostProtocols: null,
   activeGhostProtocol: 'default',
 
+  // Hurst Filter (L1 Core) & Package license gates
+  hurstFilterEnabled: false,
+  hurstFilterThreshold: 0.48,
+  hasPremiumHurst: false,
+  hasEliteHurst: false,
+
   // Trade Markers
   showGhostEntryMarkers: true,
   showLiveEntryMarkers: true,
@@ -185,6 +191,11 @@ export function validateSettings(input = {}) {
     ghostProtocols: input.ghostProtocols && typeof input.ghostProtocols === 'object' ? input.ghostProtocols : null,
     activeGhostProtocol: typeof input.activeGhostProtocol === 'string' ? input.activeGhostProtocol : 'default',
 
+    hurstFilterEnabled: toBoolean(input.hurstFilterEnabled, SETTINGS_DEFAULTS.hurstFilterEnabled),
+    hurstFilterThreshold: toNumber(input.hurstFilterThreshold, SETTINGS_DEFAULTS.hurstFilterThreshold, { min: 0.0, max: 1.0, integer: false }),
+    hasPremiumHurst: toBoolean(input.hasPremiumHurst, SETTINGS_DEFAULTS.hasPremiumHurst),
+    hasEliteHurst: toBoolean(input.hasEliteHurst, SETTINGS_DEFAULTS.hasEliteHurst),
+
 
 
     showGhostEntryMarkers: toBoolean(input.showGhostEntryMarkers, SETTINGS_DEFAULTS.showGhostEntryMarkers),
@@ -310,6 +321,11 @@ export const useSettingsStore = create()(
       setGhostRequireRegimeStable: (val) => commitSettingsPatch(set, { ghostRequireRegimeStable: val }),
       setGhostProtocols: (val) => commitSettingsPatch(set, { ghostProtocols: val }),
       setActiveGhostProtocol: (val) => commitSettingsPatch(set, { activeGhostProtocol: val }),
+
+      setHurstFilterEnabled: (val) => commitSettingsPatch(set, { hurstFilterEnabled: val }),
+      setHurstFilterThreshold: (val) => commitSettingsPatch(set, { hurstFilterThreshold: val }),
+      setHasPremiumHurst: (val) => commitSettingsPatch(set, { hasPremiumHurst: val }),
+      setHasEliteHurst: (val) => commitSettingsPatch(set, { hasEliteHurst: val }),
       loadGhostProtocol: (key) => {
         set((state) => {
           const protocols = state.ghostProtocols || {};

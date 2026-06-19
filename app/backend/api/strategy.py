@@ -42,6 +42,8 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_regime_gate_enabled: bool = Field(default=False)
     auto_ghost_allowed_regimes: list[str] | None = Field(default=None)
     auto_ghost_require_regime_stable: bool = Field(default=False)
+    auto_ghost_hurst_filter_enabled: bool = Field(default=False)
+    auto_ghost_hurst_filter_threshold: float = Field(default=0.48, ge=0.0, le=1.0)
     ai_trade_interval: int = Field(default=10, ge=1, le=100)
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
@@ -98,6 +100,8 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             ai_trade_interval=body.ai_trade_interval,
             ai_pulse_enabled=body.ai_pulse_enabled,
             ai_pulse_interval_seconds=body.ai_pulse_interval_seconds,
+            auto_ghost_hurst_filter_enabled=body.auto_ghost_hurst_filter_enabled,
+            auto_ghost_hurst_filter_threshold=body.auto_ghost_hurst_filter_threshold,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:

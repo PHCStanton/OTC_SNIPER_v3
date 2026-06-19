@@ -113,6 +113,13 @@ export default function GhostTradingWidget() {
     setAiTradeInterval,
     dontDisturbEnabled,
     setDontDisturbEnabled,
+    // Hurst & Plugins state
+    hurstFilterEnabled,
+    hurstFilterThreshold,
+    hasPremiumHurst,
+    hasEliteHurst,
+    setHurstFilterEnabled,
+    setHurstFilterThreshold,
   } = useSettingsStore();
 
   const [requestingInsight, setRequestingInsight] = useState(false);
@@ -765,6 +772,87 @@ export default function GhostTradingWidget() {
                   {ghostRegimeGateEnabled
                     ? `Ghost only executes in selected regimes${ghostRequireRegimeStable ? ' when stable' : ''}.${(!ghostAllowedRegimes || ghostAllowedRegimes.length === 0) ? ' (All regimes allowed if empty)' : ''}`
                     : 'When disabled, selected chips and stability check do not block Auto-Ghost.'}
+                </div>
+              </div>
+
+              {/* Hurst Exponent Filter & Locked Slots */}
+              <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Hurst Exponent & Volatility Gates</span>
+                
+                {/* L1 Core Hurst Filter Toggle */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={hurstFilterEnabled}
+                        onChange={(e) => setHurstFilterEnabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${hurstFilterEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                        L1 Hurst Filter (Free Core)
+                      </span>
+                    </label>
+                    <span className={`text-[10px] font-black ${hurstFilterEnabled ? 'text-white' : 'text-gray-600'}`}>
+                      H &lt; {hurstFilterThreshold.toFixed(2)}
+                    </span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="0.30"
+                    max="0.60"
+                    step="0.01"
+                    disabled={!hurstFilterEnabled}
+                    value={hurstFilterThreshold}
+                    onChange={(e) => setHurstFilterThreshold(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                  />
+                  <div className="text-[7.5px] text-gray-500">
+                    Blocks reversal trades in trending or random-noise markets.
+                  </div>
+                </div>
+
+                {/* EXTENSION_SETTINGS_SLOT */}
+                {/* L2 Premium Plugin Slot */}
+                <div className={`border-t border-white/5 pt-2 mt-1 ${hasPremiumHurst ? '' : 'opacity-60'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">
+                      L2 Adaptive Expiry (Premium)
+                    </span>
+                    {hasPremiumHurst ? (
+                      <span className="rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-emerald-400">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="rounded bg-yellow-500/10 border border-yellow-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-[#ffb800]">
+                        Locked
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[7.5px] text-gray-600 italic mt-0.5">
+                    {hasPremiumHurst ? 'Vectorized multi-scale R/S and 30s-3m adaptive durations are running.' : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}
+                  </div>
+                </div>
+
+                {/* L3 Elite Plugin Slot */}
+                <div className={`border-t border-white/5 pt-2 ${hasEliteHurst ? '' : 'opacity-60'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">
+                      L3 AI Auto-Calibration (Elite)
+                    </span>
+                    {hasEliteHurst ? (
+                      <span className="rounded bg-purple-500/10 border border-purple-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-purple-400">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="rounded bg-[#ff4a4a]/10 border border-[#ff4a4a]/25 px-1 py-0.2 text-[7px] font-black uppercase text-red-400">
+                        Locked
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[7.5px] text-gray-600 italic mt-0.5">
+                    {hasEliteHurst ? 'Microstructure filters and dynamic AI boundary adjustments active.' : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}
+                  </div>
                 </div>
               </div>
             </div>
