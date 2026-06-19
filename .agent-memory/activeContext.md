@@ -1,5 +1,6 @@
 # Active Context
 
+- **Multi-Chart UI Indicators Calibrated & Dynamic Warmup Progress Added (2026-06-19).** Calibrated the `MultiChartView.jsx` component by fetching ticks unconditionally from the Zustand stream store, resolving issues where tickers stayed static at `+0.00%` and ticks count stuck at `0` when sparklines were disabled. Added a dynamic regime warmup progress indicator (e.g. `WARM 31%`) tracking closed candles against the minimum detection threshold of 16, replacing the static `UNAVAILABLE ~` display.
 - **Streaming Pipeline Performance Audit & Optimization Complete (2026-06-19).** Conducted an extensive performance audit of the streaming pipeline and implemented 11 optimizations. Backend: converted performance monitor queue timing to O(1) deque; buffered `SignalLogger` file writes; cached manipulation detector results on each tick; lazily cached plugin status checks; added exponential backoff on AI Pulse loop failures; implemented an in-memory completed trade cache to eliminate disk reads in AI Pulse; refactored `_closed_candles` to a fixed-size `deque(maxlen=240)` in `MarketContextEngine`; and made `_resolve_asset_payout_pct` asynchronous. Frontend: stored `selectedAsset` in a Ref to stabilize Socket.IO listeners on focus switch; added a 30s expired marker auto-cleanup interval; and consolidated settings selectors in `App.jsx` using a single store `.subscribe()` subscription. All unit tests passed and Vite production builds completed successfully.
 - **Modular Plugin & Tiered Packaging Architecture Implemented and Verified (2026-06-19).** Designed and engineered the `ExtensionManager` and `BaseExtension` hooks integrated into `streaming.py` and `auto_ghost.py`. Developed two tiered packages ("Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite)) complete with backend calculations, regime state machine, microstructure cutoff noise filters, AI confidence gating, and frontend React settings components. Unified configuration across the Zustand store and backend strategy API, including dynamic license detection. All 16/16 unit tests passed and production builds verified in both installed and uninstalled states. Created `plugins/README.md` to document the architecture and developer workflow.
 - **Calibration Feature Deprecated & Completely Removed (2026-06-16).** Stripped all backend properties (`ai_calibration_phase`), FastAPI request parameters (`calib_context`), and session metadata checks from `auto_ghost.py`, `streaming.py`, `strategy.py`, `analysis.py`, and `analysis_service.py`. Decoupled settings stores (`useSettingsStore.js`), sync layers (`App.jsx`), and Layout Timers (`GlobalTimer.jsx`). Removed the calibration trigger UI panel from `AnalysisView.jsx` and renamed the tab to **AI Refinement**. Verified backend compilation and pytest suite (`test_auto_ghost.py`) passed cleanly.
@@ -17,6 +18,13 @@
 - The next valid implementation target is **Phase 6: Volatility-Adaptive Expiry** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
 
 ## Latest Changes
+
+### Applied on 2026-06-19 — Multi-Chart UI Indicators Calibration (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| IND-1 | UI Indicators | `MultiChartView.jsx` | Fetched ticks unconditionally from store to restore real-time tickers and tick count increments when sparklines are disabled. |
+| IND-2 | Warmup UX | `MultiChartView.jsx` | Replaced static `UNAVAILABLE ~` regime label during warmup with a dynamic progress indicator showing closed candles collected relative to the 16-candle threshold (e.g., `WARM 31%`), plus hover tooltips. |
 
 ### Applied on 2026-06-19 — Streaming Pipeline Latency & Lag Optimizations (VERIFIED ✅)
 

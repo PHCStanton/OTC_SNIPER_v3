@@ -20,6 +20,13 @@ This document outlines proposed UI/UX and backend enhancements to further optimi
   * Shows parameter deltas (e.g. `Z-Score: Default -> Min -0.8`, `Regimes: +Range Bound`).
   * Allows a user to rollback to a previous configuration if performance degrades.
 
+### 1.3 Dynamic Asset Blacklisting (Session-Scoped)
+* **Concept:** A one-click "Blacklist Asset" option on each chart card. Blacklisting dynamically suspends scanning/trading for that asset and removes it from the Multi-Chart view.
+* **Details:**
+  * **Event Loop / Scan Exclusion:** Instantly calls backend API to remove the asset from the active allowed assets list, freeing up streaming service ticks.
+  * **UX Decluttering:** Cleans up the Multi-Chart view by removing the card, sparing the user from scanning unfavorable setups.
+  * **Session Bounds:** Resets automatically on new session start, giving all assets a fresh evaluation when conditions reset.
+
 ---
 
 ## 2. AI Prompt & Suggestion Logic

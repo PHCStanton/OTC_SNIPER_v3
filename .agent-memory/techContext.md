@@ -34,8 +34,11 @@
 - Blocking broker SDK calls must not run directly on the async request path.
 - Trade execution uses REST, while sparklines and live trade results depend on Socket.IO connectivity.
 - **Execution Boundary:** Manual user trades are strictly mapped to the active SSID environment (Live/Demo). Automated simulation is strictly handled by the background Auto-Ghost module.
-- **Zustand Selector Hygiene:** Prohibits broad Zustand hook destructuring (`const { x, y } = useStore()`) in high-frequency rendering contexts to avoid global re-render cascades.
+- **Zustand Selector Hygiene:** Prohibits broad Zustand hook destructuring (`const { x, y } = useStore()`) in high-frequency rendering contexts to avoid global re-render cascades. Use direct store `.subscribe()` subscriptions at the root (e.g. settings sync) to completely isolate React renders.
 - **requestAnimationFrame Throttling:** Non-critical UI elements (such as historical tick arrays/sparklines) are throttled via requestAnimationFrame (10 FPS active, 2 FPS inactive) to prevent browser main-thread congestion.
+- **In-Memory Trade Context Cache:** Completed ghost trades are cached in memory to avoid repetitive, linear-time session file re-parsing from disk during the AI Pulse loop.
+- **Asynchronous Payout Resolution:** Broker payout checks are async and offloaded to a background thread pool via `asyncio.to_thread` to avoid blocking the event loop thread during cache misses.
+- **Signal Logger Memory Buffering:** Signal records are buffered in memory and flushed to disk asynchronously (5s interval or 50 entries cap) to eliminate blocking filesystem I/O on every tick.
 
 ## Coding Standards
 - Strict separation of concerns (one purpose per module/file/class).

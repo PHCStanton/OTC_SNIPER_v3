@@ -62,7 +62,7 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
   
   // Phase 2: Split store subscriptions
   const latestPrice = useStreamStore((s) => s.latestPrice?.[asset] ?? null);
-  const ticks = useStreamStore((s) => config.showSparkline ? (s.ticks?.[asset] ?? EMPTY_TICKS) : EMPTY_TICKS);
+  const ticks = useStreamStore((s) => s.ticks?.[asset] ?? EMPTY_TICKS);
   const signal = useStreamStore((s) => s.signals?.[asset] ?? null);
   const manipulation = useStreamStore((s) => s.manipulation?.[asset] ?? null);
   const isWarmup = useStreamStore((s) => Boolean(s.warmup?.[asset]));
@@ -231,7 +231,7 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
           {config.showRegime && (
             <div className="text-right">
               <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 leading-none mb-1">Regime</p>
-              {regime ? (
+              {regime && regime !== 'unavailable' && regime !== 'INSUFFICIENT_DATA' ? (
                 <span className={`text-[9px] font-black uppercase tracking-tighter leading-none truncate max-w-[80px] ${REGIME_CHIP_COLORS[regime] || 'text-gray-300'}`}>
                   {String(regime).replaceAll('_', ' ')}
                   {signal?.regime_stable != null && (
@@ -239,7 +239,19 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
                   )}
                 </span>
               ) : (
-                <p className="text-[9px] font-black text-gray-500 uppercase tracking-tighter leading-none">UNAVAIL</p>
+                (() => {
+                  const candleCount = signal?.market_context?.candle_count ?? 0;
+                  const target = 16;
+                  const pct = Math.min(100, Math.round((candleCount / target) * 100));
+                  return (
+                    <span 
+                      className="text-[9px] font-black text-gray-500 uppercase tracking-tighter leading-none cursor-help"
+                      title={`Warming up: need ${target} closed candles for regime detection. Currently at ${candleCount}/${target}`}
+                    >
+                      WARM {pct}%
+                    </span>
+                  );
+                })()
               )}
             </div>
           )}

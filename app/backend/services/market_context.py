@@ -317,14 +317,15 @@ class MarketContextEngine:
             cci_metrics = _compute_cci(candles, self.config.cci_period)
             cci = cci_metrics["cci"]
             cci_slope = cci_metrics["cci_slope"]
-            divergence_window = self._closed_candles[-20:] if len(self._closed_candles) > 20 else self._closed_candles
+            closed_candles_list = list(self._closed_candles)
+            divergence_window = closed_candles_list[-20:] if len(closed_candles_list) > 20 else closed_candles_list
             closed_cci_metrics = _compute_cci(divergence_window, self.config.cci_period)
             cci_divergence = _detect_cci_divergence(
                 divergence_window,
                 closed_cci_metrics["series"],
             )
 
-            closed_candles = self._closed_candles
+            closed_candles = closed_candles_list
             micro_support = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "low")
             micro_resistance = _last_confirmed_pivot(closed_candles, self.config.micro_pivot_span, self.config.micro_lookback, "high")
             macro_support = _last_confirmed_pivot(closed_candles, self.config.macro_pivot_span, self.config.macro_lookback, "low")

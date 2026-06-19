@@ -17,6 +17,7 @@
 - Results & Analysis Panel provides regime/z-score optimized filters (5 cutoffs with per-regime win rates) surfaced for manual use and fed into Grok analysis for filter recommendations.
 - Provide AI-assisted journaling and decision support without autonomous execution. Native Grok TTS for professional voice playback of reports/scripts (profile-managed voices alongside browser fallback).
 - Support modular, tiered plugin expansion (Premium/Elite tiers: "Adaptive Edge" and "AI Pulse & Noise Filter") to introduce premium analytics and execution modifiers (vectorized multi-scale Hurst, adaptive contract expiries, microstructure noise filters, confidence thresholds) with atomic installers and zero residue uninstallation.
+- Support session-scoped dynamic asset blacklisting to dynamically remove low-performing assets from scanning/trading loops and declutter the multi-chart UI view during active sessions.
 - Surface failures clearly so trade rejection, connectivity issues, and runtime errors are visible to the operator
 
 ## Success Metrics

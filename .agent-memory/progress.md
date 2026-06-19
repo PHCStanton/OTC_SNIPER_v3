@@ -4,6 +4,7 @@
 - This file tracks completed milestones, recent delivered work, and remaining validation targets.
 
 ## Completed Milestones
+- Multi-Chart UI Indicators Calibration (2026-06-19, VERIFIED ✅) — Calibrated `MultiChartView.jsx` to fetch ticks unconditionally from the Zustand store, fixing issues where tickers stayed static at `+0.00%` and ticks count stuck at `0` when sparklines were disabled. Added dynamic regime warmup progress percentages (e.g. `WARM 31%`) based on closed candle counts.
 - Streaming Pipeline Performance Audit & Optimization (2026-06-19, SIGNED OFF & CLOSED ✅) — Implemented 11 backend/frontend optimizations: performance monitor timing deque, buffered signal logger, cached tick manipulation flags, lazy plugin checks caching, AI Pulse exponential backoff, in-memory trades cache to prevent disk reads, fixed-size closed candles deque in `MarketContextEngine`, async payout resolution with thread pools, frontend socket selection Ref stability, frontend expired markers cleanup interval, and Zustand settings subscription in `App.jsx`. All tests passed and Vite UI production build successfully verified.
 - Modular Plugin & Tiered Packaging Architecture — Implemented `ExtensionManager` / `BaseExtension` hook-based system, built "Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite) packages, created manifest-driven atomic installer scripts, and documented the architecture in `plugins/README.md`.
 - Project Cleanup: Deprecation of Calibration Feature — Stripped calibration controllers, timed runners, and config parameters fully from backend and frontend.
@@ -47,6 +48,9 @@
   - **UI Widgets Decoupling:** Stripped stopwatch event triggers from `GlobalTimer.jsx` and renamed Results Analysis selector to **AI Refinement**. Cleaned up calibration badges from `AnalysisView.jsx` and `GhostTradingWidget.jsx`, replacing them with static simulated `Ghost` markers.
 
 ## Recent Delivery Snapshot
+- **Multi-Chart UI Indicators Calibration (2026-06-19, VERIFIED ✅):**
+  - **Unconditional Ticks Fetching:** Retrieved ticks unconditionally from Zustand store in `MultiChartView.jsx` to restore price trend tickers and tick count increments when sparklines are turned off.
+  - **Dynamic Regime Warmup Progress:** Rendered dynamic progress percentage (`WARM 31%`) based on backend closed candle count vs minimum threshold (16), replacing static `UNAVAILABLE ~` display.
 - **Streaming Pipeline Latency & Lag Optimizations (2026-06-19):**
   - **O(1) Performance Telemetry:** Converted `PerformanceMonitor.processing_durations` to `deque(maxlen=200)` to eliminate linear-time list popping.
   - **Asynchronous Buffered Signal Logging:** Replaced immediate filesystem writes on every signal in `SignalLogger` with memory-buffered, lifecycle-controlled async flushes.
