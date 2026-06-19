@@ -13,6 +13,7 @@ from .ai_review import AIReviewService
 from .auto_ghost import AutoGhostService
 from .market_context import MarketContextEngine, Level2Config, apply_level2_policy, apply_level3_policy
 from .oteo import OTEO, OTEOConfig
+from .extensions.manager import ExtensionManager
 from .manipulation import ManipulationDetector
 from .regime_classifier import RegimeClassifier
 from .trade_service import TradeService
@@ -46,6 +47,8 @@ class StreamingService:
         self.trade_service = TradeService(repository=get_data_repository(), sio=sio_server)
         self.auto_ghost = AutoGhostService(self.trade_service)
         self.trade_service.set_auto_ghost(self.auto_ghost)
+        self.extension_manager = ExtensionManager()
+        self.auto_ghost.extension_manager = self.extension_manager
         
         self._oteo_engines: Dict[str, OTEO] = {}
         self._market_context_engines: Dict[str, MarketContextEngine] = {}
@@ -121,6 +124,11 @@ class StreamingService:
         ai_pulse_interval_seconds: int | None = None,
         auto_ghost_hurst_filter_enabled: bool | None = None,
         auto_ghost_hurst_filter_threshold: float | None = None,
+        hurst_mean_revert_threshold: float | None = None,
+        hurst_trend_threshold: float | None = None,
+        min_adaptive_expiry: int | None = None,
+        hurst_min_scale_cutoff: int | None = None,
+        hurst_ai_confidence_threshold: float | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -171,6 +179,11 @@ class StreamingService:
             ai_pulse_interval_seconds=ai_pulse_interval_seconds,
             hurst_filter_enabled=auto_ghost_hurst_filter_enabled,
             hurst_filter_threshold=auto_ghost_hurst_filter_threshold,
+            hurst_mean_revert_threshold=hurst_mean_revert_threshold,
+            hurst_trend_threshold=hurst_trend_threshold,
+            min_adaptive_expiry=min_adaptive_expiry,
+            hurst_min_scale_cutoff=hurst_min_scale_cutoff,
+            hurst_ai_confidence_threshold=hurst_ai_confidence_threshold,
         )
 
         if getattr(self, "_streaming_active", False):
@@ -365,8 +378,15 @@ class StreamingService:
         manipulation = manip_detector.update(timestamp, price)
         regime = None
 
+        candle_closed = bool(market_context.get("candle_closed", False))
+        if candle_closed:
+            for ext in self.extension_manager.get_active_extensions():
+                try:
+                    ext.on_candle_closed(asset, market_context_engine._current_candle, market_context)
+                except Exception as ext_err:
+                    logger.error("Error in extension %s.on_candle_closed: %s", ext.__class__.__name__, ext_err)
+
         if self.level3_enabled:
-            candle_closed = bool(market_context.get("candle_closed", False))
             if candle_closed and market_context.get("ready"):
                 classifier = self._regime_classifiers.get(asset)
                 if classifier is not None:
@@ -409,6 +429,13 @@ class StreamingService:
                         enriched_result["confidence"] = "MEDIUM"
                         
                     enriched_result["manipulation_penalty"] = round(penalty, 1)
+
+            # Run plugin tick-processed interceptors
+            for ext in self.extension_manager.get_active_extensions():
+                try:
+                    enriched_result = ext.on_tick_processed(asset, price, timestamp, enriched_result, market_context)
+                except Exception as ext_err:
+                    logger.error("Error in extension %s.on_tick_processed: %s", ext.__class__.__name__, ext_err)
  
             payload.update({
                 "oteo_score": enriched_result["oteo_score"],

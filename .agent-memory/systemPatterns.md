@@ -16,6 +16,7 @@
 - **Auto-Ghost Simulation Pattern:** Purpose-built background execution engine for automated strategy validation. It uses the `trigger_mode` metadata in WebSocket payloads to differentiate background activity from manual user actions.
 - **Asynchronous Hot-path Queueing:** Ticks are enqueued thread-safely via `loop.call_soon_threadsafe` and consumed asynchronously in a background queue worker task, isolating the event loop from high market volatility.
 - **Memory-Buffered Logging:** I/O logging is offloaded from the tick processing hot-path. Ticks are buffered in memory and flushed periodically in batch cycles.
+- **Modular Extension Hook Pattern:** Dynamic discovery (`ExtensionManager`) and execution (`BaseExtension`) hooks inside core pipelines (`streaming.py` and `auto_ghost.py`), allowing premium plugins to modify state or veto signals dynamically without patching core code.
 
 ## Data Flow
 - Frontend → API client → thin routes → business services → repository → persisted state

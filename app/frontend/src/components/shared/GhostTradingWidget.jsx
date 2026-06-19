@@ -1,4 +1,6 @@
 import { useState, useRef } from 'react';
+import HurstAiSettings from './HurstAiSettings.jsx';
+import HurstExpirySettings from './HurstExpirySettings.jsx';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
@@ -179,6 +181,9 @@ export default function GhostTradingWidget() {
     if (suggestions.autoGhostExpirationSeconds !== undefined) setAutoGhostExpirationSeconds(suggestions.autoGhostExpirationSeconds);
     if (suggestions.ghostMaxTradesPerTimeframe !== undefined) setGhostMaxTradesPerTimeframe(suggestions.ghostMaxTradesPerTimeframe);
     if (suggestions.ghostTimeframeSeconds !== undefined) setGhostTimeframeSeconds(suggestions.ghostTimeframeSeconds);
+
+    if (suggestions.autoGhostHurstFilterEnabled !== undefined) setHurstFilterEnabled(suggestions.autoGhostHurstFilterEnabled);
+    if (suggestions.autoGhostHurstFilterThreshold !== undefined) setHurstFilterThreshold(suggestions.autoGhostHurstFilterThreshold);
 
     let starredAddedCount = 0;
     if (Array.isArray(suggestions.whitelistAssets)) {
@@ -830,7 +835,7 @@ export default function GhostTradingWidget() {
                     )}
                   </div>
                   <div className="text-[7.5px] text-gray-600 italic mt-0.5">
-                    {hasPremiumHurst ? 'Vectorized multi-scale R/S and 30s-3m adaptive durations are running.' : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}
+                    {hasPremiumHurst ? <HurstExpirySettings /> : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}
                   </div>
                 </div>
 
@@ -851,7 +856,7 @@ export default function GhostTradingWidget() {
                     )}
                   </div>
                   <div className="text-[7.5px] text-gray-600 italic mt-0.5">
-                    {hasEliteHurst ? 'Microstructure filters and dynamic AI boundary adjustments active.' : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}
+                    {hasEliteHurst ? <HurstAiSettings /> : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}
                   </div>
                 </div>
               </div>

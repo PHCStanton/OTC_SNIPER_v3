@@ -52,6 +52,11 @@ export const SETTINGS_DEFAULTS = {
   hurstFilterThreshold: 0.48,
   hasPremiumHurst: false,
   hasEliteHurst: false,
+  hurstMeanRevertThreshold: 0.44,
+  hurstTrendThreshold: 0.58,
+  minAdaptiveExpiry: 60,
+  hurstMinScaleCutoff: 12,
+  hurstAiConfidenceThreshold: 80,
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -195,6 +200,11 @@ export function validateSettings(input = {}) {
     hurstFilterThreshold: toNumber(input.hurstFilterThreshold, SETTINGS_DEFAULTS.hurstFilterThreshold, { min: 0.0, max: 1.0, integer: false }),
     hasPremiumHurst: toBoolean(input.hasPremiumHurst, SETTINGS_DEFAULTS.hasPremiumHurst),
     hasEliteHurst: toBoolean(input.hasEliteHurst, SETTINGS_DEFAULTS.hasEliteHurst),
+    hurstMeanRevertThreshold: toNumber(input.hurstMeanRevertThreshold, SETTINGS_DEFAULTS.hurstMeanRevertThreshold, { min: 0.0, max: 1.0, integer: false }),
+    hurstTrendThreshold: toNumber(input.hurstTrendThreshold, SETTINGS_DEFAULTS.hurstTrendThreshold, { min: 0.0, max: 1.0, integer: false }),
+    minAdaptiveExpiry: toNumber(input.minAdaptiveExpiry, SETTINGS_DEFAULTS.minAdaptiveExpiry, { min: 5, max: 3600, integer: true }),
+    hurstMinScaleCutoff: toNumber(input.hurstMinScaleCutoff, SETTINGS_DEFAULTS.hurstMinScaleCutoff, { min: 4, max: 50, integer: true }),
+    hurstAiConfidenceThreshold: toNumber(input.hurstAiConfidenceThreshold, SETTINGS_DEFAULTS.hurstAiConfidenceThreshold, { min: 50, max: 100, integer: true }),
 
 
 
@@ -326,6 +336,11 @@ export const useSettingsStore = create()(
       setHurstFilterThreshold: (val) => commitSettingsPatch(set, { hurstFilterThreshold: val }),
       setHasPremiumHurst: (val) => commitSettingsPatch(set, { hasPremiumHurst: val }),
       setHasEliteHurst: (val) => commitSettingsPatch(set, { hasEliteHurst: val }),
+      setHurstMeanRevertThreshold: (val) => commitSettingsPatch(set, { hurstMeanRevertThreshold: val }),
+      setHurstTrendThreshold: (val) => commitSettingsPatch(set, { hurstTrendThreshold: val }),
+      setMinAdaptiveExpiry: (val) => commitSettingsPatch(set, { minAdaptiveExpiry: val }),
+      setHurstMinScaleCutoff: (val) => commitSettingsPatch(set, { hurstMinScaleCutoff: val }),
+      setHurstAiConfidenceThreshold: (val) => commitSettingsPatch(set, { hurstAiConfidenceThreshold: val }),
       loadGhostProtocol: (key) => {
         set((state) => {
           const protocols = state.ghostProtocols || {};

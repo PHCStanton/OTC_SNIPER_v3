@@ -1,0 +1,30 @@
+{
+  "plugin_id": "adaptive_edge",
+  "name": "Adaptive Edge",
+  "version": "1.0.0",
+  "description": "Premium plugin providing vectorized multi-scale Hurst calculations and adaptive option contract expirations.",
+  "backend_files": [
+    {
+      "src": "backend/hurst_adaptive_expiry.py",
+      "dest": "app/backend/services/extensions/hurst_adaptive_expiry.py"
+    }
+  ],
+  "frontend_files": [
+    {
+      "src": "frontend/HurstExpirySettings.jsx",
+      "dest": "app/frontend/src/components/shared/HurstExpirySettings.jsx"
+    }
+  ],
+  "injection_points": [
+    {
+      "target_file": "app/frontend/src/components/shared/GhostTradingWidget.jsx",
+      "find_pattern": "import { useState, useRef } from 'react';",
+      "replacement_code": "import { useState, useRef } from 'react';\nimport HurstExpirySettings from './HurstExpirySettings.jsx';"
+    },
+    {
+      "target_file": "app/frontend/src/components/shared/GhostTradingWidget.jsx",
+      "find_pattern": "{hasPremiumHurst ? (\n                      <span className=\"rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-emerald-400\">\n                        Active\n                      </span>\n                    ) : (\n                      <span className=\"rounded bg-yellow-500/10 border border-yellow-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-[#ffb800]\">\n                        Locked\n                      </span>\n                    )}\n                  </div>\n                  <div className=\"text-[7.5px] text-gray-600 italic mt-0.5\">\n                    {hasPremiumHurst ? 'Vectorized multi-scale R/S and 30s-3m adaptive durations are running.' : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}\n                  </div>",
+      "replacement_code": "{hasPremiumHurst ? (\n                      <span className=\"rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-emerald-400\">\n                        Active\n                      </span>\n                    ) : (\n                      <span className=\"rounded bg-yellow-500/10 border border-yellow-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-[#ffb800]\">\n                        Locked\n                      </span>\n                    )}\n                  </div>\n                  <div className=\"text-[7.5px] text-gray-600 italic mt-0.5\">\n                    {hasPremiumHurst ? <HurstExpirySettings /> : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}\n                  </div>"
+    }
+  ]
+}

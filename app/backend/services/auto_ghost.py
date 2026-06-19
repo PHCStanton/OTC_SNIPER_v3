@@ -56,6 +56,11 @@ class AutoGhostConfig:
     require_regime_stable: bool = False
     hurst_filter_enabled: bool = False
     hurst_filter_threshold: float = 0.48
+    hurst_mean_revert_threshold: float = 0.44
+    hurst_trend_threshold: float = 0.58
+    min_adaptive_expiry: int = 60
+    hurst_min_scale_cutoff: int = 12
+    hurst_ai_confidence_threshold: float = 80.0
 
 
 class AutoGhostService:
@@ -64,6 +69,7 @@ class AutoGhostService:
     def __init__(self, trade_service: TradeService, config: AutoGhostConfig | None = None):
         self.trade_service = trade_service
         self.config = config or AutoGhostConfig()
+        self.extension_manager = None
         self._active_assets: set[str] = set()
         self._cooldown_until: dict[str, float] = {}
         self._pending_signals: dict[str, tuple[dict[str, Any], int]] = {}
@@ -125,6 +131,11 @@ class AutoGhostService:
         require_regime_stable: bool | None = None,
         hurst_filter_enabled: bool | None = None,
         hurst_filter_threshold: float | None = None,
+        hurst_mean_revert_threshold: float | None = None,
+        hurst_trend_threshold: float | None = None,
+        min_adaptive_expiry: int | None = None,
+        hurst_min_scale_cutoff: int | None = None,
+        hurst_ai_confidence_threshold: float | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         updates: dict[str, Any] = {}
@@ -190,9 +201,19 @@ class AutoGhostService:
             updates["hurst_filter_enabled"] = bool(hurst_filter_enabled)
         if hurst_filter_threshold is not None:
             updates["hurst_filter_threshold"] = float(hurst_filter_threshold)
-
+        if hurst_mean_revert_threshold is not None:
+            updates["hurst_mean_revert_threshold"] = float(hurst_mean_revert_threshold)
+        if hurst_trend_threshold is not None:
+            updates["hurst_trend_threshold"] = float(hurst_trend_threshold)
+        if min_adaptive_expiry is not None:
+            updates["min_adaptive_expiry"] = int(min_adaptive_expiry)
+        if hurst_min_scale_cutoff is not None:
+            updates["hurst_min_scale_cutoff"] = int(hurst_min_scale_cutoff)
+        if hurst_ai_confidence_threshold is not None:
+            updates["hurst_ai_confidence_threshold"] = float(hurst_ai_confidence_threshold)
+ 
         self.config = replace(self.config, **updates)
-
+ 
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
             self._pending_signals.clear()
@@ -217,7 +238,7 @@ class AutoGhostService:
         elif not self.config.enabled and previous_enabled:
             self._pending_signals.clear()
         return self.status
-
+ 
     @property
     def status(self) -> dict[str, Any]:
         return {
@@ -249,6 +270,13 @@ class AutoGhostService:
             "auto_ghost_require_regime_stable": self.config.require_regime_stable,
             "auto_ghost_hurst_filter_enabled": self.config.hurst_filter_enabled,
             "auto_ghost_hurst_filter_threshold": self.config.hurst_filter_threshold,
+            "auto_ghost_hurst_mean_revert_threshold": self.config.hurst_mean_revert_threshold,
+            "auto_ghost_hurst_trend_threshold": self.config.hurst_trend_threshold,
+            "auto_ghost_min_adaptive_expiry": self.config.min_adaptive_expiry,
+            "auto_ghost_hurst_min_scale_cutoff": self.config.hurst_min_scale_cutoff,
+            "auto_ghost_hurst_ai_confidence_threshold": self.config.hurst_ai_confidence_threshold,
+            "hasPremiumHurst": any(ext.__class__.__name__ == "HurstAdaptiveExpiry" for ext in self.extension_manager.get_active_extensions()) if getattr(self, "extension_manager", None) is not None else False,
+            "hasEliteHurst": any(ext.__class__.__name__ == "HurstAiNoise" for ext in self.extension_manager.get_active_extensions()) if getattr(self, "extension_manager", None) is not None else False,
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -503,6 +531,21 @@ class AutoGhostService:
                     self.config.hurst_filter_threshold,
                 )
                 return self._reject(asset, 'hurst_filter')
+        # Plugin veto check
+        if getattr(self, "extension_manager", None) is not None:
+            for ext in self.extension_manager.get_active_extensions():
+                try:
+                    allow, reason = ext.on_consider_signal(asset, price, oteo_result, self.config)
+                    if not allow:
+                        logger.info(
+                            "Auto-Ghost skipped %s: vetoed by extension %s (reason: %s)",
+                            asset,
+                            ext.__class__.__name__,
+                            reason or "No reason given",
+                        )
+                        return self._reject(asset, f"plugin_veto_{reason or 'unknown'}")
+                except Exception as ext_err:
+                    logger.error("Error in extension %s.on_consider_signal: %s", ext.__class__.__name__, ext_err)
 
         if asset in self._active_assets:
             return self._reject(asset, 'asset_active')
@@ -581,7 +624,7 @@ class AutoGhostService:
             asset_id=asset,
             direction=str(oteo_result["recommended"]).lower(),
             amount=self.config.amount,
-            expiration=self.config.expiration_seconds,
+            expiration=oteo_result.get("override_expiration_seconds") or self.config.expiration_seconds,
             account_key="primary",
             trade_mode="ghost",
             session_id=self._session_id,

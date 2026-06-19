@@ -52,3 +52,10 @@
 - **Results & Analysis Panel Filters:** 5 optimal z-score cutoffs (0.3/0.5/0.8/1.2/2.0) + per-regime win rates exposed in filter bar as toggleable chips/presets. Per-session "regimes" + "avg_z_score" enrichment. Client filtering of session list; server-side filtering of AI trade summaries. AI prompts now include the optimal data + active filters and are instructed to recommend specific z/regime combos as Ghost Controller execution gates.
 - **Profile Extensibility:** ai_config + frontend profiles drive model (reasoning_effort), voice (TTS), and (future) filter defaults per feature (confirmation, review, analysis, voiceover).
 - **AI-Adaptive Context:** Recent N-trade windows (via condition_stats, entry_context with z/regime/manip) + KB patterns enable AI to suggest "smart average" gate values (calibration phase before live execution). Advisory/confirmation modes preserved.
+
+## Modular Plugin System & Tiered Packaging (2026-06-19)
+- **Plugin Registry Manager:** Dynamically imports plugin packages containing classes inheriting from `BaseExtension` found in `app/backend/services/extensions/`.
+- **Three Lifecycle Hooks:** Plugins implement `on_tick_processed`, `on_candle_closed`, and `on_consider_signal` (the veto gate check before Auto-Ghost submits trades).
+- **Atomic Manifest Installer:** Each plugin contains a manifest-driven Python installer script (`install.py`) that copies modules and injects UI components inside the frontend file `GhostTradingWidget.jsx`. Reverting with `--uninstall` removes all copied files and restores backups seamlessly.
+- **Lock Verification:** Backend status payloads dynamically report active/inactive status badges for installed tiers (`hasPremiumHurst` and `hasEliteHurst`) by checking the class names of registered extensions.
+

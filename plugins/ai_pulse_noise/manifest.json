@@ -1,0 +1,30 @@
+{
+  "plugin_id": "ai_pulse_noise",
+  "name": "AI Pulse & Noise Filter",
+  "version": "1.0.0",
+  "description": "Elite plugin providing microstructure scale-cutoff noise filters and dynamic AI boundary adjustments.",
+  "backend_files": [
+    {
+      "src": "backend/hurst_ai_noise.py",
+      "dest": "app/backend/services/extensions/hurst_ai_noise.py"
+    }
+  ],
+  "frontend_files": [
+    {
+      "src": "frontend/HurstAiSettings.jsx",
+      "dest": "app/frontend/src/components/shared/HurstAiSettings.jsx"
+    }
+  ],
+  "injection_points": [
+    {
+      "target_file": "app/frontend/src/components/shared/GhostTradingWidget.jsx",
+      "find_pattern": "import { useState, useRef } from 'react';",
+      "replacement_code": "import { useState, useRef } from 'react';\nimport HurstAiSettings from './HurstAiSettings.jsx';"
+    },
+    {
+      "target_file": "app/frontend/src/components/shared/GhostTradingWidget.jsx",
+      "find_pattern": "{hasEliteHurst ? (\n                      <span className=\"rounded bg-purple-500/10 border border-purple-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-purple-400\">\n                        Active\n                      </span>\n                    ) : (\n                      <span className=\"rounded bg-[#ff4a4a]/10 border border-[#ff4a4a]/25 px-1 py-0.2 text-[7px] font-black uppercase text-red-400\">\n                        Locked\n                      </span>\n                    )}\n                  </div>\n                  <div className=\"text-[7.5px] text-gray-600 italic mt-0.5\">\n                    {hasEliteHurst ? 'Microstructure filters and dynamic AI boundary adjustments active.' : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}\n                  </div>",
+      "replacement_code": "{hasEliteHurst ? (\n                      <span className=\"rounded bg-purple-500/10 border border-purple-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-purple-400\">\n                        Active\n                      </span>\n                    ) : (\n                      <span className=\"rounded bg-[#ff4a4a]/10 border border-[#ff4a4a]/25 px-1 py-0.2 text-[7px] font-black uppercase text-red-400\">\n                        Locked\n                      </span>\n                    )}\n                  </div>\n                  <div className=\"text-[7.5px] text-gray-600 italic mt-0.5\">\n                    {hasEliteHurst ? <HurstAiSettings /> : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}\n                  </div>"
+    }
+  ]
+}

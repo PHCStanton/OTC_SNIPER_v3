@@ -1,5 +1,6 @@
 # Active Context
 
+- **Modular Plugin & Tiered Packaging Architecture Implemented and Verified (2026-06-19).** Designed and engineered the `ExtensionManager` and `BaseExtension` hooks integrated into `streaming.py` and `auto_ghost.py`. Developed two tiered packages ("Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite)) complete with backend calculations, regime state machine, microstructure cutoff noise filters, AI confidence gating, and frontend React settings components. Unified configuration across the Zustand store and backend strategy API, including dynamic license detection. All 16/16 unit tests passed and production builds verified in both installed and uninstalled states. Created `plugins/README.md` to document the architecture and developer workflow.
 - **Calibration Feature Deprecated & Completely Removed (2026-06-16).** Stripped all backend properties (`ai_calibration_phase`), FastAPI request parameters (`calib_context`), and session metadata checks from `auto_ghost.py`, `streaming.py`, `strategy.py`, `analysis.py`, and `analysis_service.py`. Decoupled settings stores (`useSettingsStore.js`), sync layers (`App.jsx`), and Layout Timers (`GlobalTimer.jsx`). Removed the calibration trigger UI panel from `AnalysisView.jsx` and renamed the tab to **AI Refinement**. Verified backend compilation and pytest suite (`test_auto_ghost.py`) passed cleanly.
 - **Calibration AI Advisory Alignment & Bug Fixes are fully complete and verified (2026-06-15).** Fixed Zustand settings store validation bug in `useSettingsStore.js` to allow `aiCalibrationPhase` changes to persist and sync. Added session-level `is_calibration` parsing in `analysis_service.py` to auto-tag calibration sessions. Added clear `Calib` and `Tuned` status badges to session logs list (`AnalysisView.jsx`) and floating controller widget header (`GhostTradingWidget.jsx`). Verified clean frontend production builds and automated test suite execution (`test_auto_ghost.py`).
 - **Z-Score & Regime Gates (Ghost Protocol) Integration & Stale Tick Filtering is now fully complete and verified (2026-06-14).** Resolved the JSX compilation syntax error, calibration stopwatch auto-stop, and Grok audio overlapping in `AnalysisView.jsx`. Implemented settings, validation, and `loadGhostProtocol` actions in `useSettingsStore.js` and wired them to sync via `App.jsx`. Configured FastAPI strategy router, streaming service updates, and implemented the actual Z-Score and Market Regime confluences validation checks inside `auto_ghost.py`. Applied a 15-minute (900s) age limit constraint on historical ticks loaded during engine pre-seeding in `streaming.py` to prevent stale context data from corrupting initialization state.
@@ -15,6 +16,18 @@
 - The next valid implementation target is **Phase 6: Volatility-Adaptive Expiry** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
 
 ## Latest Changes
+
+### Applied on 2026-06-19 — Modular Plugin & Tiered Packaging Architecture (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| PLG-1 | Backend Hooks | `streaming.py`, `auto_ghost.py` | Integrated `BaseExtension` hooks: `on_tick_processed`, `on_candle_closed`, and `on_consider_signal` to decouple core loops from extensions. |
+| PLG-2 | Dynamic Manager | `app/backend/services/extensions/manager.py`, `base.py` | Built dynamic discoverability and loading of active extensions. Calculated tier licenses (`hasPremiumHurst`, `hasEliteHurst`) dynamically based on registration. |
+| PLG-3 | Premium Plugin | `plugins/adaptive_edge/` | Developed "Adaptive Edge" plugin containing NumPy-vectorized multi-scale R/S Hurst math, regime state machine hysteresis filters, and dynamic contract expiration duration scaling. |
+| PLG-4 | Elite Plugin | `plugins/ai_pulse_noise/` | Developed "AI Pulse & Noise Filter" plugin containing microstructure tick-scale cutoffs to ignore bid-ask bounces and dynamic AI signal confidence veto bounds. |
+| PLG-5 | Atomic Installers | `plugins/*/install.py`, `manifest.json` | Created manifest-driven installers for copying files and injecting UI components. Supports clean uninstallation with automatic rollback and backup restoration. |
+| PLG-6 | Documentation | `plugins/README.md` | Created a comprehensive guide explaining the architecture, available plugins, installation, and extension developer guide. |
+| PLG-7 | Verification | `test_auto_ghost.py`, `test_level3_phase1.py` etc. | Verified backend checks and Vite production build. Ran 16/16 unit tests successfully. Verified atomic uninstallation/reinstallation. |
 
 ### Applied on 2026-06-16 — Deprecation & Removal of Calibration Feature (VERIFIED ✅)
 

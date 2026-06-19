@@ -44,6 +44,11 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_require_regime_stable: bool = Field(default=False)
     auto_ghost_hurst_filter_enabled: bool = Field(default=False)
     auto_ghost_hurst_filter_threshold: float = Field(default=0.48, ge=0.0, le=1.0)
+    auto_ghost_hurst_mean_revert_threshold: float = Field(default=0.44, ge=0.0, le=1.0)
+    auto_ghost_hurst_trend_threshold: float = Field(default=0.58, ge=0.0, le=1.0)
+    auto_ghost_min_adaptive_expiry: int = Field(default=60, ge=5, le=3600)
+    auto_ghost_hurst_min_scale_cutoff: int = Field(default=12, ge=4, le=50)
+    auto_ghost_hurst_ai_confidence_threshold: float = Field(default=80.0, ge=50.0, le=100.0)
     ai_trade_interval: int = Field(default=10, ge=1, le=100)
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
@@ -102,6 +107,11 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             ai_pulse_interval_seconds=body.ai_pulse_interval_seconds,
             auto_ghost_hurst_filter_enabled=body.auto_ghost_hurst_filter_enabled,
             auto_ghost_hurst_filter_threshold=body.auto_ghost_hurst_filter_threshold,
+            hurst_mean_revert_threshold=body.auto_ghost_hurst_mean_revert_threshold,
+            hurst_trend_threshold=body.auto_ghost_hurst_trend_threshold,
+            min_adaptive_expiry=body.auto_ghost_min_adaptive_expiry,
+            hurst_min_scale_cutoff=body.auto_ghost_hurst_min_scale_cutoff,
+            hurst_ai_confidence_threshold=body.auto_ghost_hurst_ai_confidence_threshold,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:

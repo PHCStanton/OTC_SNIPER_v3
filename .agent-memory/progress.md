@@ -4,6 +4,7 @@
 - This file tracks completed milestones, recent delivered work, and remaining validation targets.
 
 ## Completed Milestones
+- Modular Plugin & Tiered Packaging Architecture — Implemented `ExtensionManager` / `BaseExtension` hook-based system, built "Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite) packages, created manifest-driven atomic installer scripts, and documented the architecture in `plugins/README.md`.
 - Project Cleanup: Deprecation of Calibration Feature — Stripped calibration controllers, timed runners, and config parameters fully from backend and frontend.
 - Architecture separation (Workspace vs App Root)
 - Phase 0: Ops Layer — Chrome lifecycle management + manual SSID input
@@ -37,6 +38,7 @@
 - **Z-Score & Regime Gates (Ghost Protocol) Integration & Stale Tick Filtering (2026-06-14, SIGNED OFF & CLOSED ✅)** — Resolved the JSX compilation syntax error, Grok audio overlapping, and calibration stopwatch auto-stop running leak in `GlobalTimer.jsx`. Resolved React Rules of Hooks violation in `AnalysisView.jsx`. Implemented settings, validation, and loadGhostProtocol actions in `useSettingsStore.js` and wired them to sync via `App.jsx`. Configured FastAPI strategy router, streaming service updates, and implemented the actual Z-Score and Market Regime confluences validation checks inside `auto_ghost.py`. Applied a 15-minute (900s) age limit constraint on historical ticks loaded during engine pre-seeding in `streaming.py` to prevent stale context data from corrupting initialization state. Added Test 7 and Test 8 smoke tests in `test_auto_ghost.py` for full gates verification.
 - **Grok Native TTS (Text-to-Speech) Integration (2026-06-13+)** — Full stack: backend provider/service/config/API for /v1/tts with voice profiles (grok vs browser), speed, custom voice_ids. Frontend AISettings with toggle/selectors/test playback. Integrated into AnalysisView and voice-over flows.
 - **UI Sound Updates and Progress Tracking Consolidation (2026-06-15, SIGNED OFF & CLOSED ✅)** — Replaced standard Click, Ghost Win, and Ghost Loss sounds with updated premium audio files. Consolidated development progress tracking in `.agent-memory/progress.md` by removing duplicate root-level `progress.md`.
+- **Modular Plugin & Tiered Packaging Architecture (2026-06-19, SIGNED OFF & CLOSED ✅)** — Built dynamic plugin architecture with backend `ExtensionManager`/`BaseExtension` hooks, registry discovery, and two installers/manifests. Created "Adaptive Edge" and "AI Pulse & Noise Filter" plugins with backend models and React settings panels. Wrote comprehensive `plugins/README.md` guide.
 - **AI Pulse Calibration & Ghost Protocol Suggestions (2026-06-16, SIGNED OFF & CLOSED ✅)** — Merged Calibration mechanics into the real-time AI Pulse loop. Extended prompts with session context (PnL, win rates, conditions) and past trades history. Instructed AI to provide explicit CALL/PUT trade instructions, prices, wait times, and structured JSON parameter recommendations. Frontend parses recommendations, enables one-click updates to settings stores and starred asset favors whitelists, and supports extending to chat drafts.
 - **Deprecation & removal of Calibration Feature (2026-06-16):**
   - **Backend Clean:** Removed `ai_calibration_phase` from strategy configuration schemas and endpoints (`strategy.py`), strategy runtime sync logic (`streaming.py`), Auto-Ghost config attributes (`auto_ghost.py`), and session parsing/Grok prompts builder (`analysis_service.py`). Removed `calib_context` analysis refinement parameters (`analysis.py`).
@@ -44,6 +46,12 @@
   - **UI Widgets Decoupling:** Stripped stopwatch event triggers from `GlobalTimer.jsx` and renamed Results Analysis selector to **AI Refinement**. Cleaned up calibration badges from `AnalysisView.jsx` and `GhostTradingWidget.jsx`, replacing them with static simulated `Ghost` markers.
 
 ## Recent Delivery Snapshot
+- **Modular Plugin & Tiered Packaging Architecture (2026-06-19):**
+  - **Decoupled Extension Hooks:** Integrated `on_tick_processed`, `on_candle_closed`, and `on_consider_signal` triggers inside the core processing loops (`streaming.py` and `auto_ghost.py`) using a common `BaseExtension` abstraction.
+  - **Dynamic Extension Manager:** Built dynamic discovery and lifecycle hook propagation in `manager.py`. Installs/uninstalls modules at runtime, and computes license tiers (`hasPremiumHurst`, `hasEliteHurst`) automatically from active classes.
+  - **Tiered Packages:** Implemented "Adaptive Edge" (NumPy-vectorized R/S Hurst, regimes hysteresis tracker, dynamic expiry override) and "AI Pulse & Noise Filter" (microstructure tick cutoff size filter, AI confidence signal veto).
+  - **Atomic Installers:** Created manifest-driven `install.py` scripts for each plugin to copy backend/frontend files and regex-inject UI mounts into `GhostTradingWidget.jsx`. Reverts all changes on `--uninstall` and restores backups.
+  - **Interactive Documentation:** Created a clear developer guide and architecture reference in `plugins/README.md`.
 - **AI Pulse Calibration & Ghost Protocol Suggestions (2026-06-16):**
   - **Backend AI Prompt & Sync:** Updated `streaming.py` to fetch current session metrics (PnL, win rate, condition win rates, gates) and recent trades context (last 10 trades fallback). Prompts xAI/Gemini to output real-time insights with direction, levels, wait times, and structured JSON tweaks. Parses JSON suggestions defensively and emits via Socket.IO.
   - **Zustand State Stores:** Expanded notification store to save recommendations. Added bulk whitelisting action `setStarredAssets` to `useAssetStore.js`. App.jsx maps notifications data payload.
