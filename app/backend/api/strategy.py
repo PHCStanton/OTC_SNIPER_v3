@@ -49,6 +49,9 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_min_adaptive_expiry: int = Field(default=60, ge=5, le=3600)
     auto_ghost_hurst_min_scale_cutoff: int = Field(default=12, ge=4, le=50)
     auto_ghost_hurst_ai_confidence_threshold: float = Field(default=80.0, ge=50.0, le=100.0)
+    auto_ghost_blacklist_assets: list[str] = Field(default_factory=list)
+    auto_ghost_hurst_l2_enabled: bool = Field(default=True)
+    auto_ghost_hurst_l3_enabled: bool = Field(default=True)
     ai_trade_interval: int = Field(default=10, ge=1, le=100)
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
@@ -112,6 +115,9 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             min_adaptive_expiry=body.auto_ghost_min_adaptive_expiry,
             hurst_min_scale_cutoff=body.auto_ghost_hurst_min_scale_cutoff,
             hurst_ai_confidence_threshold=body.auto_ghost_hurst_ai_confidence_threshold,
+            auto_ghost_blacklist_assets=body.auto_ghost_blacklist_assets,
+            auto_ghost_hurst_l2_enabled=body.auto_ghost_hurst_l2_enabled,
+            auto_ghost_hurst_l3_enabled=body.auto_ghost_hurst_l3_enabled,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:

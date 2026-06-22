@@ -10,8 +10,9 @@ from .base import BaseExtension
 logger = logging.getLogger(__name__)
 
 class ExtensionManager:
-    def __init__(self):
+    def __init__(self, on_reload=None):
         self._extensions: List[BaseExtension] = []
+        self._on_reload = on_reload
         self.discover_extensions()
 
     def discover_extensions(self) -> None:
@@ -27,7 +28,7 @@ class ExtensionManager:
                 module_name = entry[:-3]
                 try:
                     # Import the plugin module dynamically
-                    module = importlib.import_module(f".{module_name}", package="app.backend.services.extensions")
+                    module = importlib.import_module(f".{module_name}", package=__package__)
                     
                     # Find all classes that subclass BaseExtension
                     for attr_name in dir(module):
@@ -43,6 +44,12 @@ class ExtensionManager:
                             logger.info("Successfully registered extension: %s", attr.__name__)
                 except Exception as e:
                     logger.error("Failed to load extension module %s: %s", module_name, e, exc_info=True)
+
+        if self._on_reload:
+            try:
+                self._on_reload()
+            except Exception as cb_err:
+                logger.error("Extension reload callback failed: %s", cb_err)
 
     def get_active_extensions(self) -> List[BaseExtension]:
         """Return all registered plugins."""

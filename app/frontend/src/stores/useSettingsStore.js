@@ -50,13 +50,17 @@ export const SETTINGS_DEFAULTS = {
   // Hurst Filter (L1 Core) & Package license gates
   hurstFilterEnabled: false,
   hurstFilterThreshold: 0.48,
-  hasPremiumHurst: false,
-  hasEliteHurst: false,
+  hasPremiumHurst: true,
+  hasEliteHurst: true,
   hurstMeanRevertThreshold: 0.44,
   hurstTrendThreshold: 0.58,
   minAdaptiveExpiry: 60,
   hurstMinScaleCutoff: 12,
   hurstAiConfidenceThreshold: 80,
+  sidebarPayoutThreshold: 92,
+  ghostBlacklist: [],
+  hurstL2Enabled: true,
+  hurstL3Enabled: true,
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -198,13 +202,17 @@ export function validateSettings(input = {}) {
 
     hurstFilterEnabled: toBoolean(input.hurstFilterEnabled, SETTINGS_DEFAULTS.hurstFilterEnabled),
     hurstFilterThreshold: toNumber(input.hurstFilterThreshold, SETTINGS_DEFAULTS.hurstFilterThreshold, { min: 0.0, max: 1.0, integer: false }),
-    hasPremiumHurst: toBoolean(input.hasPremiumHurst, SETTINGS_DEFAULTS.hasPremiumHurst),
-    hasEliteHurst: toBoolean(input.hasEliteHurst, SETTINGS_DEFAULTS.hasEliteHurst),
+    hasPremiumHurst: true,
+    hasEliteHurst: true,
     hurstMeanRevertThreshold: toNumber(input.hurstMeanRevertThreshold, SETTINGS_DEFAULTS.hurstMeanRevertThreshold, { min: 0.0, max: 1.0, integer: false }),
     hurstTrendThreshold: toNumber(input.hurstTrendThreshold, SETTINGS_DEFAULTS.hurstTrendThreshold, { min: 0.0, max: 1.0, integer: false }),
     minAdaptiveExpiry: toNumber(input.minAdaptiveExpiry, SETTINGS_DEFAULTS.minAdaptiveExpiry, { min: 5, max: 3600, integer: true }),
     hurstMinScaleCutoff: toNumber(input.hurstMinScaleCutoff, SETTINGS_DEFAULTS.hurstMinScaleCutoff, { min: 4, max: 50, integer: true }),
     hurstAiConfidenceThreshold: toNumber(input.hurstAiConfidenceThreshold, SETTINGS_DEFAULTS.hurstAiConfidenceThreshold, { min: 50, max: 100, integer: true }),
+    sidebarPayoutThreshold: toNumber(input.sidebarPayoutThreshold, SETTINGS_DEFAULTS.sidebarPayoutThreshold, { min: 0, max: 100, integer: true }),
+    ghostBlacklist: Array.isArray(input.ghostBlacklist) ? input.ghostBlacklist : SETTINGS_DEFAULTS.ghostBlacklist,
+    hurstL2Enabled: toBoolean(input.hurstL2Enabled, SETTINGS_DEFAULTS.hurstL2Enabled),
+    hurstL3Enabled: toBoolean(input.hurstL3Enabled, SETTINGS_DEFAULTS.hurstL3Enabled),
 
 
 
@@ -341,6 +349,10 @@ export const useSettingsStore = create()(
       setMinAdaptiveExpiry: (val) => commitSettingsPatch(set, { minAdaptiveExpiry: val }),
       setHurstMinScaleCutoff: (val) => commitSettingsPatch(set, { hurstMinScaleCutoff: val }),
       setHurstAiConfidenceThreshold: (val) => commitSettingsPatch(set, { hurstAiConfidenceThreshold: val }),
+      setSidebarPayoutThreshold: (val) => commitSettingsPatch(set, { sidebarPayoutThreshold: val }),
+      setGhostBlacklist: (val) => commitSettingsPatch(set, { ghostBlacklist: val }),
+      setHurstL2Enabled: (val) => commitSettingsPatch(set, { hurstL2Enabled: val }),
+      setHurstL3Enabled: (val) => commitSettingsPatch(set, { hurstL3Enabled: val }),
       loadGhostProtocol: (key) => {
         set((state) => {
           const protocols = state.ghostProtocols || {};

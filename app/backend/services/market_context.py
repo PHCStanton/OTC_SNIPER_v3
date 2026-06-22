@@ -273,6 +273,174 @@ class MarketContextEngine:
         self._cached_context: dict[str, Any] | None = None
         self._tick_timestamps: deque[float] = deque(maxlen=60)
         self._tick_prices: deque[float] = deque(maxlen=400)
+        self._adx_state: dict[str, Any] | None = None
+        self.extensions_override_hurst: bool = False
+
+    def _bootstrap_adx_state(self, closed_candles: list[Candle], period: int) -> dict[str, Any] | None:
+        if len(closed_candles) < period + 2:
+            return None
+
+        trs: list[float] = []
+        plus_dm_values: list[float] = []
+        minus_dm_values: list[float] = []
+
+        for index in range(1, len(closed_candles)):
+            previous = closed_candles[index - 1]
+            current = closed_candles[index]
+
+            high_diff = current.high - previous.high
+            low_diff = previous.low - current.low
+            plus_dm = high_diff if high_diff > low_diff and high_diff > 0 else 0.0
+            minus_dm = low_diff if low_diff > high_diff and low_diff > 0 else 0.0
+
+            true_range = max(
+                current.high - current.low,
+                abs(current.high - previous.close),
+                abs(current.low - previous.close),
+            )
+
+            trs.append(true_range)
+            plus_dm_values.append(plus_dm)
+            minus_dm_values.append(minus_dm)
+
+        if len(trs) < period:
+            return None
+
+        atr = sum(trs[:period]) / period
+        plus_dm_smoothed = sum(plus_dm_values[:period]) / period
+        minus_dm_smoothed = sum(minus_dm_values[:period]) / period
+
+        adx_series: list[float] = []
+        plus_di = 0.0
+        minus_di = 0.0
+
+        for index in range(period, len(trs)):
+            atr = ((atr * (period - 1)) + trs[index]) / period
+            plus_dm_smoothed = ((plus_dm_smoothed * (period - 1)) + plus_dm_values[index]) / period
+            minus_dm_smoothed = ((minus_dm_smoothed * (period - 1)) + minus_dm_values[index]) / period
+
+            if atr <= 0:
+                plus_di = 0.0
+                minus_di = 0.0
+                dx = 0.0
+            else:
+                plus_di = 100.0 * (plus_dm_smoothed / atr)
+                minus_di = 100.0 * (minus_dm_smoothed / atr)
+                denominator = plus_di + minus_di
+                dx = 0.0 if denominator <= 0 else 100.0 * abs(plus_di - minus_di) / denominator
+
+            if not adx_series:
+                adx_series.append(dx)
+            else:
+                adx_series.append(((adx_series[-1] * (period - 1)) + dx) / period)
+
+        if not adx_series:
+            return None
+
+        return {
+            "atr": atr,
+            "plus_dm_smoothed": plus_dm_smoothed,
+            "minus_dm_smoothed": minus_dm_smoothed,
+            "plus_di": plus_di,
+            "minus_di": minus_di,
+            "adx_history": adx_series[-3:],
+            "prev_candle": closed_candles[-1],
+        }
+
+    def _step_adx(self, state: dict[str, Any], curr_candle: Candle, period: int) -> dict[str, Any]:
+        prev = state["prev_candle"]
+        curr = curr_candle
+
+        high_diff = curr.high - prev.high
+        low_diff = prev.low - curr.low
+        plus_dm = high_diff if high_diff > low_diff and high_diff > 0 else 0.0
+        minus_dm = low_diff if low_diff > high_diff and low_diff > 0 else 0.0
+
+        true_range = max(
+            curr.high - curr.low,
+            abs(curr.high - prev.close),
+            abs(curr.low - prev.close),
+        )
+
+        atr_prev = state["atr"]
+        plus_dm_smoothed_prev = state["plus_dm_smoothed"]
+        minus_dm_smoothed_prev = state["minus_dm_smoothed"]
+
+        atr = ((atr_prev * (period - 1)) + true_range) / period
+        plus_dm_smoothed = ((plus_dm_smoothed_prev * (period - 1)) + plus_dm) / period
+        minus_dm_smoothed = ((minus_dm_smoothed_prev * (period - 1)) + minus_dm) / period
+
+        if atr <= 0:
+            plus_di = 0.0
+            minus_di = 0.0
+            dx = 0.0
+        else:
+            plus_di = 100.0 * (plus_dm_smoothed / atr)
+            minus_di = 100.0 * (minus_dm_smoothed / atr)
+            denominator = plus_di + minus_di
+            dx = 0.0 if denominator <= 0 else 100.0 * abs(plus_di - minus_di) / denominator
+
+        adx_prev = state["adx_history"][-1]
+        adx = ((adx_prev * (period - 1)) + dx) / period
+
+        adx_history = list(state["adx_history"])
+        adx_history.append(adx)
+        if len(adx_history) > 3:
+            adx_history.pop(0)
+
+        return {
+            "atr": atr,
+            "plus_dm_smoothed": plus_dm_smoothed,
+            "minus_dm_smoothed": minus_dm_smoothed,
+            "plus_di": plus_di,
+            "minus_di": minus_di,
+            "adx_history": adx_history,
+            "prev_candle": curr,
+        }
+
+    def _update_adx_incremental(self, closed_candles: list[Candle], current_candle: Candle | None, period: int) -> dict[str, float | None]:
+        if len(closed_candles) < period + 2:
+            self._adx_state = None
+            return {"atr": None, "adx": None, "plus_di": None, "minus_di": None, "adx_slope": None}
+
+        # 1. Ensure base state is updated to include all closed candles
+        if self._adx_state is None:
+            self._adx_state = self._bootstrap_adx_state(closed_candles, period)
+        else:
+            # If closed_candles has progressed, advance self._adx_state to closed_candles[-1]
+            last_closed = closed_candles[-1]
+            if last_closed.start_ts != self._adx_state["prev_candle"].start_ts:
+                # Find the closed candle that matches our previous state
+                start_idx = -1
+                for idx, c in enumerate(closed_candles):
+                    if c.start_ts == self._adx_state["prev_candle"].start_ts:
+                        start_idx = idx
+                        break
+
+                if start_idx != -1:
+                    # Apply step-by-step updates for all new closed candles
+                    for idx in range(start_idx + 1, len(closed_candles)):
+                        self._adx_state = self._step_adx(self._adx_state, closed_candles[idx], period)
+                else:
+                    # Fallback/reset if we completely lost sync
+                    self._adx_state = self._bootstrap_adx_state(closed_candles, period)
+
+        if self._adx_state is None:
+            return {"atr": None, "adx": None, "plus_di": None, "minus_di": None, "adx_slope": None}
+
+        # 2. Perform temporary step to current_candle (if present)
+        if current_candle is not None:
+            temp_state = self._step_adx(self._adx_state, current_candle, period)
+        else:
+            temp_state = self._adx_state
+
+        atr = temp_state["atr"]
+        plus_di = temp_state["plus_di"]
+        minus_di = temp_state["minus_di"]
+        adx = temp_state["adx_history"][-1] if temp_state["adx_history"] else None
+        adx_slope = temp_state["adx_history"][-1] - temp_state["adx_history"][-3] if len(temp_state["adx_history"]) >= 3 else 0.0
+
+        return {"atr": atr, "adx": adx, "plus_di": plus_di, "minus_di": minus_di, "adx_slope": adx_slope}
 
     def _compute_tick_frequency(self, timestamp: float) -> float:
         self._tick_timestamps.append(float(timestamp))
@@ -308,7 +476,7 @@ class MarketContextEngine:
             if self._current_candle is not None:
                 candles.append(self._current_candle)
 
-            metrics = _compute_adx(candles, self.config.adx_period)
+            metrics = self._update_adx_incremental(list(self._closed_candles), self._current_candle, self.config.adx_period)
             atr = metrics["atr"]
             adx = metrics["adx"]
             plus_di = metrics["plus_di"]
@@ -365,7 +533,10 @@ class MarketContextEngine:
                 cci_state = "neutral"
 
             # Calculate single-scale Hurst exponent on the rolling tick prices
-            hurst_val = calculate_single_scale_hurst(list(self._tick_prices), window=300)
+            if not self.extensions_override_hurst:
+                hurst_val = calculate_single_scale_hurst(list(self._tick_prices), window=300)
+            else:
+                hurst_val = self._cached_context.get("hurst", 0.5) if self._cached_context else 0.5
 
             self._cached_context = {
                 "ready": len(closed_candles) >= max(self.config.adx_period + 2, self.config.cci_period, self.config.micro_pivot_span * 3 + 2),

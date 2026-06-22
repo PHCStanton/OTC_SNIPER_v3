@@ -1,0 +1,469 @@
+{
+  "summary": {
+    "by_pocket_expiry": {
+      "Vol:LOW | Liq:HIGH | Manip:LOW|15": {
+        "wins": 19176,
+        "losses": 18980,
+        "draws": 1257,
+        "win_rate": 50.25684033965825
+      },
+      "Vol:LOW | Liq:HIGH | Manip:LOW|30": {
+        "wins": 19149,
+        "losses": 19452,
+        "draws": 796,
+        "win_rate": 49.607523121162664
+      },
+      "Vol:LOW | Liq:HIGH | Manip:LOW|60": {
+        "wins": 19070,
+        "losses": 19643,
+        "draws": 644,
+        "win_rate": 49.25993852194354
+      },
+      "Vol:LOW | Liq:HIGH | Manip:LOW|90": {
+        "wins": 18620,
+        "losses": 20129,
+        "draws": 575,
+        "win_rate": 48.05285297685102
+      },
+      "Vol:LOW | Liq:HIGH | Manip:LOW|120": {
+        "wins": 18522,
+        "losses": 20373,
+        "draws": 414,
+        "win_rate": 47.620516775935215
+      },
+      "Vol:LOW | Liq:HIGH | Manip:LOW|180": {
+        "wins": 18634,
+        "losses": 20358,
+        "draws": 259,
+        "win_rate": 47.78929011079196
+      },
+      "Vol:LOW | Liq:HIGH | Manip:LOW|300": {
+        "wins": 19499,
+        "losses": 19155,
+        "draws": 261,
+        "win_rate": 50.44497335333988
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|15": {
+        "wins": 11,
+        "losses": 6,
+        "draws": 2,
+        "win_rate": 64.70588235294117
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|30": {
+        "wins": 14,
+        "losses": 4,
+        "draws": 1,
+        "win_rate": 77.77777777777779
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|60": {
+        "wins": 11,
+        "losses": 8,
+        "draws": 0,
+        "win_rate": 57.89473684210527
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|90": {
+        "wins": 12,
+        "losses": 7,
+        "draws": 0,
+        "win_rate": 63.1578947368421
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|120": {
+        "wins": 9,
+        "losses": 10,
+        "draws": 0,
+        "win_rate": 47.368421052631575
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|180": {
+        "wins": 9,
+        "losses": 10,
+        "draws": 0,
+        "win_rate": 47.368421052631575
+      },
+      "Vol:MEDIUM | Liq:LOW | Manip:LOW|300": {
+        "wins": 8,
+        "losses": 11,
+        "draws": 0,
+        "win_rate": 42.10526315789473
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|15": {
+        "wins": 1041,
+        "losses": 951,
+        "draws": 56,
+        "win_rate": 52.25903614457831
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|30": {
+        "wins": 1072,
+        "losses": 921,
+        "draws": 55,
+        "win_rate": 53.788258906171606
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|60": {
+        "wins": 1054,
+        "losses": 956,
+        "draws": 38,
+        "win_rate": 52.43781094527363
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|90": {
+        "wins": 1086,
+        "losses": 918,
+        "draws": 44,
+        "win_rate": 54.191616766467064
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|120": {
+        "wins": 1029,
+        "losses": 991,
+        "draws": 25,
+        "win_rate": 50.94059405940594
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|180": {
+        "wins": 984,
+        "losses": 1018,
+        "draws": 25,
+        "win_rate": 49.150849150849155
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:LOW|300": {
+        "wins": 1101,
+        "losses": 892,
+        "draws": 10,
+        "win_rate": 55.24335173105871
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|15": {
+        "wins": 240,
+        "losses": 256,
+        "draws": 19,
+        "win_rate": 48.38709677419355
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|30": {
+        "wins": 231,
+        "losses": 262,
+        "draws": 22,
+        "win_rate": 46.85598377281947
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|60": {
+        "wins": 192,
+        "losses": 319,
+        "draws": 3,
+        "win_rate": 37.573385518590996
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|90": {
+        "wins": 225,
+        "losses": 281,
+        "draws": 8,
+        "win_rate": 44.466403162055336
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|120": {
+        "wins": 249,
+        "losses": 254,
+        "draws": 11,
+        "win_rate": 49.50298210735586
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|180": {
+        "wins": 217,
+        "losses": 286,
+        "draws": 11,
+        "win_rate": 43.141153081510936
+      },
+      "Vol:LOW | Liq:HIGH | Manip:MEDIUM|300": {
+        "wins": 243,
+        "losses": 261,
+        "draws": 6,
+        "win_rate": 48.214285714285715
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|15": {
+        "wins": 18,
+        "losses": 23,
+        "draws": 0,
+        "win_rate": 43.90243902439025
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|30": {
+        "wins": 23,
+        "losses": 16,
+        "draws": 2,
+        "win_rate": 58.97435897435898
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|60": {
+        "wins": 28,
+        "losses": 13,
+        "draws": 0,
+        "win_rate": 68.29268292682927
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|90": {
+        "wins": 25,
+        "losses": 16,
+        "draws": 0,
+        "win_rate": 60.97560975609756
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|120": {
+        "wins": 29,
+        "losses": 12,
+        "draws": 0,
+        "win_rate": 70.73170731707317
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|180": {
+        "wins": 23,
+        "losses": 18,
+        "draws": 0,
+        "win_rate": 56.09756097560976
+      },
+      "Vol:HIGH | Liq:LOW | Manip:LOW|300": {
+        "wins": 12,
+        "losses": 29,
+        "draws": 0,
+        "win_rate": 29.268292682926827
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|15": {
+        "wins": 31,
+        "losses": 18,
+        "draws": 0,
+        "win_rate": 63.26530612244898
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|30": {
+        "wins": 28,
+        "losses": 19,
+        "draws": 2,
+        "win_rate": 59.57446808510638
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|60": {
+        "wins": 26,
+        "losses": 20,
+        "draws": 3,
+        "win_rate": 56.52173913043478
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|90": {
+        "wins": 25,
+        "losses": 24,
+        "draws": 0,
+        "win_rate": 51.02040816326531
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|120": {
+        "wins": 25,
+        "losses": 24,
+        "draws": 0,
+        "win_rate": 51.02040816326531
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|180": {
+        "wins": 25,
+        "losses": 24,
+        "draws": 0,
+        "win_rate": 51.02040816326531
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:LOW|300": {
+        "wins": 29,
+        "losses": 18,
+        "draws": 2,
+        "win_rate": 61.702127659574465
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|15": {
+        "wins": 2,
+        "losses": 1,
+        "draws": 0,
+        "win_rate": 66.66666666666666
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|30": {
+        "wins": 3,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|60": {
+        "wins": 3,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|90": {
+        "wins": 3,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|120": {
+        "wins": 3,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|180": {
+        "wins": 3,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:LOW | Liq:MEDIUM | Manip:LOW|300": {
+        "wins": 3,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|15": {
+        "wins": 13,
+        "losses": 3,
+        "draws": 0,
+        "win_rate": 81.25
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|30": {
+        "wins": 10,
+        "losses": 6,
+        "draws": 0,
+        "win_rate": 62.5
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|60": {
+        "wins": 7,
+        "losses": 9,
+        "draws": 0,
+        "win_rate": 43.75
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|90": {
+        "wins": 3,
+        "losses": 7,
+        "draws": 6,
+        "win_rate": 30.0
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|120": {
+        "wins": 1,
+        "losses": 15,
+        "draws": 0,
+        "win_rate": 6.25
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|180": {
+        "wins": 1,
+        "losses": 15,
+        "draws": 0,
+        "win_rate": 6.25
+      },
+      "Vol:LOW | Liq:LOW | Manip:LOW|300": {
+        "wins": 1,
+        "losses": 15,
+        "draws": 0,
+        "win_rate": 6.25
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|15": {
+        "wins": 11,
+        "losses": 1,
+        "draws": 0,
+        "win_rate": 91.66666666666666
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|30": {
+        "wins": 11,
+        "losses": 1,
+        "draws": 0,
+        "win_rate": 91.66666666666666
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|60": {
+        "wins": 8,
+        "losses": 4,
+        "draws": 0,
+        "win_rate": 66.66666666666666
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|90": {
+        "wins": 8,
+        "losses": 4,
+        "draws": 0,
+        "win_rate": 66.66666666666666
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|120": {
+        "wins": 11,
+        "losses": 1,
+        "draws": 0,
+        "win_rate": 91.66666666666666
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|180": {
+        "wins": 5,
+        "losses": 7,
+        "draws": 0,
+        "win_rate": 41.66666666666667
+      },
+      "Vol:MEDIUM | Liq:MEDIUM | Manip:LOW|300": {
+        "wins": 11,
+        "losses": 1,
+        "draws": 0,
+        "win_rate": 91.66666666666666
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|15": {
+        "wins": 14,
+        "losses": 9,
+        "draws": 0,
+        "win_rate": 60.86956521739131
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|30": {
+        "wins": 16,
+        "losses": 7,
+        "draws": 0,
+        "win_rate": 69.56521739130434
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|60": {
+        "wins": 18,
+        "losses": 5,
+        "draws": 0,
+        "win_rate": 78.26086956521739
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|90": {
+        "wins": 14,
+        "losses": 9,
+        "draws": 0,
+        "win_rate": 60.86956521739131
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|120": {
+        "wins": 12,
+        "losses": 11,
+        "draws": 0,
+        "win_rate": 52.17391304347826
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|180": {
+        "wins": 15,
+        "losses": 8,
+        "draws": 0,
+        "win_rate": 65.21739130434783
+      },
+      "Vol:MEDIUM | Liq:HIGH | Manip:MEDIUM|300": {
+        "wins": 11,
+        "losses": 12,
+        "draws": 0,
+        "win_rate": 47.82608695652174
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|15": {
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|30": {
+        "wins": 0,
+        "losses": 1,
+        "draws": 0,
+        "win_rate": 0.0
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|60": {
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|90": {
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|120": {
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|180": {
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      },
+      "Vol:HIGH | Liq:HIGH | Manip:MEDIUM|300": {
+        "wins": 1,
+        "losses": 0,
+        "draws": 0,
+        "win_rate": 100.0
+      }
+    }
+  },
+  "total_trades": 295295
+}

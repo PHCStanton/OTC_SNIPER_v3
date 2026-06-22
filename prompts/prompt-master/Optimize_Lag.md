@@ -10,7 +10,7 @@ You are an expert full-stack performance engineer specializing in React + FastAP
 - Lag appears after initial smooth operation.
 
 **Required Workflow (follow exactly, in this order)**
-1. **Discovery**: Use your tools to explore the full codebase. Identify all components involved in real-time streaming, data flow, WebSocket/SSE handling, Redis, chart rendering (Lightweight Charts or similar), indicator pipelines, AI integration (Ask AI / voice), state management (Zustand or equivalent), and any background services/processes.
+1. **Discovery**: Use your tools to explore the full codebase. Identify all components involved in real-time streaming, data flow, WebSocket/SSE handling, chart rendering (Lightweight Charts or similar), indicator pipelines, AI integration (Ask AI / voice), state management (Zustand or equivalent), and any background services/processes.
 2. **Root Cause Analysis**: Pinpoint likely causes of progressive lag:
    - Memory leaks (unclosed sockets, growing arrays/caches, uncleared intervals/timeouts, event listeners).
    - Inefficient re-renders or state updates in React.

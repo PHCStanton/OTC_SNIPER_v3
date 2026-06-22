@@ -1,5 +1,6 @@
 # Active Context
 
+- **Multi-Day Backtests, Hurst Optimization & Filing System Reorganization (2026-06-22).** Completed comprehensive weekly backtests (June 15-19) for `EURUSD_otc` on OTEO Base Levels, Kalman Filter pre-filtering, rescaled-range Hurst Exponent, Ornstein-Uhlenbeck (OU) parameter tracking, and Spike Pockets strategies. Optimized trade-expiry resolution in `backtest_hurst.py` by passing pre-computed timestamps, speeding up execution by 100x (reducing 5-day runtime from 1 hour to 1.3 minutes). Restructured the backtesting report filesystem to dynamically output logs/summaries under strategy-specific and asset-specific subdirectories inside `app/backtesting/results`. Migrated all historical CSV, JSON, and MD files to the new nested directory structure, and wrote execution instructions in `scripts/backtest_instructions.md`.
 - **Multi-Chart UI Indicators Calibrated & Dynamic Warmup Progress Added (2026-06-19).** Calibrated the `MultiChartView.jsx` component by fetching ticks unconditionally from the Zustand stream store, resolving issues where tickers stayed static at `+0.00%` and ticks count stuck at `0` when sparklines were disabled. Added a dynamic regime warmup progress indicator (e.g. `WARM 31%`) tracking closed candles against the minimum detection threshold of 16, replacing the static `UNAVAILABLE ~` display.
 - **Streaming Pipeline Performance Audit & Optimization Complete (2026-06-19).** Conducted an extensive performance audit of the streaming pipeline and implemented 11 optimizations. Backend: converted performance monitor queue timing to O(1) deque; buffered `SignalLogger` file writes; cached manipulation detector results on each tick; lazily cached plugin status checks; added exponential backoff on AI Pulse loop failures; implemented an in-memory completed trade cache to eliminate disk reads in AI Pulse; refactored `_closed_candles` to a fixed-size `deque(maxlen=240)` in `MarketContextEngine`; and made `_resolve_asset_payout_pct` asynchronous. Frontend: stored `selectedAsset` in a Ref to stabilize Socket.IO listeners on focus switch; added a 30s expired marker auto-cleanup interval; and consolidated settings selectors in `App.jsx` using a single store `.subscribe()` subscription. All unit tests passed and Vite production builds completed successfully.
 - **Modular Plugin & Tiered Packaging Architecture Implemented and Verified (2026-06-19).** Designed and engineered the `ExtensionManager` and `BaseExtension` hooks integrated into `streaming.py` and `auto_ghost.py`. Developed two tiered packages ("Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite)) complete with backend calculations, regime state machine, microstructure cutoff noise filters, AI confidence gating, and frontend React settings components. Unified configuration across the Zustand store and backend strategy API, including dynamic license detection. All 16/16 unit tests passed and production builds verified in both installed and uninstalled states. Created `plugins/README.md` to document the architecture and developer workflow.
@@ -18,6 +19,15 @@
 - The next valid implementation target is **Phase 6: Volatility-Adaptive Expiry** in `Dev_Docs/Level3_Implementation_Plan_26-04-29.md`.
 
 ## Latest Changes
+
+### Applied on 2026-06-22 — Multi-Day Backtests, Hurst Optimization & Filing System Reorganization (VERIFIED ✅)
+
+| # | Area | File(s) | Outcome |
+|---|------|---------|---------|
+| BT-1 | Hurst Optimization | `backtest_hurst.py` | Optimized timestamp resolution in `evaluate_expiry`, boosting execution speed by 100x and dropping weekly ticks sweep time to 1.3 minutes. |
+| BT-2 | Weekly Backtests | `backtest_pockets.py`, `backtest_hurst.py`, `backtest_kalman.py` | Ran weekly backtests (June 15-19) for `EURUSD_otc` to map timeframe block profitability, spike pocket matrices, Kalman filter noise reductions, and Hurst MR presets. |
+| BT-3 | Reorganization | `app/backtesting/results/` | Structured output logs into specific strategy categories and asset-named subdirectories under the results folder, and migrated historical reports. |
+| BT-4 | Documentation | `scripts/backtest_instructions.md` | Created a guide detailing PowerShell command patterns to execute base levels, Kalman, Hurst, OU, and pockets backtests. |
 
 ### Applied on 2026-06-19 — Multi-Chart UI Indicators Calibration (VERIFIED ✅)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from dataclasses import dataclass, replace
 from time import time as unix_time
 from typing import Any
@@ -61,6 +62,9 @@ class AutoGhostConfig:
     min_adaptive_expiry: int = 60
     hurst_min_scale_cutoff: int = 12
     hurst_ai_confidence_threshold: float = 80.0
+    blacklist_assets: list[str] | None = None
+    hurst_l2_enabled: bool = True
+    hurst_l3_enabled: bool = True
 
 
 class AutoGhostService:
@@ -92,7 +96,7 @@ class AutoGhostService:
         self._trade_timestamps: list[float] = []
         self._last_reject_reason_by_asset: dict[str, str] = {}
         self._reject_counts: dict[str, int] = {}
-        self._session_trades: list[dict[str, Any]] = []
+        self._session_trades: deque[dict[str, Any]] = deque(maxlen=200)
 
     def _record_reject(self, asset: str, reason: str) -> None:
         self._last_reject_reason_by_asset[asset] = reason
@@ -137,6 +141,9 @@ class AutoGhostService:
         min_adaptive_expiry: int | None = None,
         hurst_min_scale_cutoff: int | None = None,
         hurst_ai_confidence_threshold: float | None = None,
+        blacklist_assets: list[str] | None = None,
+        hurst_l2_enabled: bool | None = None,
+        hurst_l3_enabled: bool | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         updates: dict[str, Any] = {}
@@ -212,8 +219,22 @@ class AutoGhostService:
             updates["hurst_min_scale_cutoff"] = int(hurst_min_scale_cutoff)
         if hurst_ai_confidence_threshold is not None:
             updates["hurst_ai_confidence_threshold"] = float(hurst_ai_confidence_threshold)
+        if blacklist_assets is not None:
+            updates["blacklist_assets"] = [str(a).strip() for a in blacklist_assets if str(a).strip()]
+        if hurst_l2_enabled is not None:
+            updates["hurst_l2_enabled"] = bool(hurst_l2_enabled)
+        if hurst_l3_enabled is not None:
+            updates["hurst_l3_enabled"] = bool(hurst_l3_enabled)
  
         self.config = replace(self.config, **updates)
+ 
+        # Update extensions' enabled flags dynamically
+        if getattr(self, "extension_manager", None) is not None:
+            for ext in self.extension_manager.get_active_extensions():
+                if ext.__class__.__name__ == "HurstAdaptiveExpiry":
+                    ext.enabled = self.config.hurst_l2_enabled
+                elif ext.__class__.__name__ == "HurstAiNoise":
+                    ext.enabled = self.config.hurst_l3_enabled
  
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
@@ -221,7 +242,7 @@ class AutoGhostService:
             self._consecutive_losses.clear()
             self._condition_stats.clear()
             self._session_pnl = 0.0
-            self._session_trades = []
+            self._session_trades = deque(maxlen=200)
             self._session_trade_count = 0
             self._session_wins = 0
             self._session_losses = 0
@@ -241,6 +262,19 @@ class AutoGhostService:
             self._pending_signals.clear()
         return self.status
  
+    def clear_plugin_cache(self) -> None:
+        """Invalidate cached extension detection flags (called on plugin reload)."""
+        for attr in ("_has_premium_hurst", "_has_elite_hurst"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+        # Re-apply current enablement state to extensions
+        if getattr(self, "extension_manager", None) is not None:
+            for ext in self.extension_manager.get_active_extensions():
+                if ext.__class__.__name__ == "HurstAdaptiveExpiry":
+                    ext.enabled = self.config.hurst_l2_enabled
+                elif ext.__class__.__name__ == "HurstAiNoise":
+                    ext.enabled = self.config.hurst_l3_enabled
+
     @property
     def has_premium_hurst(self) -> bool:
         if not hasattr(self, "_has_premium_hurst"):
@@ -274,6 +308,9 @@ class AutoGhostService:
             "auto_ghost_max_concurrent_trades": self.config.max_concurrent_trades,
             "auto_ghost_per_asset_cooldown_seconds": self.config.per_asset_cooldown_seconds,
             "auto_ghost_minimum_payout_pct": self.config.minimum_payout_pct,
+            "auto_ghost_blacklist_assets": self.config.blacklist_assets or [],
+            "auto_ghost_hurst_l2_enabled": self.config.hurst_l2_enabled,
+            "auto_ghost_hurst_l3_enabled": self.config.hurst_l3_enabled,
             "auto_ghost_manipulation_severity_threshold": self.config.manipulation_severity_threshold,
             "auto_ghost_block_on_manipulation": self.config.block_on_manipulation,
             "auto_ghost_min_confidence_enabled": self.config.min_confidence_enabled,
@@ -344,9 +381,7 @@ class AutoGhostService:
             "regime_label": entry_context.get("regime_label", "UNKNOWN") if entry_context else "UNKNOWN",
             "entry_context": entry_context,
         })
-        if len(self._session_trades) > 200:
-            self._session_trades.pop(0)
-        now = unix_time()
+        # deque(maxlen=200) handles eviction automatically
 
         if outcome == "win":
             self._session_wins += 1
@@ -426,7 +461,8 @@ class AutoGhostService:
         if self.config.oteo_ai_enabled and self.config.ai_trade_interval > 0:
             if self._session_trade_count > 0 and self._session_trade_count % self.config.ai_trade_interval == 0:
                 logger.info("Trade count interval reached (%d trades). Triggering AI Suggestions in background.", self._session_trade_count)
-                asyncio.create_task(self._run_trade_count_suggestions())
+                task = asyncio.create_task(self._run_trade_count_suggestions())
+                task.add_done_callback(lambda t: logger.error("_run_trade_count_suggestions failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
 
     def _reject(self, asset: str, reason: str) -> None:
         self._record_reject(asset, reason)
@@ -446,6 +482,10 @@ class AutoGhostService:
         now = unix_time()
         for a in [a for a in self._active_assets if now >= self._cooldown_until.get(a, 0)]:
             self._active_assets.discard(a)
+
+        if self.config.blacklist_assets and asset in self.config.blacklist_assets:
+            logger.info("Auto-Ghost skipped %s: asset is blacklisted", asset)
+            return self._reject(asset, 'asset_blacklisted')
 
         if not self.config.enabled:
             return self._reject(asset, 'disabled')
@@ -496,7 +536,7 @@ class AutoGhostService:
                 )
                 return self._reject(asset, 'above_max_confidence')
         if payout_pct is None:
-            logger.warning(f"Auto-Ghost skipped {asset}: payout unavailable")
+            logger.warning("Auto-Ghost skipped %s: payout unavailable", asset)
             return self._reject(asset, 'payout_unavailable')
         if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
             logger.info(
@@ -547,14 +587,14 @@ class AutoGhostService:
         regime_stable = oteo_result.get("regime_stable")
         if self.config.regime_gate_enabled and self.config.allowed_regimes:
             if regime_label is None:
-                logger.info(f"Auto-Ghost skipped {asset}: regime gate enabled but signal has no regime label")
+                logger.info("Auto-Ghost skipped %s: regime gate enabled but signal has no regime label", asset)
                 return self._reject(asset, 'missing_regime_label')
             if str(regime_label).upper() not in self.config.allowed_regimes:
-                logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} not in allowed {self.config.allowed_regimes} (Ghost Protocol gate)")
+                logger.info("Auto-Ghost skipped %s: regime %s not in allowed %s (Ghost Protocol gate)", asset, regime_label, self.config.allowed_regimes)
                 return self._reject(asset, 'regime_not_allowed')
 
         if self.config.regime_gate_enabled and self.config.require_regime_stable and regime_stable is False:
-            logger.info(f"Auto-Ghost skipped {asset}: regime {regime_label} is unstable (Ghost Protocol gate)")
+            logger.info("Auto-Ghost skipped %s: regime %s is unstable (Ghost Protocol gate)", asset, regime_label)
             return self._reject(asset, 'regime_unstable')
 
         # Hurst Exponent Gate check (L1 Core)
@@ -619,7 +659,7 @@ class AutoGhostService:
         if self.config.oteo_ai_enabled:
             strategy_level = "level3" if oteo_result.get("level3_enabled") else "level2" if oteo_result.get("level2_enabled") else "level1"
             # Advisory mode: Query in background without blocking execution
-            asyncio.create_task(
+            advisory_task = asyncio.create_task(
                 self._run_ai_advisory(
                     asset=asset,
                     direction=oteo_result.get("recommended"),
@@ -629,6 +669,7 @@ class AutoGhostService:
                     strategy_level=strategy_level,
                 )
             )
+            advisory_task.add_done_callback(lambda t: logger.error("_run_ai_advisory failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
 
         entry_context = {
             "asset": asset,
@@ -881,7 +922,7 @@ class AutoGhostService:
                 })
             logger.info("AI Advisory completed for %s: %s (%s)", asset, response, top_pattern_str)
         except Exception as e:
-            logger.warning(f"AI Advisory background query failed for {asset}: {e}")
+            logger.warning("AI Advisory background query failed for %s: %s", asset, e)
 
     async def _run_trade_count_suggestions(self) -> None:
         """Query AI for controller gates optimization suggestions based on session statistics."""
@@ -953,4 +994,4 @@ class AutoGhostService:
                     "timestamp": unix_time(),
                 })
         except Exception as e:
-            logger.warning(f"AI Trade Count Suggestion background query failed: {e}")
+            logger.warning("AI Trade Count Suggestion background query failed: %s", e)

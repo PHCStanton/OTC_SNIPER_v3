@@ -7,6 +7,7 @@ import AccountSettings from './AccountSettings.jsx';
 import AppSettings from './AppSettings.jsx';
 import RiskSettings from './RiskSettings.jsx';
 import AISettings from './AISettings.jsx';
+import GhostSettings from './GhostSettings.jsx';
 import { Database } from 'lucide-react';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 
@@ -19,7 +20,9 @@ export default function SettingsView() {
       ? AppSettings
       : activeTab === 'ai'
         ? AISettings
-        : RiskSettings;
+        : activeTab === 'ghost'
+          ? GhostSettings
+          : RiskSettings;
 
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top,_rgba(255,184,0,0.06),_transparent_34%),linear-gradient(180deg,#0c0f0f_0%,#10151a_46%,#131820_100%)] px-4 py-4 text-[#e3e6e7] lg:px-6 lg:py-6">

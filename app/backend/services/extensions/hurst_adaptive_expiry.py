@@ -3,7 +3,7 @@ from collections import deque
 from typing import Any, Dict, Tuple
 import numpy as np
 
-from app.backend.services.extensions.base import BaseExtension
+from .base import BaseExtension
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,15 @@ class HurstAdaptiveExpiry(BaseExtension):
                 oteo_result["market_context"] = {}
             oteo_result["market_context"]["hurst"] = round(h_val, 3)
             oteo_result["market_context"]["hurst_regime"] = state
+
+            # Adaptive Expiry injection (moved from on_consider_signal for SoC)
+            # Only set for mean_reverting since trending/random_walk are vetoed
+            if state == "mean_reverting":
+                if h_val <= 0.35:
+                    expiry = self.min_adaptive_expiry  # e.g., 60s
+                else:
+                    expiry = self.min_adaptive_expiry * 2  # e.g., 120s
+                oteo_result["override_expiration_seconds"] = expiry
             
         return oteo_result
 
@@ -164,11 +173,10 @@ class HurstAdaptiveExpiry(BaseExtension):
         oteo_result: Dict[str, Any], 
         config: Any
     ) -> Tuple[bool, str | None]:
-        """Veto trades if in trending or chop regimes, and override expiration seconds."""
+        """Veto trades if in trending or chop regimes (pure gate, no mutations)."""
         if not self.enabled:
             return True, None
             
-        h_val = self._last_h.get(asset, 0.5)
         state = self._regime_states.get(asset, "random_walk")
         
         # Veto check
@@ -177,15 +185,4 @@ class HurstAdaptiveExpiry(BaseExtension):
         elif state == "random_walk":
             return False, "regime_chop"
             
-        # Adaptive Expiry Logic:
-        # Strong mean reversion (H <= 0.35) -> shorter expiry
-        # Moderate mean reversion (H < 0.44) -> longer expiry
-        if h_val <= 0.35:
-            expiry = self.min_adaptive_expiry  # e.g., 60s
-        else:
-            expiry = self.min_adaptive_expiry * 2  # e.g., 120s
-            
-        oteo_result["override_expiration_seconds"] = expiry
-        logger.info("[Premium] Adaptive Expiry set option contract duration to %ds for %s (H=%.3f)", expiry, asset, h_val)
-        
         return True, None

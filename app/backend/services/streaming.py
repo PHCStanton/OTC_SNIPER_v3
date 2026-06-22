@@ -47,8 +47,9 @@ class StreamingService:
         self.trade_service = TradeService(repository=get_data_repository(), sio=sio_server)
         self.auto_ghost = AutoGhostService(self.trade_service)
         self.trade_service.set_auto_ghost(self.auto_ghost)
-        self.extension_manager = ExtensionManager()
+        self.extension_manager = ExtensionManager(on_reload=self.auto_ghost.clear_plugin_cache)
         self.auto_ghost.extension_manager = self.extension_manager
+        self.auto_ghost.clear_plugin_cache()
         
         self._oteo_engines: Dict[str, OTEO] = {}
         self._market_context_engines: Dict[str, MarketContextEngine] = {}
@@ -60,6 +61,7 @@ class StreamingService:
         self._allowed_assets: set[str] = set()
         self._streaming_active: bool = False
         self._payout_cache: Dict[str, tuple[float, float]] = {}
+        self._payout_fail_counts: Dict[str, int] = {}
         
         # Telemetry and Bounded Queue (Phase 0/1)
         self.perf_monitor = PerformanceMonitor(sio_server)
@@ -130,6 +132,9 @@ class StreamingService:
         min_adaptive_expiry: int | None = None,
         hurst_min_scale_cutoff: int | None = None,
         hurst_ai_confidence_threshold: float | None = None,
+        auto_ghost_blacklist_assets: list[str] | None = None,
+        auto_ghost_hurst_l2_enabled: bool | None = None,
+        auto_ghost_hurst_l3_enabled: bool | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -185,6 +190,9 @@ class StreamingService:
             min_adaptive_expiry=min_adaptive_expiry,
             hurst_min_scale_cutoff=hurst_min_scale_cutoff,
             hurst_ai_confidence_threshold=hurst_ai_confidence_threshold,
+            blacklist_assets=auto_ghost_blacklist_assets,
+            hurst_l2_enabled=auto_ghost_hurst_l2_enabled,
+            hurst_l3_enabled=auto_ghost_hurst_l3_enabled,
         )
 
         if getattr(self, "_streaming_active", False):
@@ -292,6 +300,7 @@ class StreamingService:
             
             self._oteo_engines[asset] = oteo
             self._market_context_engines[asset] = market_context
+            market_context.extensions_override_hurst = bool(self.extension_manager.get_active_extensions())
             self._manip_engines[asset] = ManipulationDetector()
             self._tick_counts[asset] = len(valid_ticks)
 
@@ -311,13 +320,26 @@ class StreamingService:
             payout_pct = await asyncio.to_thread(self.trade_service._resolve_payout_pct, adapter, asset)
             payout_pct = float(payout_pct)
             self._payout_cache[asset] = (payout_pct, now)
+            self._payout_fail_counts[asset] = 0
             return payout_pct
         except Exception as exc:
+            fail_count = self._payout_fail_counts.get(asset, 0) + 1
+            self._payout_fail_counts[asset] = fail_count
             logger.warning(
-                "Failed to resolve payout for %s; Auto-Ghost will skip until payout is available: %s",
+                "Failed to resolve payout for %s (attempt %d); Auto-Ghost will skip until payout is available: %s",
                 asset,
+                fail_count,
                 exc,
             )
+            if fail_count >= 3 and self.sio:
+                try:
+                    await self.sio.emit("notification", {
+                        "type": "warning",
+                        "message": f"⚠ Payout unavailable for {asset} — ghost trades blocked until broker reconnects ({fail_count} consecutive failures)",
+                        "timestamp": now,
+                    })
+                except Exception as sio_err:
+                    logger.error("Failed to emit payout warning notification: %s", sio_err)
             return None
 
     def process_tick(self, asset: str, price: float, timestamp: float, source: str = "pocket_option") -> None:
@@ -498,18 +520,24 @@ class StreamingService:
 
         if self.sio:
             room = f"market_data:{asset}"
-            await self.sio.emit("market_data", payload, room=room)
-            self.perf_monitor.record_emit()
+            try:
+                await self.sio.emit("market_data", payload, room=room)
+                self.perf_monitor.record_emit()
+            except Exception as sio_err:
+                logger.error("Socket.IO market_data emission failed for %s: %s", asset, sio_err)
             
             # Emit warmup status
             self._tick_counts[asset] += 1
             count = self._tick_counts[asset]
             if count % 10 == 0 or count == 50:
-                await self.sio.emit("warmup_status", {
-                    "asset": asset,
-                    "ready": count >= 50,
-                    "ticks_received": count
-                }, room=room)
+                try:
+                    await self.sio.emit("warmup_status", {
+                        "asset": asset,
+                        "ready": count >= 50,
+                        "ticks_received": count
+                    }, room=room)
+                except Exception as sio_err:
+                    logger.error("Socket.IO warmup_status emission failed for %s: %s", asset, sio_err)
 
         # Asynchronously write to tick log and process signals (post-emit)
         await self.tick_logger.write_tick(asset, {
@@ -545,13 +573,19 @@ class StreamingService:
                 "broker": source
             })
             payout_pct = await self._resolve_asset_payout_pct(asset)
-            await self.auto_ghost.consider_signal(
-                asset=asset,
-                price=price,
-                timestamp=timestamp,
-                oteo_result=oteo_result,
-                manipulation=manipulation,
-                payout_pct=payout_pct,
+            signal_task = asyncio.create_task(
+                self.auto_ghost.consider_signal(
+                    asset=asset,
+                    price=price,
+                    timestamp=timestamp,
+                    oteo_result=oteo_result,
+                    manipulation=manipulation,
+                    payout_pct=payout_pct,
+                )
+            )
+            signal_task.add_done_callback(
+                lambda t: logger.error("consider_signal task failed: %s", t.exception())
+                if not t.cancelled() and t.exception() else None
             )
 
             # Phase 4: Push snapshot to AI review loop when regime data is available
@@ -633,7 +667,7 @@ class StreamingService:
         is_insufficient = False
         # Fallback if no recent trades: take last 10 session trades
         if not recent_trades:
-            recent_trades = trades[-10:]
+            recent_trades = list(trades)[-10:]
             # Mark insufficient if overall session has fewer than 3 trades
             is_insufficient = len(trades) < 3
 
@@ -699,10 +733,11 @@ class StreamingService:
             "  \"autoGhostManipulationSeverityThreshold\": 0.35,\n"
             "  \"ghostMinZScore\": -0.8,\n"
             "  \"ghostMinZScoreEnabled\": true,\n"
-            "  \"whitelistAssets\": [\"EURUSD_otc\"]\n"
+            "  \"whitelistAssets\": [\"EURUSD_otc\"],\n"
+            "  \"blacklistAssets\": [\"AUDNZD_otc\"]\n"
             "}\n"
             "```\n"
-            "Only suggest parameters that need changing. Do NOT include unchanged parameters. Whitelisted assets under 'whitelistAssets' will be starred/favorited in the UI.\n"
+            "Only suggest parameters that need changing. Do NOT include unchanged parameters. Whitelisted assets under 'whitelistAssets' will be starred/favorited in the UI. Blacklisted assets under 'blacklistAssets' will be added to the ghost blacklist in the UI.\n"
             "3. If there is insufficient data to make reliable gate suggestions (e.g., you marked it as insufficient), do not output suggested settings in the JSON block (use '{}' or omit) and explicitly state in the message text that you are waiting for more trade results to calibrate."
         )
 

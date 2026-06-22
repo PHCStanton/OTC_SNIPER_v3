@@ -1,0 +1,486 @@
+{
+  "row_count": 1176,
+  "summary": {
+    "by_asset_expiry": {
+      "EURUSD_otc|120": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 74,
+        "missing_exit": 28,
+        "net_pl": -13.28,
+        "roi": -9.49,
+        "trades": 168,
+        "win_rate": 47.14,
+        "wins": 66
+      },
+      "EURUSD_otc|15": {
+        "draws": 12,
+        "insufficient_data": 0,
+        "losses": 84,
+        "missing_exit": 6,
+        "net_pl": -23.28,
+        "roi": -15.52,
+        "trades": 168,
+        "win_rate": 44.0,
+        "wins": 66
+      },
+      "EURUSD_otc|180": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 54,
+        "missing_exit": 42,
+        "net_pl": 12.24,
+        "roi": 9.71,
+        "trades": 168,
+        "win_rate": 57.14,
+        "wins": 72
+      },
+      "EURUSD_otc|30": {
+        "draws": 2,
+        "insufficient_data": 0,
+        "losses": 78,
+        "missing_exit": 10,
+        "net_pl": -6.24,
+        "roi": -4.0,
+        "trades": 168,
+        "win_rate": 50.0,
+        "wins": 78
+      },
+      "EURUSD_otc|300": {
+        "draws": 2,
+        "insufficient_data": 0,
+        "losses": 56,
+        "missing_exit": 70,
+        "net_pl": -19.2,
+        "roi": -20.0,
+        "trades": 168,
+        "win_rate": 41.67,
+        "wins": 40
+      },
+      "EURUSD_otc|60": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 80,
+        "missing_exit": 14,
+        "net_pl": -11.92,
+        "roi": -7.74,
+        "trades": 168,
+        "win_rate": 48.05,
+        "wins": 74
+      },
+      "EURUSD_otc|90": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 82,
+        "missing_exit": 24,
+        "net_pl": -24.96,
+        "roi": -17.33,
+        "trades": 168,
+        "win_rate": 43.06,
+        "wins": 62
+      }
+    },
+    "by_confidence_expiry": {
+      "HIGH|120": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 12,
+        "missing_exit": 4,
+        "net_pl": -4.64,
+        "roi": -23.2,
+        "trades": 24,
+        "win_rate": 40.0,
+        "wins": 8
+      },
+      "HIGH|15": {
+        "draws": 4,
+        "insufficient_data": 0,
+        "losses": 8,
+        "missing_exit": 2,
+        "net_pl": 1.2,
+        "roi": 6.67,
+        "trades": 24,
+        "win_rate": 55.56,
+        "wins": 10
+      },
+      "HIGH|180": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 6,
+        "missing_exit": 8,
+        "net_pl": 3.2,
+        "roi": 20.0,
+        "trades": 24,
+        "win_rate": 62.5,
+        "wins": 10
+      },
+      "HIGH|30": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 10,
+        "missing_exit": 4,
+        "net_pl": -0.8,
+        "roi": -4.0,
+        "trades": 24,
+        "win_rate": 50.0,
+        "wins": 10
+      },
+      "HIGH|300": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 6,
+        "missing_exit": 12,
+        "net_pl": -0.48,
+        "roi": -4.0,
+        "trades": 24,
+        "win_rate": 50.0,
+        "wins": 6
+      },
+      "HIGH|60": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 12,
+        "missing_exit": 4,
+        "net_pl": -4.64,
+        "roi": -23.2,
+        "trades": 24,
+        "win_rate": 40.0,
+        "wins": 8
+      },
+      "HIGH|90": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 12,
+        "missing_exit": 4,
+        "net_pl": -4.64,
+        "roi": -23.2,
+        "trades": 24,
+        "win_rate": 40.0,
+        "wins": 8
+      },
+      "MEDIUM|120": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 62,
+        "missing_exit": 24,
+        "net_pl": -8.64,
+        "roi": -7.2,
+        "trades": 144,
+        "win_rate": 48.33,
+        "wins": 58
+      },
+      "MEDIUM|15": {
+        "draws": 8,
+        "insufficient_data": 0,
+        "losses": 76,
+        "missing_exit": 4,
+        "net_pl": -24.48,
+        "roi": -18.55,
+        "trades": 144,
+        "win_rate": 42.42,
+        "wins": 56
+      },
+      "MEDIUM|180": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 48,
+        "missing_exit": 34,
+        "net_pl": 9.04,
+        "roi": 8.22,
+        "trades": 144,
+        "win_rate": 56.36,
+        "wins": 62
+      },
+      "MEDIUM|30": {
+        "draws": 2,
+        "insufficient_data": 0,
+        "losses": 68,
+        "missing_exit": 6,
+        "net_pl": -5.44,
+        "roi": -4.0,
+        "trades": 144,
+        "win_rate": 50.0,
+        "wins": 68
+      },
+      "MEDIUM|300": {
+        "draws": 2,
+        "insufficient_data": 0,
+        "losses": 50,
+        "missing_exit": 58,
+        "net_pl": -18.72,
+        "roi": -22.29,
+        "trades": 144,
+        "win_rate": 40.48,
+        "wins": 34
+      },
+      "MEDIUM|60": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 68,
+        "missing_exit": 10,
+        "net_pl": -7.28,
+        "roi": -5.43,
+        "trades": 144,
+        "win_rate": 49.25,
+        "wins": 66
+      },
+      "MEDIUM|90": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 70,
+        "missing_exit": 20,
+        "net_pl": -20.32,
+        "roi": -16.39,
+        "trades": 144,
+        "win_rate": 43.55,
+        "wins": 54
+      }
+    },
+    "by_level_expiry": {
+      "L1|120": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 37,
+        "missing_exit": 14,
+        "net_pl": -6.64,
+        "roi": -9.49,
+        "trades": 84,
+        "win_rate": 47.14,
+        "wins": 33
+      },
+      "L1|15": {
+        "draws": 6,
+        "insufficient_data": 0,
+        "losses": 42,
+        "missing_exit": 3,
+        "net_pl": -11.64,
+        "roi": -15.52,
+        "trades": 84,
+        "win_rate": 44.0,
+        "wins": 33
+      },
+      "L1|180": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 27,
+        "missing_exit": 21,
+        "net_pl": 6.12,
+        "roi": 9.71,
+        "trades": 84,
+        "win_rate": 57.14,
+        "wins": 36
+      },
+      "L1|30": {
+        "draws": 1,
+        "insufficient_data": 0,
+        "losses": 39,
+        "missing_exit": 5,
+        "net_pl": -3.12,
+        "roi": -4.0,
+        "trades": 84,
+        "win_rate": 50.0,
+        "wins": 39
+      },
+      "L1|300": {
+        "draws": 1,
+        "insufficient_data": 0,
+        "losses": 28,
+        "missing_exit": 35,
+        "net_pl": -9.6,
+        "roi": -20.0,
+        "trades": 84,
+        "win_rate": 41.67,
+        "wins": 20
+      },
+      "L1|60": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 40,
+        "missing_exit": 7,
+        "net_pl": -5.96,
+        "roi": -7.74,
+        "trades": 84,
+        "win_rate": 48.05,
+        "wins": 37
+      },
+      "L1|90": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 41,
+        "missing_exit": 12,
+        "net_pl": -12.48,
+        "roi": -17.33,
+        "trades": 84,
+        "win_rate": 43.06,
+        "wins": 31
+      },
+      "L2|120": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 37,
+        "missing_exit": 14,
+        "net_pl": -6.64,
+        "roi": -9.49,
+        "trades": 84,
+        "win_rate": 47.14,
+        "wins": 33
+      },
+      "L2|15": {
+        "draws": 6,
+        "insufficient_data": 0,
+        "losses": 42,
+        "missing_exit": 3,
+        "net_pl": -11.64,
+        "roi": -15.52,
+        "trades": 84,
+        "win_rate": 44.0,
+        "wins": 33
+      },
+      "L2|180": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 27,
+        "missing_exit": 21,
+        "net_pl": 6.12,
+        "roi": 9.71,
+        "trades": 84,
+        "win_rate": 57.14,
+        "wins": 36
+      },
+      "L2|30": {
+        "draws": 1,
+        "insufficient_data": 0,
+        "losses": 39,
+        "missing_exit": 5,
+        "net_pl": -3.12,
+        "roi": -4.0,
+        "trades": 84,
+        "win_rate": 50.0,
+        "wins": 39
+      },
+      "L2|300": {
+        "draws": 1,
+        "insufficient_data": 0,
+        "losses": 28,
+        "missing_exit": 35,
+        "net_pl": -9.6,
+        "roi": -20.0,
+        "trades": 84,
+        "win_rate": 41.67,
+        "wins": 20
+      },
+      "L2|60": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 40,
+        "missing_exit": 7,
+        "net_pl": -5.96,
+        "roi": -7.74,
+        "trades": 84,
+        "win_rate": 48.05,
+        "wins": 37
+      },
+      "L2|90": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 41,
+        "missing_exit": 12,
+        "net_pl": -12.48,
+        "roi": -17.33,
+        "trades": 84,
+        "win_rate": 43.06,
+        "wins": 31
+      }
+    },
+    "by_regime_expiry": {
+      "None|120": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 74,
+        "missing_exit": 28,
+        "net_pl": -13.28,
+        "roi": -9.49,
+        "trades": 168,
+        "win_rate": 47.14,
+        "wins": 66
+      },
+      "None|15": {
+        "draws": 12,
+        "insufficient_data": 0,
+        "losses": 84,
+        "missing_exit": 6,
+        "net_pl": -23.28,
+        "roi": -15.52,
+        "trades": 168,
+        "win_rate": 44.0,
+        "wins": 66
+      },
+      "None|180": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 54,
+        "missing_exit": 42,
+        "net_pl": 12.24,
+        "roi": 9.71,
+        "trades": 168,
+        "win_rate": 57.14,
+        "wins": 72
+      },
+      "None|30": {
+        "draws": 2,
+        "insufficient_data": 0,
+        "losses": 78,
+        "missing_exit": 10,
+        "net_pl": -6.24,
+        "roi": -4.0,
+        "trades": 168,
+        "win_rate": 50.0,
+        "wins": 78
+      },
+      "None|300": {
+        "draws": 2,
+        "insufficient_data": 0,
+        "losses": 56,
+        "missing_exit": 70,
+        "net_pl": -19.2,
+        "roi": -20.0,
+        "trades": 168,
+        "win_rate": 41.67,
+        "wins": 40
+      },
+      "None|60": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 80,
+        "missing_exit": 14,
+        "net_pl": -11.92,
+        "roi": -7.74,
+        "trades": 168,
+        "win_rate": 48.05,
+        "wins": 74
+      },
+      "None|90": {
+        "draws": 0,
+        "insufficient_data": 0,
+        "losses": 82,
+        "missing_exit": 24,
+        "net_pl": -24.96,
+        "roi": -17.33,
+        "trades": 168,
+        "win_rate": 43.06,
+        "wins": 62
+      }
+    },
+    "overall": {
+      "draws": 16,
+      "insufficient_data": 0,
+      "losses": 508,
+      "missing_exit": 194,
+      "net_pl": -86.64,
+      "roi": -8.97,
+      "trades": 1176,
+      "win_rate": 47.41,
+      "wins": 458
+    }
+  }
+}

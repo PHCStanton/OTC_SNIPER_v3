@@ -431,7 +431,26 @@ export default function TopBar() {
                     <LayoutGrid size={14} className={isSettings && activeSettingsTab === 'app' ? 'text-[#ffb800]' : 'text-gray-400'} />
                     <div className="flex flex-col">
                       <span>App Settings</span>
-                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">OTEO, Ghost Trading, UI Prefs</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">OTEO, UI Prefs</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('ghost');
+                      setActiveView('settings');
+                      setShowSettingsDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isSettings && activeSettingsTab === 'ghost'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <Ghost size={14} className={isSettings && activeSettingsTab === 'ghost' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Ghost Protocol</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Protocol, Gates, Blacklist</span>
                     </div>
                   </button>
 

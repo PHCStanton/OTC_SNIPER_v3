@@ -43,7 +43,8 @@ export default function LeftSidebar() {
   } = useAssetStore();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [payoutThreshold, setPayoutThreshold] = useState(DEFAULT_PAYOUT_THRESHOLD);
+  const payoutThreshold = useSettingsStore((s) => s.sidebarPayoutThreshold);
+  const setPayoutThreshold = useSettingsStore((s) => s.setSidebarPayoutThreshold);
   const [otcOnly, setOtcOnly] = useState(false);
   const [assetTypeFilter, setAssetTypeFilter] = useState('all');
   const [filtersOpen, setFiltersOpen] = useState(true);

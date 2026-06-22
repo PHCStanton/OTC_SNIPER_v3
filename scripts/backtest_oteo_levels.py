@@ -23,7 +23,7 @@ from app.backend.services.regime_classifier import RegimeClassifier
 DEFAULT_EXPIRY_SECONDS = [15, 30, 60, 90, 120, 180, 300]
 DEFAULT_TICK_ROOT = Path("app/data/tick_logs")
 DEFAULT_GHOST_SESSION_ROOT = Path("app/data/ghost_trades/sessions")
-DEFAULT_REPORT_ROOT = Path("@reports/backtests")
+DEFAULT_REPORT_ROOT = Path("app/backtesting/results")
 
 # Minimum settled trades required before a win-rate recommendation is meaningful.
 MIN_SAMPLE_SIZE = 30
@@ -1013,9 +1013,19 @@ def run_replay(
 
     summary = runner.summarize(rows)
     prefix = _report_prefix(dates)
-    csv_path = report_root / f"{prefix}.csv"
-    json_path = report_root / f"{prefix}_summary.json"
-    md_path = report_root / f"{prefix}_analysis.md"
+    
+    asset_name = "unknown_asset"
+    if assets:
+        asset_name = assets[0]
+    elif rows:
+        asset_name = rows[0]["asset"]
+        
+    target_report_dir = report_root / "oteo_levels" / f"{asset_name}_oteo_levels"
+    target_report_dir.mkdir(parents=True, exist_ok=True)
+    
+    csv_path = target_report_dir / f"{prefix}.csv"
+    json_path = target_report_dir / f"{prefix}_summary.json"
+    md_path = target_report_dir / f"{prefix}_analysis.md"
     _write_csv(rows, csv_path)
     _write_json({"summary": summary, "row_count": len(rows)}, json_path)
     _write_markdown(
@@ -1045,9 +1055,17 @@ def run_ghost_reprice(
     runner = BacktestRunner(BacktestConfig(expiry_seconds=[int(value) for value in expiry_seconds], payout_pct=payout_pct))
     summary = runner.summarize(rows)
     prefix = _ghost_report_prefix([Path(path) for path in session_files])
-    csv_path = report_root / f"{prefix}.csv"
-    json_path = report_root / f"{prefix}_summary.json"
-    md_path = report_root / f"{prefix}_analysis.md"
+    
+    asset_name = "unknown_asset"
+    if rows:
+        asset_name = rows[0]["asset"]
+        
+    target_report_dir = report_root / "ghost_reprice" / f"{asset_name}_ghost_reprice"
+    target_report_dir.mkdir(parents=True, exist_ok=True)
+    
+    csv_path = target_report_dir / f"{prefix}.csv"
+    json_path = target_report_dir / f"{prefix}_summary.json"
+    md_path = target_report_dir / f"{prefix}_analysis.md"
     _write_csv(rows, csv_path)
     _write_json({"summary": summary, "row_count": len(rows)}, json_path)
     _write_markdown(

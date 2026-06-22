@@ -3,7 +3,7 @@ from collections import deque
 from typing import Any, Dict, Tuple
 import numpy as np
 
-from app.backend.services.extensions.base import BaseExtension
+from .base import BaseExtension
 
 logger = logging.getLogger(__name__)
 

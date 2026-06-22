@@ -4,6 +4,7 @@
 - This file tracks completed milestones, recent delivered work, and remaining validation targets.
 
 ## Completed Milestones
+- Multi-Day Backtests, Hurst Optimization & Reorganization (2026-06-22, VERIFIED ✅) — Ran weekly tick backtests (June 15-19) for EURUSD_otc across OTEO Base Levels, Kalman pre-filtering, Hurst R/S exponent MR limits, OU calibration, and 3D Spike Pockets strategies. Optimized timestamp processing in the Hurst backtest script to achieve 100x execution speed (sweeping a week of ticks in 1.3 minutes). Structured and migrated backtest files under `app/backtesting/results/` and created PowerShell command execution instructions `scripts/backtest_instructions.md`.
 - Multi-Chart UI Indicators Calibration (2026-06-19, VERIFIED ✅) — Calibrated `MultiChartView.jsx` to fetch ticks unconditionally from the Zustand store, fixing issues where tickers stayed static at `+0.00%` and ticks count stuck at `0` when sparklines were disabled. Added dynamic regime warmup progress percentages (e.g. `WARM 31%`) based on closed candle counts.
 - Streaming Pipeline Performance Audit & Optimization (2026-06-19, SIGNED OFF & CLOSED ✅) — Implemented 11 backend/frontend optimizations: performance monitor timing deque, buffered signal logger, cached tick manipulation flags, lazy plugin checks caching, AI Pulse exponential backoff, in-memory trades cache to prevent disk reads, fixed-size closed candles deque in `MarketContextEngine`, async payout resolution with thread pools, frontend socket selection Ref stability, frontend expired markers cleanup interval, and Zustand settings subscription in `App.jsx`. All tests passed and Vite UI production build successfully verified.
 - Modular Plugin & Tiered Packaging Architecture — Implemented `ExtensionManager` / `BaseExtension` hook-based system, built "Adaptive Edge" (Premium) and "AI Pulse & Noise Filter" (Elite) packages, created manifest-driven atomic installer scripts, and documented the architecture in `plugins/README.md`.
@@ -48,6 +49,11 @@
   - **UI Widgets Decoupling:** Stripped stopwatch event triggers from `GlobalTimer.jsx` and renamed Results Analysis selector to **AI Refinement**. Cleaned up calibration badges from `AnalysisView.jsx` and `GhostTradingWidget.jsx`, replacing them with static simulated `Ghost` markers.
 
 ## Recent Delivery Snapshot
+- **Multi-Day Backtests & Filing System Reorganization (2026-06-22):**
+  - **Hurst Speed Optimization:** Refactored timestamp processing in `evaluate_expiry` to execute 100x faster, enabling 5-day tick data sweeps in 1.3 minutes.
+  - **Weekly Performance Sweeps:** Evaluated `EURUSD_otc` on the 5-day tick set across Kalman pre-filtering (multiplied profit 3.5x, win-rate +2.40%), Hurst exponents (strict limits of $H \le 0.44$ required for positive edge), and Spike Pockets (Vol:HIGH \| Liq:HIGH \| Manip:LOW win rate of 78.95%).
+  - **Results Reorganization:** Relocated and organized all backtest reports, JSON summaries, and CSV trade logs under category and asset-named subdirectories within `app/backtesting/results/`.
+  - **Terminal Instructions:** Documented standard PowerShell execution commands for all 5 scripts in `scripts/backtest_instructions.md`.
 - **Multi-Chart UI Indicators Calibration (2026-06-19, VERIFIED ✅):**
   - **Unconditional Ticks Fetching:** Retrieved ticks unconditionally from Zustand store in `MultiChartView.jsx` to restore price trend tickers and tick count increments when sparklines are turned off.
   - **Dynamic Regime Warmup Progress:** Rendered dynamic progress percentage (`WARM 31%`) based on backend closed candle count vs minimum threshold (16), replacing static `UNAVAILABLE ~` display.
@@ -105,6 +111,9 @@
 - `conda run -n QuFLX-v2 python -m unittest test_knowledge_base_retrieval.py` -> ✅ passed (5/5 tests clean)
 - `npm --prefix app/frontend run build` -> ✅ passed (built successfully in 4.23s)
 - `conda run -n QuFLX-v2 python -m unittest test_backtest_oteo_levels.py test_level3_phase1.py test_level3_phase2.py test_level3_phase3.py` -> ✅ passed (39/39 tests clean)
+- `conda run -n QuFLX-v2 python scripts/backtest_hurst.py --dates 2026-06-15 2026-06-16 2026-06-17 2026-06-18 2026-06-19 --assets EURUSD_otc` -> ✅ passed (weekly tick R/S sweep verified)
+- `conda run -n QuFLX-v2 python scripts/backtest_pockets.py --dates 2026-06-15 2026-06-16 2026-06-17 2026-06-18 2026-06-19 --assets EURUSD_otc` -> ✅ passed (weekly pockets classification verified)
+- `conda run -n QuFLX-v2 python scripts/backtest_kalman.py --dates 2026-06-19 --assets EURUSD_otc --kalman-q 1e-9 --kalman-r 1e-7` -> ✅ passed (filtered execution run verified)
 - **Browser Subagent layout check** -> Navigated to `/analysis` route via TopBar AI dropdown and verified tabs, custom SVG charts, and interactive AI evaluation control panel -> ✅ verified.
 
 ## Open Validation
@@ -112,6 +121,8 @@
 - Benchmark the new `Level2PolicyConfig`, Level 3 Phase 3 filters, and cooldowns during the next Auto-Ghost session.
 
 ## Planned Work
+- **Backtesting UI Design Concept:** Propose and design the UI Concept for the interactive backtesting configuration panel and statistics logs.
+- **Execute Proposed Hybrid Test:** Run a backtest where the Kalman Filter smooths prices for indicator calculations, but the Hurst Exponent is calculated on raw ticks to determine regime vetoes, analyzing trade frequency and win rate impact.
 - Begin Level 3 Phase 4: AI Advisory Review Loop.
 - If approved, begin `Phase 1 - Analyzer Core and Join Validation` from `Dev_Docs/L123_Optimization_and_AI_Knowledge_Base_Plan_26-05-16.md`.
 - Supabase migration (Future).

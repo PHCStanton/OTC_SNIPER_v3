@@ -1,0 +1,91 @@
+{
+  "summary": {
+    "by_level_expiry": {
+      "L1|15": {
+        "wins": 33,
+        "losses": 42,
+        "draws": 6,
+        "win_rate": 44.0
+      },
+      "L1|30": {
+        "wins": 39,
+        "losses": 39,
+        "draws": 1,
+        "win_rate": 50.0
+      },
+      "L1|60": {
+        "wins": 37,
+        "losses": 40,
+        "draws": 0,
+        "win_rate": 48.05194805194805
+      },
+      "L1|90": {
+        "wins": 31,
+        "losses": 41,
+        "draws": 0,
+        "win_rate": 43.05555555555556
+      },
+      "L1|120": {
+        "wins": 33,
+        "losses": 37,
+        "draws": 0,
+        "win_rate": 47.14285714285714
+      },
+      "L1|180": {
+        "wins": 36,
+        "losses": 27,
+        "draws": 0,
+        "win_rate": 57.14285714285714
+      },
+      "L1|300": {
+        "wins": 20,
+        "losses": 28,
+        "draws": 1,
+        "win_rate": 41.66666666666667
+      },
+      "L2|15": {
+        "wins": 33,
+        "losses": 42,
+        "draws": 6,
+        "win_rate": 44.0
+      },
+      "L2|30": {
+        "wins": 39,
+        "losses": 39,
+        "draws": 1,
+        "win_rate": 50.0
+      },
+      "L2|60": {
+        "wins": 37,
+        "losses": 40,
+        "draws": 0,
+        "win_rate": 48.05194805194805
+      },
+      "L2|90": {
+        "wins": 31,
+        "losses": 41,
+        "draws": 0,
+        "win_rate": 43.05555555555556
+      },
+      "L2|120": {
+        "wins": 33,
+        "losses": 37,
+        "draws": 0,
+        "win_rate": 47.14285714285714
+      },
+      "L2|180": {
+        "wins": 36,
+        "losses": 27,
+        "draws": 0,
+        "win_rate": 57.14285714285714
+      },
+      "L2|300": {
+        "wins": 20,
+        "losses": 28,
+        "draws": 1,
+        "win_rate": 41.66666666666667
+      }
+    }
+  },
+  "total_rows": 1344
+}

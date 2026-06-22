@@ -55,6 +55,8 @@ const formatInterval = (sec) => {
   return remainingSecs > 0 ? `${mins}m ${remainingSecs}s` : `${mins}m`;
 };
 
+const PULSE_PRESETS = [60, 120, 180, 300, 600, 900, 1200, 1800];
+
 export default function GhostTradingWidget() {
   const autoGhostEnabled = useSettingsStore((s) => s.autoGhostEnabled);
   const ghostWidgetPosition = useSettingsStore((s) => s.ghostWidgetPosition);
@@ -120,9 +122,17 @@ export default function GhostTradingWidget() {
     hurstFilterThreshold,
     hasPremiumHurst,
     hasEliteHurst,
+    hurstL2Enabled,
+    hurstL3Enabled,
     setHurstFilterEnabled,
     setHurstFilterThreshold,
   } = useSettingsStore();
+
+  const currentPresetIndex = PULSE_PRESETS.reduce((closestIdx, currVal, idx) => {
+    const currentDiff = Math.abs(currVal - aiPulseIntervalSeconds);
+    const closestDiff = Math.abs(PULSE_PRESETS[closestIdx] - aiPulseIntervalSeconds);
+    return currentDiff < closestDiff ? idx : closestIdx;
+  }, 0);
 
   const [requestingInsight, setRequestingInsight] = useState(false);
 
@@ -186,23 +196,54 @@ export default function GhostTradingWidget() {
     if (suggestions.autoGhostHurstFilterThreshold !== undefined) setHurstFilterThreshold(suggestions.autoGhostHurstFilterThreshold);
 
     let starredAddedCount = 0;
+    const currentStarred = useAssetStore.getState().starredAssets;
+    let nextStarred = [...currentStarred];
+
+    const currentBlacklist = useSettingsStore.getState().ghostBlacklist;
+    let nextBlacklist = [...currentBlacklist];
+    let blacklistAddedCount = 0;
+
+    // Apply whitelist suggestions
     if (Array.isArray(suggestions.whitelistAssets)) {
-      const currentStarred = useAssetStore.getState().starredAssets;
-      const nextStarred = [...currentStarred];
       suggestions.whitelistAssets.forEach((asset) => {
+        // Star/Favorite the asset
         if (!nextStarred.includes(asset)) {
           nextStarred.push(asset);
           starredAddedCount++;
         }
+        // Ensure it is removed from the blacklist to avoid execution block conflicts
+        if (nextBlacklist.includes(asset)) {
+          nextBlacklist = nextBlacklist.filter((a) => a !== asset);
+        }
       });
-      if (starredAddedCount > 0) {
-        useAssetStore.getState().setStarredAssets(nextStarred);
-      }
+    }
+
+    // Apply blacklist suggestions
+    if (Array.isArray(suggestions.blacklistAssets)) {
+      suggestions.blacklistAssets.forEach((asset) => {
+        // Add to blacklist
+        if (!nextBlacklist.includes(asset)) {
+          nextBlacklist.push(asset);
+          blacklistAddedCount++;
+        }
+        // Unstar the asset to avoid confusion
+        if (nextStarred.includes(asset)) {
+          nextStarred = nextStarred.filter((a) => a !== asset);
+        }
+      });
+    }
+
+    // Save stores
+    if (starredAddedCount > 0 || nextStarred.length !== currentStarred.length) {
+      useAssetStore.getState().setStarredAssets(nextStarred);
+    }
+    if (blacklistAddedCount > 0 || nextBlacklist.length !== currentBlacklist.length) {
+      useSettingsStore.getState().setGhostBlacklist(nextBlacklist);
     }
 
     useToastStore.getState().addToast({
       type: 'success',
-      message: `Ghost Protocol updated! Applied settings & starred ${starredAddedCount} assets.`,
+      message: `Ghost Protocol updated! Whitelisted/Starred: ${starredAddedCount} | Blacklisted: ${blacklistAddedCount} assets.`,
       duration: 4000,
     });
   };
@@ -326,7 +367,7 @@ export default function GhostTradingWidget() {
     >
       {/* The Popup */}
       {isOpen && (
-        <div className="absolute bottom-16 left-0 mb-4 w-[360px] rounded-[20px] border border-white/5 bg-[#1a1c22] p-5 shadow-2xl backdrop-blur-xl origin-bottom-left animate-in fade-in zoom-in duration-200">
+        <div className="absolute bottom-16 left-0 mb-4 w-[360px] rounded-[20px] border border-[#ffb800] bg-[#1a1c22] p-5 shadow-2xl backdrop-blur-xl origin-bottom-left animate-in fade-in zoom-in duration-200">
           <div className="flex items-center justify-between mb-4 border-b border-white/5 pb-3">
             <div className="flex items-center gap-2 text-[#ffb800]">
               <Zap size={18} />
@@ -825,16 +866,22 @@ export default function GhostTradingWidget() {
                       L2 Adaptive Expiry (Premium)
                     </span>
                     {hasPremiumHurst ? (
-                      <span className="rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-emerald-400">
-                        Active
-                      </span>
+                      hurstL2Enabled ? (
+                        <span className="rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-emerald-400">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="rounded bg-gray-500/15 border border-white/10 px-1 py-0.2 text-[7px] font-black uppercase text-gray-400">
+                          Suspended
+                        </span>
+                      )
                     ) : (
                       <span className="rounded bg-yellow-500/10 border border-yellow-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-[#ffb800]">
                         Locked
                       </span>
                     )}
                   </div>
-                  <div className="text-[7.5px] text-gray-600 italic mt-0.5">
+                  <div className={`text-[7.5px] text-gray-600 italic mt-0.5 ${hasPremiumHurst && !hurstL2Enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                     {hasPremiumHurst ? <HurstExpirySettings /> : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}
                   </div>
                 </div>
@@ -846,16 +893,22 @@ export default function GhostTradingWidget() {
                       L3 AI Auto-Calibration (Elite)
                     </span>
                     {hasEliteHurst ? (
-                      <span className="rounded bg-purple-500/10 border border-purple-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-purple-400">
-                        Active
-                      </span>
+                      hurstL3Enabled ? (
+                        <span className="rounded bg-purple-500/10 border border-purple-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-purple-400">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="rounded bg-gray-500/15 border border-white/10 px-1 py-0.2 text-[7px] font-black uppercase text-gray-400">
+                          Suspended
+                        </span>
+                      )
                     ) : (
                       <span className="rounded bg-[#ff4a4a]/10 border border-[#ff4a4a]/25 px-1 py-0.2 text-[7px] font-black uppercase text-red-400">
                         Locked
                       </span>
                     )}
                   </div>
-                  <div className="text-[7.5px] text-gray-600 italic mt-0.5">
+                  <div className={`text-[7.5px] text-gray-600 italic mt-0.5 ${hasEliteHurst && !hurstL3Enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                     {hasEliteHurst ? <HurstAiSettings /> : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}
                   </div>
                 </div>
@@ -891,16 +944,40 @@ export default function GhostTradingWidget() {
                       {formatInterval(aiPulseIntervalSeconds)}
                     </span>
                   </div>
-                  <input
-                    type="range"
-                    min="10"
-                    max="3600"
-                    step="10"
-                    disabled={!aiPulseEnabled}
-                    value={aiPulseIntervalSeconds}
-                    onChange={(e) => setAiPulseIntervalSeconds(Number(e.target.value))}
-                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
-                  />
+                  <div className="relative w-full">
+                    <input
+                      type="range"
+                      min="0"
+                      max={PULSE_PRESETS.length - 1}
+                      step="1"
+                      disabled={!aiPulseEnabled}
+                      value={currentPresetIndex}
+                      onChange={(e) => setAiPulseIntervalSeconds(PULSE_PRESETS[Number(e.target.value)])}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                    />
+                    <div className="relative w-full h-7 mt-1 select-none pointer-events-none">
+                      {PULSE_PRESETS.map((val, idx) => {
+                        const percent = (idx / (PULSE_PRESETS.length - 1)) * 100;
+                        const offset = (0.5 - idx / (PULSE_PRESETS.length - 1)) * 14;
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              position: 'absolute',
+                              left: `calc(${percent}% + ${offset}px)`,
+                              transform: 'translateX(-50%)',
+                            }}
+                            className="flex flex-col items-center"
+                          >
+                            <div className={`w-0.5 h-1 rounded-full ${idx === currentPresetIndex ? 'bg-[#ffb800]' : 'bg-gray-700'}`} />
+                            <span className={`text-[7px] font-black uppercase mt-1 ${idx === currentPresetIndex ? 'text-[#ffb800]' : 'text-gray-600'}`}>
+                              {formatInterval(val)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -991,6 +1068,9 @@ export default function GhostTradingWidget() {
                         )}
                         {latestPulse.suggestions.whitelistAssets && latestPulse.suggestions.whitelistAssets.length > 0 && (
                           <div>• WHITELIST ASSETS: <span className="text-[#ffb800]">{latestPulse.suggestions.whitelistAssets.map(a => a.replace('_otc', ' OTC').toUpperCase()).join(', ')}</span></div>
+                        )}
+                        {latestPulse.suggestions.blacklistAssets && latestPulse.suggestions.blacklistAssets.length > 0 && (
+                          <div>• BLACKLIST ASSETS: <span className="text-red-400">{latestPulse.suggestions.blacklistAssets.map(a => a.replace('_otc', ' OTC').toUpperCase()).join(', ')}</span></div>
                         )}
                       </div>
 

@@ -298,6 +298,61 @@ async def test_auto_ghost():
     assert len(trade_service.trades) == 4
     print("Test 8 passed: Market Regime gates verified.")
 
+    # Test 9: Asset blacklisting
+    print("Starting Test 9 (Asset Blacklisting)...")
+    service.update_config(
+        blacklist_assets=["EURUSD", "GBPUSD"]
+    )
+    # Signal for blacklisted asset EURUSD
+    res_bl1 = await service.consider_signal(
+        asset="EURUSD", price=1.1, timestamp=4000.0, oteo_result=oteo_result, manipulation={}
+    )
+    assert res_bl1 is None, "Should be rejected because EURUSD is blacklisted"
+    assert service._last_reject_reason_by_asset.get("EURUSD") == "asset_blacklisted"
+
+    # Signal for non-blacklisted asset USDJPY
+    service._active_assets.clear()
+    service._cooldown_until.clear()
+    res_bl2 = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=4001.0, oteo_result=oteo_result, manipulation={}
+    )
+    assert res_bl2 and res_bl2["success"] is True, "Should succeed as USDJPY is not blacklisted"
+    print("Test 9 passed: Asset blacklisting verified.")
+
+    # Test 10: Hurst L2/L3 extension dynamic enabling/disabling
+    print("Starting Test 10 (Hurst L2/L3 extension toggles)...")
+    from app.backend.services.extensions.manager import ExtensionManager
+    service.extension_manager = ExtensionManager()
+    
+    # Verify extensions are discovered
+    exts = service.extension_manager.get_active_extensions()
+    assert len(exts) >= 2, "Should discover at least the two Hurst extensions"
+    
+    # Find the extension instances
+    l2_ext = next((e for e in exts if e.__class__.__name__ == "HurstAdaptiveExpiry"), None)
+    l3_ext = next((e for e in exts if e.__class__.__name__ == "HurstAiNoise"), None)
+    
+    assert l2_ext is not None
+    assert l3_ext is not None
+    
+    # Toggle enabled to False
+    service.update_config(hurst_l2_enabled=False, hurst_l3_enabled=False)
+    assert l2_ext.enabled is False
+    assert l3_ext.enabled is False
+    
+    # Toggle enabled to True
+    service.update_config(hurst_l2_enabled=True, hurst_l3_enabled=True)
+    assert l2_ext.enabled is True
+    assert l3_ext.enabled is True
+
+    # Test clear_plugin_cache propagates status
+    service.update_config(hurst_l2_enabled=False, hurst_l3_enabled=True)
+    service.clear_plugin_cache()
+    assert l2_ext.enabled is False
+    assert l3_ext.enabled is True
+
+    print("Test 10 passed: Hurst L2/L3 extension dynamic toggles verified.")
+
     print("All tests passed successfully!")
 
 if __name__ == "__main__":
