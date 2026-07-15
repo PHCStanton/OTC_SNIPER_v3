@@ -4,6 +4,8 @@
 - This file tracks completed milestones, recent delivered work, and remaining validation targets.
 
 ## Completed Milestones
+- Event Loop Assertion Fixes (2026-07-07, VERIFIED ✅) — Implemented Socket.IO disconnect handler in `main.py` and registered custom asyncio event loop exception handler in `streaming.py` to suppress Windows ProactorEventLoop write assertions on client disconnects. Verified clean compilation.
+- Streaming Lag & Performance Optimization (2026-06-22, VERIFIED ✅) — Capped `AnalysisTerminal` log buffer to 200 items in React to prevent unbounded DOM node growth. Implemented constant-time $O(1)$ tick indicators/trend parsing helpers in `chartUtils.js` to avoid full-series array parsing overhead, and integrated them into `MultiChartView.jsx` to optimize background card rendering when sparklines are disabled. Succeeded Vite frontend builds and pytest suites.
 - Multi-Day Backtests, Hurst Optimization & Reorganization (2026-06-22, VERIFIED ✅) — Ran weekly tick backtests (June 15-19) for EURUSD_otc across OTEO Base Levels, Kalman pre-filtering, Hurst R/S exponent MR limits, OU calibration, and 3D Spike Pockets strategies. Optimized timestamp processing in the Hurst backtest script to achieve 100x execution speed (sweeping a week of ticks in 1.3 minutes). Structured and migrated backtest files under `app/backtesting/results/` and created PowerShell command execution instructions `scripts/backtest_instructions.md`.
 - Multi-Chart UI Indicators Calibration (2026-06-19, VERIFIED ✅) — Calibrated `MultiChartView.jsx` to fetch ticks unconditionally from the Zustand store, fixing issues where tickers stayed static at `+0.00%` and ticks count stuck at `0` when sparklines were disabled. Added dynamic regime warmup progress percentages (e.g. `WARM 31%`) based on closed candle counts.
 - Streaming Pipeline Performance Audit & Optimization (2026-06-19, SIGNED OFF & CLOSED ✅) — Implemented 11 backend/frontend optimizations: performance monitor timing deque, buffered signal logger, cached tick manipulation flags, lazy plugin checks caching, AI Pulse exponential backoff, in-memory trades cache to prevent disk reads, fixed-size closed candles deque in `MarketContextEngine`, async payout resolution with thread pools, frontend socket selection Ref stability, frontend expired markers cleanup interval, and Zustand settings subscription in `App.jsx`. All tests passed and Vite UI production build successfully verified.
@@ -49,11 +51,19 @@
   - **UI Widgets Decoupling:** Stripped stopwatch event triggers from `GlobalTimer.jsx` and renamed Results Analysis selector to **AI Refinement**. Cleaned up calibration badges from `AnalysisView.jsx` and `GhostTradingWidget.jsx`, replacing them with static simulated `Ghost` markers.
 
 ## Recent Delivery Snapshot
-- **Multi-Day Backtests & Filing System Reorganization (2026-06-22):**
+- **Event Loop Assertion Fixes (2026-07-07, VERIFIED ✅):**
+  - **Socket.IO Disconnect handler:** Added `@sio.event` `disconnect(sid)` handler to `main.py` to gracefully log client disconnections and prevent emissions to dead socket transports.
+  - **Proactor Loop Handler:** Registered custom `_handle_loop_exception` callback in `StreamingService.start()` to catch and filter out `AssertionError` occurrences in Windows `ProactorEventLoop` when writing to abruptly disconnected pipe transports.
+- **Streaming Lag & Performance Optimization (2026-06-22, VERIFIED ✅):**
+  - **AnalysisTerminal Capping:** Bounded the lines buffer state to a maximum of 200 logs to eliminate infinite DOM tree growth.
+  - **O(1) Tick Metrics:** Added constant-time trend and price extractors to `chartUtils.js` to skip expensive O(N) array transformations.
+  - **MultiChartView Rendition:** Integrated new helpers to avoid render recalculations for off-focus assets in the watchlist grid when sparklines are disabled.
+- **Multi-Day Backtests, Hybrid Kalman-Hurst & Filing System Reorganization (2026-06-22):**
   - **Hurst Speed Optimization:** Refactored timestamp processing in `evaluate_expiry` to execute 100x faster, enabling 5-day tick data sweeps in 1.3 minutes.
-  - **Weekly Performance Sweeps:** Evaluated `EURUSD_otc` on the 5-day tick set across Kalman pre-filtering (multiplied profit 3.5x, win-rate +2.40%), Hurst exponents (strict limits of $H \le 0.44$ required for positive edge), and Spike Pockets (Vol:HIGH \| Liq:HIGH \| Manip:LOW win rate of 78.95%).
+  - **Hybrid Kalman-Hurst Implementation:** Created `scripts/backtest_hybrid_kalman_hurst.py` and unit tests in `test_backtest_hybrid_kalman_hurst.py` to compare Baseline, Kalman-Only, Hurst-Only, and Hybrid strategy setups.
+  - **Weekly Performance Sweeps & Key Findings:** Evaluated `EURUSD_otc` on the 5-day tick set. Hurst-Only (strict $H \le 0.44$) on raw price ticks achieved a positive expectancy (**53.20% win-rate**, beating the 52.08% breakeven), while the Hybrid Kalman-Hurst setup win-rate collapsed to **28.77%** due to phase-shift execution lag introduced by Kalman price smoothing on crossover indicators.
   - **Results Reorganization:** Relocated and organized all backtest reports, JSON summaries, and CSV trade logs under category and asset-named subdirectories within `app/backtesting/results/`.
-  - **Terminal Instructions:** Documented standard PowerShell execution commands for all 5 scripts in `scripts/backtest_instructions.md`.
+  - **Terminal Instructions:** Documented standard PowerShell execution commands for all 6 scripts in `scripts/backtest_instructions.md`.
 - **Multi-Chart UI Indicators Calibration (2026-06-19, VERIFIED ✅):**
   - **Unconditional Ticks Fetching:** Retrieved ticks unconditionally from Zustand store in `MultiChartView.jsx` to restore price trend tickers and tick count increments when sparklines are turned off.
   - **Dynamic Regime Warmup Progress:** Rendered dynamic progress percentage (`WARM 31%`) based on backend closed candle count vs minimum threshold (16), replacing static `UNAVAILABLE ~` display.

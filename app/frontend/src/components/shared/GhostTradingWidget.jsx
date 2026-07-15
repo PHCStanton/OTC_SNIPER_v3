@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import HurstAiSettings from './HurstAiSettings.jsx';
 import HurstExpirySettings from './HurstExpirySettings.jsx';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
@@ -126,6 +126,10 @@ export default function GhostTradingWidget() {
     hurstL3Enabled,
     setHurstFilterEnabled,
     setHurstFilterThreshold,
+    setHurstL2Enabled,
+    setHurstL3Enabled,
+    autoGhostRsiCciEnabled,
+    setAutoGhostRsiCciEnabled,
   } = useSettingsStore();
 
   const currentPresetIndex = PULSE_PRESETS.reduce((closestIdx, currVal, idx) => {
@@ -135,6 +139,23 @@ export default function GhostTradingWidget() {
   }, 0);
 
   const [requestingInsight, setRequestingInsight] = useState(false);
+  const [selectedSuggestedWhitelist, setSelectedSuggestedWhitelist] = useState([]);
+  const [selectedSuggestedBlacklist, setSelectedSuggestedBlacklist] = useState([]);
+
+  const notifications = useNotificationStore((s) => s.notifications);
+  const latestPulse = notifications.find(
+    (n) => n.type === 'ai_pulse' || n.type === 'ai_advisory'
+  );
+
+  useEffect(() => {
+    if (latestPulse?.suggestions) {
+      setSelectedSuggestedWhitelist(latestPulse.suggestions.whitelistAssets || []);
+      setSelectedSuggestedBlacklist(latestPulse.suggestions.blacklistAssets || []);
+    } else {
+      setSelectedSuggestedWhitelist([]);
+      setSelectedSuggestedBlacklist([]);
+    }
+  }, [latestPulse]);
 
   const handleRequestManualInsight = async () => {
     if (requestingInsight) return;
@@ -162,12 +183,7 @@ export default function GhostTradingWidget() {
     }
   };
 
-  const notifications = useNotificationStore((s) => s.notifications);
-  const latestPulse = notifications.find(
-    (n) => n.type === 'ai_pulse' || n.type === 'ai_advisory'
-  );
-
-  const handleUpdateGhostProtocol = (suggestions) => {
+  const handleUpdateGhostProtocol = (suggestions, selectedWhitelist = null, selectedBlacklist = null) => {
     if (!suggestions) return;
 
     if (suggestions.ghostMinConfidence !== undefined) setGhostMinConfidence(suggestions.ghostMinConfidence);
@@ -203,9 +219,12 @@ export default function GhostTradingWidget() {
     let nextBlacklist = [...currentBlacklist];
     let blacklistAddedCount = 0;
 
+    const whitelistToApply = selectedWhitelist !== null ? selectedWhitelist : (suggestions.whitelistAssets || []);
+    const blacklistToApply = selectedBlacklist !== null ? selectedBlacklist : (suggestions.blacklistAssets || []);
+
     // Apply whitelist suggestions
-    if (Array.isArray(suggestions.whitelistAssets)) {
-      suggestions.whitelistAssets.forEach((asset) => {
+    if (Array.isArray(whitelistToApply)) {
+      whitelistToApply.forEach((asset) => {
         // Star/Favorite the asset
         if (!nextStarred.includes(asset)) {
           nextStarred.push(asset);
@@ -219,8 +238,8 @@ export default function GhostTradingWidget() {
     }
 
     // Apply blacklist suggestions
-    if (Array.isArray(suggestions.blacklistAssets)) {
-      suggestions.blacklistAssets.forEach((asset) => {
+    if (Array.isArray(blacklistToApply)) {
+      blacklistToApply.forEach((asset) => {
         // Add to blacklist
         if (!nextBlacklist.includes(asset)) {
           nextBlacklist.push(asset);
@@ -821,9 +840,9 @@ export default function GhostTradingWidget() {
                 </div>
               </div>
 
-              {/* Hurst Exponent Filter & Locked Slots */}
+              {/* Extensions & Locked Slots */}
               <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
-                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Hurst Exponent & Volatility Gates</span>
+                <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Extensions</span>
                 
                 {/* L1 Core Hurst Filter Toggle */}
                 <div className="space-y-1">
@@ -862,54 +881,95 @@ export default function GhostTradingWidget() {
                 {/* L2 Premium Plugin Slot */}
                 <div className={`border-t border-white/5 pt-2 mt-1 ${hasPremiumHurst ? '' : 'opacity-60'}`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">
-                      L2 Adaptive Expiry (Premium)
-                    </span>
-                    {hasPremiumHurst ? (
-                      hurstL2Enabled ? (
-                        <span className="rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-emerald-400">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="rounded bg-gray-500/15 border border-white/10 px-1 py-0.2 text-[7px] font-black uppercase text-gray-400">
-                          Suspended
-                        </span>
-                      )
-                    ) : (
-                      <span className="rounded bg-yellow-500/10 border border-yellow-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-[#ffb800]">
-                        Locked
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        disabled={!hasPremiumHurst}
+                        checked={hurstL2Enabled}
+                        onChange={(e) => setHurstL2Enabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3 disabled:cursor-not-allowed"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${hurstL2Enabled && hasPremiumHurst ? 'text-emerald-400' : 'text-gray-500'}`}>
+                        L2 Adaptive Expiry (Premium)
                       </span>
-                    )}
+                    </label>
+                    <span className={`rounded px-1 py-0.2 text-[7px] font-black uppercase border ${
+                      hasPremiumHurst 
+                        ? (hurstL2Enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' : 'bg-gray-500/15 text-gray-400 border-white/10')
+                        : 'bg-yellow-500/10 text-[#ffb800] border-yellow-500/25'
+                    }`}>
+                      {hasPremiumHurst ? (hurstL2Enabled ? 'Active' : 'Suspended') : 'Locked'}
+                    </span>
                   </div>
-                  <div className={`text-[7.5px] text-gray-600 italic mt-0.5 ${hasPremiumHurst && !hurstL2Enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                    {hasPremiumHurst ? <HurstExpirySettings /> : 'Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.'}
-                  </div>
+                  {hasPremiumHurst && hurstL2Enabled ? (
+                    <div className="text-[7.5px] text-gray-600 italic mt-0.5">
+                      <HurstExpirySettings />
+                    </div>
+                  ) : (
+                    <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
+                      Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.
+                    </div>
+                  )}
                 </div>
 
                 {/* L3 Elite Plugin Slot */}
                 <div className={`border-t border-white/5 pt-2 ${hasEliteHurst ? '' : 'opacity-60'}`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">
-                      L3 AI Auto-Calibration (Elite)
-                    </span>
-                    {hasEliteHurst ? (
-                      hurstL3Enabled ? (
-                        <span className="rounded bg-purple-500/10 border border-purple-500/25 px-1 py-0.2 text-[7px] font-black uppercase text-purple-400">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="rounded bg-gray-500/15 border border-white/10 px-1 py-0.2 text-[7px] font-black uppercase text-gray-400">
-                          Suspended
-                        </span>
-                      )
-                    ) : (
-                      <span className="rounded bg-[#ff4a4a]/10 border border-[#ff4a4a]/25 px-1 py-0.2 text-[7px] font-black uppercase text-red-400">
-                        Locked
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        disabled={!hasEliteHurst}
+                        checked={hurstL3Enabled}
+                        onChange={(e) => setHurstL3Enabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3 disabled:cursor-not-allowed"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${hurstL3Enabled && hasEliteHurst ? 'text-purple-400' : 'text-gray-500'}`}>
+                        L3 AI Auto-Calibration (Elite)
                       </span>
-                    )}
+                    </label>
+                    <span className={`rounded px-1 py-0.2 text-[7px] font-black uppercase border ${
+                      hasEliteHurst 
+                        ? (hurstL3Enabled ? 'bg-purple-500/10 text-purple-400 border-purple-500/25' : 'bg-gray-500/15 text-gray-400 border-white/10')
+                        : 'bg-[#ff4a4a]/10 text-red-400 border-[#ff4a4a]/25'
+                    }`}>
+                      {hasEliteHurst ? (hurstL3Enabled ? 'Active' : 'Suspended') : 'Locked'}
+                    </span>
                   </div>
-                  <div className={`text-[7.5px] text-gray-600 italic mt-0.5 ${hasEliteHurst && !hurstL3Enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                    {hasEliteHurst ? <HurstAiSettings /> : 'Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.'}
+                  {hasEliteHurst && hurstL3Enabled ? (
+                    <div className="text-[7.5px] text-gray-600 italic mt-0.5">
+                      <HurstAiSettings />
+                    </div>
+                  ) : (
+                    <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
+                      Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.
+                    </div>
+                  )}
+                </div>
+
+                {/* RSI/CCI Confluence Slot */}
+                <div className="border-t border-white/5 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={autoGhostRsiCciEnabled}
+                        onChange={(e) => setAutoGhostRsiCciEnabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${autoGhostRsiCciEnabled ? 'text-amber-400' : 'text-gray-500'}`}>
+                        RSI/CCI Momentum Confluence (Extension)
+                      </span>
+                    </label>
+                    <span className={`rounded px-1 py-0.2 text-[7px] font-black uppercase border ${
+                      autoGhostRsiCciEnabled 
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/25' 
+                        : 'bg-gray-500/15 text-gray-400 border-white/10'
+                    }`}>
+                      {autoGhostRsiCciEnabled ? 'Active' : 'Suspended'}
+                    </span>
+                  </div>
+                  <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
+                    Vetoes entry signals if RSI(7) and CCI(9) are not parallel from extreme zones.
                   </div>
                 </div>
               </div>
@@ -1067,16 +1127,58 @@ export default function GhostTradingWidget() {
                           <div>• MANIP THRESHOLD: <span className="text-white">{latestPulse.suggestions.autoGhostManipulationSeverityThreshold}</span></div>
                         )}
                         {latestPulse.suggestions.whitelistAssets && latestPulse.suggestions.whitelistAssets.length > 0 && (
-                          <div>• WHITELIST ASSETS: <span className="text-[#ffb800]">{latestPulse.suggestions.whitelistAssets.map(a => a.replace('_otc', ' OTC').toUpperCase()).join(', ')}</span></div>
+                          <div className="space-y-1 mt-1.5 pt-1.5 border-t border-white/5">
+                            <div className="text-gray-500 font-black tracking-widest text-[8px] uppercase">Whitelist Suggestions:</div>
+                            <div className="flex flex-wrap gap-1.5 py-1">
+                              {latestPulse.suggestions.whitelistAssets.map((asset) => (
+                                <label key={asset} className="flex items-center gap-1.5 bg-[#ffb800]/10 hover:bg-[#ffb800]/20 text-[#ffb800] border border-[#ffb800]/25 rounded px-2 py-0.5 cursor-pointer text-[8px] font-black uppercase transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedSuggestedWhitelist.includes(asset)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedSuggestedWhitelist(prev => [...prev, asset]);
+                                      } else {
+                                        setSelectedSuggestedWhitelist(prev => prev.filter(a => a !== asset));
+                                      }
+                                    }}
+                                    className="accent-[#ffb800]"
+                                  />
+                                  {asset.replace('_otc', '').toUpperCase()}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                         )}
                         {latestPulse.suggestions.blacklistAssets && latestPulse.suggestions.blacklistAssets.length > 0 && (
-                          <div>• BLACKLIST ASSETS: <span className="text-red-400">{latestPulse.suggestions.blacklistAssets.map(a => a.replace('_otc', ' OTC').toUpperCase()).join(', ')}</span></div>
+                          <div className="space-y-1 mt-1.5 pt-1.5 border-t border-white/5">
+                            <div className="text-gray-500 font-black tracking-widest text-[8px] uppercase">Blacklist Suggestions:</div>
+                            <div className="flex flex-wrap gap-1.5 py-1">
+                              {latestPulse.suggestions.blacklistAssets.map((asset) => (
+                                <label key={asset} className="flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/25 rounded px-2 py-0.5 cursor-pointer text-[8px] font-black uppercase transition-colors">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedSuggestedBlacklist.includes(asset)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedSuggestedBlacklist(prev => [...prev, asset]);
+                                      } else {
+                                        setSelectedSuggestedBlacklist(prev => prev.filter(a => a !== asset));
+                                      }
+                                    }}
+                                    className="accent-red-500"
+                                  />
+                                  {asset.replace('_otc', '').toUpperCase()}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
 
                       <button
                         type="button"
-                        onClick={() => handleUpdateGhostProtocol(latestPulse.suggestions)}
+                        onClick={() => handleUpdateGhostProtocol(latestPulse.suggestions, selectedSuggestedWhitelist, selectedSuggestedBlacklist)}
                         className="w-full h-8 rounded bg-[#ffb800] hover:bg-white text-black font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-[#ffb800]/10"
                       >
                         <Zap size={11} className="fill-current" />

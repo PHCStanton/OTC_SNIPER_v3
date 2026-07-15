@@ -1,0 +1,653 @@
+[
+  {
+    "asset": "EURUSD",
+    "tick_logs_mb": 156.28,
+    "backup_data_mb": 5.88,
+    "ghost_trades": 1709,
+    "composite_score": 247.61
+  },
+  {
+    "asset": "AUDCAD",
+    "tick_logs_mb": 128.56,
+    "backup_data_mb": 9.32,
+    "ghost_trades": 1094,
+    "composite_score": 192.58
+  },
+  {
+    "asset": "AUDCHF",
+    "tick_logs_mb": 110.15,
+    "backup_data_mb": 8.94,
+    "ghost_trades": 854,
+    "composite_score": 161.79
+  },
+  {
+    "asset": "EURGBP",
+    "tick_logs_mb": 90.18,
+    "backup_data_mb": 3.74,
+    "ghost_trades": 1071,
+    "composite_score": 147.47
+  },
+  {
+    "asset": "AUDUSD",
+    "tick_logs_mb": 83.4,
+    "backup_data_mb": 9.22,
+    "ghost_trades": 987,
+    "composite_score": 141.97
+  },
+  {
+    "asset": "CADCHF",
+    "tick_logs_mb": 91.51,
+    "backup_data_mb": 5.3,
+    "ghost_trades": 724,
+    "composite_score": 133.01
+  },
+  {
+    "asset": "AUDNZD",
+    "tick_logs_mb": 83.94,
+    "backup_data_mb": 8.88,
+    "ghost_trades": 436,
+    "composite_score": 114.62
+  },
+  {
+    "asset": "EURCHF",
+    "tick_logs_mb": 75.71,
+    "backup_data_mb": 6.26,
+    "ghost_trades": 541,
+    "composite_score": 109.01
+  },
+  {
+    "asset": "GBPUSD",
+    "tick_logs_mb": 71.34,
+    "backup_data_mb": 1.17,
+    "ghost_trades": 653,
+    "composite_score": 105.16
+  },
+  {
+    "asset": "EURJPY",
+    "tick_logs_mb": 82.42,
+    "backup_data_mb": 4.01,
+    "ghost_trades": 192,
+    "composite_score": 96.03
+  },
+  {
+    "asset": "EURNZD",
+    "tick_logs_mb": 69.3,
+    "backup_data_mb": 3.07,
+    "ghost_trades": 466,
+    "composite_score": 95.66
+  },
+  {
+    "asset": "CADJPY",
+    "tick_logs_mb": 69.71,
+    "backup_data_mb": 6.19,
+    "ghost_trades": 193,
+    "composite_score": 85.55
+  },
+  {
+    "asset": "CHFJPY",
+    "tick_logs_mb": 71.6,
+    "backup_data_mb": 4.33,
+    "ghost_trades": 151,
+    "composite_score": 83.49
+  },
+  {
+    "asset": "AEDCNY",
+    "tick_logs_mb": 59.39,
+    "backup_data_mb": 5.89,
+    "ghost_trades": 277,
+    "composite_score": 79.13
+  },
+  {
+    "asset": "BHDCNY",
+    "tick_logs_mb": 66.63,
+    "backup_data_mb": 5.15,
+    "ghost_trades": 140,
+    "composite_score": 78.78
+  },
+  {
+    "asset": "USDJPY",
+    "tick_logs_mb": 60.26,
+    "backup_data_mb": 0.1,
+    "ghost_trades": 78,
+    "composite_score": 64.26
+  },
+  {
+    "asset": "NZDUSD",
+    "tick_logs_mb": 44.93,
+    "backup_data_mb": 0.76,
+    "ghost_trades": 204,
+    "composite_score": 55.9
+  },
+  {
+    "asset": "USDCAD",
+    "tick_logs_mb": 39.58,
+    "backup_data_mb": 1.1,
+    "ghost_trades": 298,
+    "composite_score": 55.58
+  },
+  {
+    "asset": "GBPJPY",
+    "tick_logs_mb": 44.74,
+    "backup_data_mb": 1.67,
+    "ghost_trades": 95,
+    "composite_score": 51.16
+  },
+  {
+    "asset": "GBPAUD",
+    "tick_logs_mb": 40.3,
+    "backup_data_mb": 1.53,
+    "ghost_trades": 174,
+    "composite_score": 50.54
+  },
+  {
+    "asset": "EURTRY",
+    "tick_logs_mb": 43.78,
+    "backup_data_mb": 1.31,
+    "ghost_trades": 96,
+    "composite_score": 49.89
+  },
+  {
+    "asset": "USDCHF",
+    "tick_logs_mb": 35.97,
+    "backup_data_mb": 0.05,
+    "ghost_trades": 244,
+    "composite_score": 48.22
+  },
+  {
+    "asset": "LBPUSD",
+    "tick_logs_mb": 34.19,
+    "backup_data_mb": 0.7,
+    "ghost_trades": 233,
+    "composite_score": 46.54
+  },
+  {
+    "asset": "EURRUB",
+    "tick_logs_mb": 39.86,
+    "backup_data_mb": 3.95,
+    "ghost_trades": 29,
+    "composite_score": 45.26
+  },
+  {
+    "asset": "ZARUSD",
+    "tick_logs_mb": 31.53,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 245,
+    "composite_score": 43.78
+  },
+  {
+    "asset": "MADUSD",
+    "tick_logs_mb": 32.77,
+    "backup_data_mb": 0.18,
+    "ghost_trades": 192,
+    "composite_score": 42.54
+  },
+  {
+    "asset": "KESUSD",
+    "tick_logs_mb": 27.95,
+    "backup_data_mb": 1.4,
+    "ghost_trades": 238,
+    "composite_score": 41.25
+  },
+  {
+    "asset": "NZDJPY",
+    "tick_logs_mb": 30.16,
+    "backup_data_mb": 0.3,
+    "ghost_trades": 63,
+    "composite_score": 33.61
+  },
+  {
+    "asset": "QARCNY",
+    "tick_logs_mb": 23.17,
+    "backup_data_mb": 0.95,
+    "ghost_trades": 33,
+    "composite_score": 25.77
+  },
+  {
+    "asset": "USDARS",
+    "tick_logs_mb": 21.9,
+    "backup_data_mb": 1.01,
+    "ghost_trades": 46,
+    "composite_score": 25.21
+  },
+  {
+    "asset": "AXP",
+    "tick_logs_mb": 15.98,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 40,
+    "composite_score": 17.98
+  },
+  {
+    "asset": "AAPL",
+    "tick_logs_mb": 12.73,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 34,
+    "composite_score": 14.43
+  },
+  {
+    "asset": "NGNUSD",
+    "tick_logs_mb": 7.77,
+    "backup_data_mb": 0.79,
+    "ghost_trades": 103,
+    "composite_score": 13.71
+  },
+  {
+    "asset": "ADAUSD",
+    "tick_logs_mb": 6.13,
+    "backup_data_mb": 0.04,
+    "ghost_trades": 144,
+    "composite_score": 13.37
+  },
+  {
+    "asset": "VISA",
+    "tick_logs_mb": 11.8,
+    "backup_data_mb": 0.02,
+    "ghost_trades": 3,
+    "composite_score": 11.98
+  },
+  {
+    "asset": "USDCOP",
+    "tick_logs_mb": 10.43,
+    "backup_data_mb": 0.13,
+    "ghost_trades": 24,
+    "composite_score": 11.76
+  },
+  {
+    "asset": "SARCNY",
+    "tick_logs_mb": 8.76,
+    "backup_data_mb": 1.24,
+    "ghost_trades": 18,
+    "composite_score": 10.91
+  },
+  {
+    "asset": "USDDZD",
+    "tick_logs_mb": 8.38,
+    "backup_data_mb": 0.03,
+    "ghost_trades": 49,
+    "composite_score": 10.86
+  },
+  {
+    "asset": "JODCNY",
+    "tick_logs_mb": 8.57,
+    "backup_data_mb": 0.91,
+    "ghost_trades": 21,
+    "composite_score": 10.53
+  },
+  {
+    "asset": "TSLA",
+    "tick_logs_mb": 10.44,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 10.44
+  },
+  {
+    "asset": "BNBUSD",
+    "tick_logs_mb": 7.0,
+    "backup_data_mb": 0.08,
+    "ghost_trades": 48,
+    "composite_score": 9.48
+  },
+  {
+    "asset": "USDSGD",
+    "tick_logs_mb": 8.89,
+    "backup_data_mb": 0.09,
+    "ghost_trades": 1,
+    "composite_score": 9.03
+  },
+  {
+    "asset": "AVAX",
+    "tick_logs_mb": 4.96,
+    "backup_data_mb": 0.09,
+    "ghost_trades": 73,
+    "composite_score": 8.69
+  },
+  {
+    "asset": "EURHUF",
+    "tick_logs_mb": 5.57,
+    "backup_data_mb": 2.77,
+    "ghost_trades": 3,
+    "composite_score": 8.49
+  },
+  {
+    "asset": "USDTHB",
+    "tick_logs_mb": 7.78,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 13,
+    "composite_score": 8.43
+  },
+  {
+    "asset": "SOLUSD",
+    "tick_logs_mb": 6.98,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 11,
+    "composite_score": 7.53
+  },
+  {
+    "asset": "UAHUSD",
+    "tick_logs_mb": 4.21,
+    "backup_data_mb": 0.66,
+    "ghost_trades": 51,
+    "composite_score": 7.42
+  },
+  {
+    "asset": "OMRCNY",
+    "tick_logs_mb": 6.28,
+    "backup_data_mb": 0.5,
+    "ghost_trades": 12,
+    "composite_score": 7.38
+  },
+  {
+    "asset": "AMD",
+    "tick_logs_mb": 6.84,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 6.84
+  },
+  {
+    "asset": "USDMXN",
+    "tick_logs_mb": 6.44,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 6,
+    "composite_score": 6.74
+  },
+  {
+    "asset": "USDBRL",
+    "tick_logs_mb": 5.8,
+    "backup_data_mb": 0.62,
+    "ghost_trades": 2,
+    "composite_score": 6.53
+  },
+  {
+    "asset": "BTCUSD",
+    "tick_logs_mb": 5.97,
+    "backup_data_mb": 0.03,
+    "ghost_trades": 6,
+    "composite_score": 6.3
+  },
+  {
+    "asset": "CHFNOK",
+    "tick_logs_mb": 3.32,
+    "backup_data_mb": 2.59,
+    "ghost_trades": 7,
+    "composite_score": 6.26
+  },
+  {
+    "asset": "USDEGP",
+    "tick_logs_mb": 4.87,
+    "backup_data_mb": 0.04,
+    "ghost_trades": 2,
+    "composite_score": 5.01
+  },
+  {
+    "asset": "MSFT",
+    "tick_logs_mb": 4.31,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 2,
+    "composite_score": 4.41
+  },
+  {
+    "asset": "DOGE",
+    "tick_logs_mb": 1.19,
+    "backup_data_mb": 0.07,
+    "ghost_trades": 63,
+    "composite_score": 4.4
+  },
+  {
+    "asset": "BITB",
+    "tick_logs_mb": 3.57,
+    "backup_data_mb": 0.16,
+    "ghost_trades": 0,
+    "composite_score": 3.73
+  },
+  {
+    "asset": "DOTUSD",
+    "tick_logs_mb": 3.43,
+    "backup_data_mb": 0.04,
+    "ghost_trades": 3,
+    "composite_score": 3.63
+  },
+  {
+    "asset": "TNDUSD",
+    "tick_logs_mb": 2.68,
+    "backup_data_mb": 0.09,
+    "ghost_trades": 11,
+    "composite_score": 3.32
+  },
+  {
+    "asset": "USDBDT",
+    "tick_logs_mb": 2.95,
+    "backup_data_mb": 0.32,
+    "ghost_trades": 0,
+    "composite_score": 3.27
+  },
+  {
+    "asset": "LTCUSD",
+    "tick_logs_mb": 2.69,
+    "backup_data_mb": 0.07,
+    "ghost_trades": 2,
+    "composite_score": 2.86
+  },
+  {
+    "asset": "USDIDR",
+    "tick_logs_mb": 2.68,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 2.68
+  },
+  {
+    "asset": "MCD",
+    "tick_logs_mb": 2.68,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 2.68
+  },
+  {
+    "asset": "FB",
+    "tick_logs_mb": 2.3,
+    "backup_data_mb": 0.01,
+    "ghost_trades": 1,
+    "composite_score": 2.36
+  },
+  {
+    "asset": "IRRUSD",
+    "tick_logs_mb": 1.69,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 10,
+    "composite_score": 2.19
+  },
+  {
+    "asset": "ETHUSD",
+    "tick_logs_mb": 1.68,
+    "backup_data_mb": 0.12,
+    "ghost_trades": 3,
+    "composite_score": 1.95
+  },
+  {
+    "asset": "JNJ",
+    "tick_logs_mb": 1.85,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 1.85
+  },
+  {
+    "asset": "USDCLP",
+    "tick_logs_mb": 1.68,
+    "backup_data_mb": 0.11,
+    "ghost_trades": 0,
+    "composite_score": 1.79
+  },
+  {
+    "asset": "LINK",
+    "tick_logs_mb": 1.47,
+    "backup_data_mb": 0.11,
+    "ghost_trades": 2,
+    "composite_score": 1.68
+  },
+  {
+    "asset": "USDPKR",
+    "tick_logs_mb": 1.5,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 3,
+    "composite_score": 1.65
+  },
+  {
+    "asset": "VIX",
+    "tick_logs_mb": 1.49,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 1,
+    "composite_score": 1.54
+  },
+  {
+    "asset": "USDMYR",
+    "tick_logs_mb": 1.4,
+    "backup_data_mb": 0.09,
+    "ghost_trades": 0,
+    "composite_score": 1.49
+  },
+  {
+    "asset": "BA",
+    "tick_logs_mb": 1.49,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 1.49
+  },
+  {
+    "asset": "USDCNH",
+    "tick_logs_mb": 1.3,
+    "backup_data_mb": 0.04,
+    "ghost_trades": 2,
+    "composite_score": 1.44
+  },
+  {
+    "asset": "AUDJPY",
+    "tick_logs_mb": 1.4,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 1.41
+  },
+  {
+    "asset": "USDRUB",
+    "tick_logs_mb": 1.23,
+    "backup_data_mb": 0.07,
+    "ghost_trades": 2,
+    "composite_score": 1.4
+  },
+  {
+    "asset": "AMZN",
+    "tick_logs_mb": 1.03,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 2,
+    "composite_score": 1.13
+  },
+  {
+    "asset": "USDINR",
+    "tick_logs_mb": 0.72,
+    "backup_data_mb": 0.05,
+    "ghost_trades": 5,
+    "composite_score": 1.02
+  },
+  {
+    "asset": "SYPUSD",
+    "tick_logs_mb": 0.53,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 8,
+    "composite_score": 0.93
+  },
+  {
+    "asset": "MATIC",
+    "tick_logs_mb": 0.43,
+    "backup_data_mb": 0.05,
+    "ghost_trades": 8,
+    "composite_score": 0.88
+  },
+  {
+    "asset": "USDVND",
+    "tick_logs_mb": 0.6,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 3,
+    "composite_score": 0.75
+  },
+  {
+    "asset": "USDPHP",
+    "tick_logs_mb": 0.55,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 2,
+    "composite_score": 0.65
+  },
+  {
+    "asset": "XOM",
+    "tick_logs_mb": 0.37,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 2,
+    "composite_score": 0.47
+  },
+  {
+    "asset": "TONUSD",
+    "tick_logs_mb": 0.18,
+    "backup_data_mb": 0.07,
+    "ghost_trades": 0,
+    "composite_score": 0.25
+  },
+  {
+    "asset": "CITI",
+    "tick_logs_mb": 0.14,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 0.14
+  },
+  {
+    "asset": "CSCO",
+    "tick_logs_mb": 0.1,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 0.1
+  },
+  {
+    "asset": "INTC",
+    "tick_logs_mb": 0.09,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 0.09
+  },
+  {
+    "asset": "YERUSD",
+    "tick_logs_mb": 0.0,
+    "backup_data_mb": 0.01,
+    "ghost_trades": 0,
+    "composite_score": 0.01
+  },
+  {
+    "asset": "COIN",
+    "tick_logs_mb": 0.0,
+    "backup_data_mb": 0.01,
+    "ghost_trades": 0,
+    "composite_score": 0.01
+  },
+  {
+    "asset": "PFE",
+    "tick_logs_mb": 0.0,
+    "backup_data_mb": 0.01,
+    "ghost_trades": 0,
+    "composite_score": 0.01
+  },
+  {
+    "asset": "AEDCNYOTC",
+    "tick_logs_mb": 0.0,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 0.0
+  },
+  {
+    "asset": "EURCAD",
+    "tick_logs_mb": 0.0,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 0.0
+  },
+  {
+    "asset": "EURAUD",
+    "tick_logs_mb": 0.0,
+    "backup_data_mb": 0.0,
+    "ghost_trades": 0,
+    "composite_score": 0.0
+  }
+]

@@ -65,6 +65,7 @@ class AutoGhostConfig:
     blacklist_assets: list[str] | None = None
     hurst_l2_enabled: bool = True
     hurst_l3_enabled: bool = True
+    rsi_cci_enabled: bool = False
 
 
 class AutoGhostService:
@@ -144,6 +145,7 @@ class AutoGhostService:
         blacklist_assets: list[str] | None = None,
         hurst_l2_enabled: bool | None = None,
         hurst_l3_enabled: bool | None = None,
+        rsi_cci_enabled: bool | None = None,
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         updates: dict[str, Any] = {}
@@ -225,6 +227,8 @@ class AutoGhostService:
             updates["hurst_l2_enabled"] = bool(hurst_l2_enabled)
         if hurst_l3_enabled is not None:
             updates["hurst_l3_enabled"] = bool(hurst_l3_enabled)
+        if rsi_cci_enabled is not None:
+            updates["rsi_cci_enabled"] = bool(rsi_cci_enabled)
  
         self.config = replace(self.config, **updates)
  
@@ -235,6 +239,8 @@ class AutoGhostService:
                     ext.enabled = self.config.hurst_l2_enabled
                 elif ext.__class__.__name__ == "HurstAiNoise":
                     ext.enabled = self.config.hurst_l3_enabled
+                elif ext.__class__.__name__ == "RSICCIConfluenceExtension":
+                    ext.enabled = self.config.rsi_cci_enabled
  
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
@@ -274,6 +280,8 @@ class AutoGhostService:
                     ext.enabled = self.config.hurst_l2_enabled
                 elif ext.__class__.__name__ == "HurstAiNoise":
                     ext.enabled = self.config.hurst_l3_enabled
+                elif ext.__class__.__name__ == "RSICCIConfluenceExtension":
+                    ext.enabled = self.config.rsi_cci_enabled
 
     @property
     def has_premium_hurst(self) -> bool:
@@ -311,6 +319,7 @@ class AutoGhostService:
             "auto_ghost_blacklist_assets": self.config.blacklist_assets or [],
             "auto_ghost_hurst_l2_enabled": self.config.hurst_l2_enabled,
             "auto_ghost_hurst_l3_enabled": self.config.hurst_l3_enabled,
+            "auto_ghost_rsi_cci_enabled": self.config.rsi_cci_enabled,
             "auto_ghost_manipulation_severity_threshold": self.config.manipulation_severity_threshold,
             "auto_ghost_block_on_manipulation": self.config.block_on_manipulation,
             "auto_ghost_min_confidence_enabled": self.config.min_confidence_enabled,

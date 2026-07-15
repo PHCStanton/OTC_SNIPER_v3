@@ -123,7 +123,10 @@ export default function AnalysisTerminal({ signal, manipulation, direction, warm
     prevKeyRef.current = entry.key;
 
     const newLines = entryToLines(entry, ts());
-    setLines((prev) => [...prev, ...newLines]);
+    setLines((prev) => {
+      const nextLines = [...prev, ...newLines];
+      return nextLines.slice(-200);
+    });
   }, [signal, manipulation, direction, warmup]);
 
   // Auto-scroll the terminal body only — never the page viewport

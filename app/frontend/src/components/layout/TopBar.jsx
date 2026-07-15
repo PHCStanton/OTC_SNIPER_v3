@@ -10,6 +10,7 @@ import {
   Wifi,
   WifiOff,
   TrendingUp,
+  ChartSpline,
   ShieldAlert,
   Settings,
   ChevronDown,
@@ -23,6 +24,7 @@ import {
   LayoutGrid,
   Play,
   Pause,
+  Crosshair,
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
@@ -48,14 +50,20 @@ export default function TopBar() {
   const [chromeLoading, setChromeLoading] = useState(false);
   const [showAiDropdown, setShowAiDropdown] = useState(false);
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
+  const [showTradingDropdown, setShowTradingDropdown] = useState(false);
+  const [showGhostDropdown, setShowGhostDropdown] = useState(false);
   const { 
     aiDevMode, 
     setAiDevMode, 
     oteoAiEnabled,
+    autoGhostEnabled,
+    setAutoGhostEnabled,
   } = useSettingsStore();
   const dropdownRef = useRef(null);
   const settingsDropdownRef = useRef(null);
   const notificationsDropdownRef = useRef(null);
+  const tradingDropdownRef = useRef(null);
+  const ghostDropdownRef = useRef(null);
 
   const { notifications, markAllAsRead, clearAll } = useNotificationStore();
   const unreadCount = notifications.filter((n) => n.unread).length;
@@ -138,6 +146,12 @@ export default function TopBar() {
       }
       if (notificationsDropdownRef.current && !notificationsDropdownRef.current.contains(event.target)) {
         setShowNotifications(false);
+      }
+      if (tradingDropdownRef.current && !tradingDropdownRef.current.contains(event.target)) {
+        setShowTradingDropdown(false);
+      }
+      if (ghostDropdownRef.current && !ghostDropdownRef.current.contains(event.target)) {
+        setShowGhostDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -237,151 +251,171 @@ export default function TopBar() {
         {/* ── Right: Tabs menu + Settings + Profile ── */}
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-2 rounded-lg p-0.5">
-            <button
-              onClick={() => setActiveView('journal')}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                isJournal 
-                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-[#25282f]/20'
-              }`}
-            >
-              <BookOpen size={12} />
-              Journal
-            </button>
-            <button
-              onClick={() => {
-                setActiveView('risk');
-                setDashboardMode('risk');
-              }}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                isRisk 
-                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-[#25282f]/20'
-              }`}
-            >
-              <ShieldAlert size={12} />
-              Risk
-            </button>
-            <button
-              onClick={() => {
-                setActiveView('trading');
-                setDashboardMode('trading');
-              }}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
-                isTrading 
-                  ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' 
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-[#25282f]/20'
-              }`}
-            >
-              <TrendingUp size={12} />
-              Trading
-            </button>
- 
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setShowAiDropdown(!showAiDropdown)}
-                title="AI Assistant Menu"
-                className={`ml-2 flex h-11 w-11 items-center justify-center rounded-lg border transition-all duration-350 ${
-                  isAI || showAiDropdown
-                    ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
-                    : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'
-                }`}
+            {/* Ghost Protocol Dropdown (Crosshair) */}
+            <div className="relative" ref={ghostDropdownRef}>
+              <TopBarIconButton
+                onClick={() => setShowGhostDropdown(!showGhostDropdown)}
+                title="Ghost Protocol Menu"
+                ariaLabel="Open Ghost Protocol menu"
+                active={activeView === 'journal' || (activeView === 'settings' && activeSettingsTab === 'ghost') || showGhostDropdown}
               >
-                <AiChipIcon size={38} />
-              </button>
-              {showAiDropdown && (
-                <div className="absolute right-0 mt-2 w-80 rounded-xl border-2 border-[#1a1c22] bg-gradient-to-br from-[#f5df19] to-[#ffb800] p-3 shadow-[0_10px_30px_rgba(245,223,25,0.25)] z-[100] space-y-3 text-left">
-                  <div className="flex items-center justify-between border-b border-black/10 pb-2">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#1a1c22]">AI Assistant Menu</span>
-                    {oteoAiEnabled ? (
-                      <span className="rounded bg-black/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#1a1c22] border border-black/10">
-                        Active Advisor
-                      </span>
-                    ) : (
-                      <span className="rounded bg-black/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-black/50 border border-black/10">
-                        Inactive
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <button
-                      onClick={() => {
-                        setActiveView('ai');
-                        setShowAiDropdown(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
-                    >
-                      <Bot size={14} className="text-[#ffb800]" />
-                      <span>Open AI Chat</span>
-                    </button>
+                <Crosshair size={22} strokeWidth={2} />
+              </TopBarIconButton>
 
-                    <div className="flex items-center justify-between rounded-lg bg-[#1a1c22] border border-white/5 p-2.5">
-                      <div className="flex flex-col text-left">
-                        <span className="text-[10px] font-black uppercase tracking-wide text-white">Developer Mode</span>
-                        <span className="text-[8px] text-gray-500">Discuss platform upgrades</span>
+              {showGhostDropdown && (
+                <div className="absolute right-0 mt-2 w-60 rounded-xl border border-white/10 bg-[#161920] p-2 shadow-2xl z-[100] space-y-1 text-left">
+                  <div className="border-b border-white/5 px-2 pb-1.5 pt-0.5 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ghost Protocol</span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setAutoGhostEnabled(!autoGhostEnabled);
+                      setShowGhostDropdown(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      autoGhostEnabled
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Crosshair size={14} className={autoGhostEnabled ? 'text-[#ffb800]' : 'text-gray-400'} />
+                      <div className="flex flex-col">
+                        <span>Ghost Protocol</span>
+                        <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Simulated trade automation</span>
                       </div>
-                      <button
-                        onClick={() => setAiDevMode(!aiDevMode)}
-                        className={`h-4 w-8 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
-                      >
-                        <div className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                      </button>
                     </div>
+                    <div className={`h-2.5 w-2.5 rounded-full ${autoGhostEnabled ? 'bg-[#ffb800] animate-pulse' : 'bg-gray-600'}`} />
+                  </button>
 
-                    {aiDevMode && (
-                      <button
-                        onClick={() => {
-                          useAIStore.getState().setDraft("Grok, what features should we add to OTC SNIPER to increase the quality of AI outputs and trading performance?");
-                          setActiveView('ai');
-                          setShowAiDropdown(false);
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-emerald-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-emerald-300 transition border border-emerald-500/10"
-                      >
-                        <Zap size={14} />
-                        <span>Platform Quality Insights</span>
-                      </button>
-                    )}
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('ghost');
+                      setActiveView('settings');
+                      setShowGhostDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      activeView === 'settings' && activeSettingsTab === 'ghost'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <Ghost size={14} className={activeView === 'settings' && activeSettingsTab === 'ghost' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Auto-Ghost Settings</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Configure gates, blacklist & sizing</span>
+                    </div>
+                  </button>
 
-                    <button
-                      onClick={() => {
-                        setActiveView('analysis');
-                        setShowAiDropdown(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
-                    >
-                      <TrendingUp size={14} />
-                      <span>Analyze Trade Results</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setActiveView('journal');
-                        setShowAiDropdown(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
-                    >
-                      <BookOpen size={14} />
-                      <span>Open Trading Journal</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        useToastStore.getState().addToast({ type: 'success', message: '[AI Advisor] Attached active session context' });
-                        setShowAiDropdown(false);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
-                    >
-                      <Save size={14} />
-                      <span>Upload Active Context</span>
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      setActiveView('journal');
+                      setShowGhostDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      activeView === 'journal'
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <BookOpen size={14} className={activeView === 'journal' ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Ghost Journal</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Simulated trade history logs</span>
+                    </div>
+                  </button>
                 </div>
               )}
             </div>
-          </div>
- 
-          <div className="flex items-center gap-2 border-l border-white/5 pl-4">
-            <div className="relative" ref={settingsDropdownRef}>
+
+            {/* Trading Portal Dropdown (ChartSpline) */}
+            <div className="relative" ref={tradingDropdownRef}>
+              <TopBarIconButton
+                onClick={() => setShowTradingDropdown(!showTradingDropdown)}
+                title="Trading Portal"
+                ariaLabel="Open trading menu"
+                active={isTrading || isRisk || showTradingDropdown}
+              >
+                <ChartSpline size={22} strokeWidth={2} />
+              </TopBarIconButton>
+
+              {showTradingDropdown && (
+                <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-[#161920] p-2 shadow-2xl z-[100] space-y-1 text-left">
+                  <div className="border-b border-white/5 px-2 pb-1.5 pt-0.5 mb-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Trading Portal</span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setActiveView('trading');
+                      setDashboardMode('trading');
+                      setShowTradingDropdown(false);
+                      setTimeout(() => {
+                        const el = document.getElementById('multi-chart-view-section');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 100);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isTrading
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <LayoutGrid size={14} className={isTrading ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Multi-Chart Grid</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Watch multiple asset OTC charts</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveView('trading');
+                      setDashboardMode('trading');
+                      setShowTradingDropdown(false);
+                      setTimeout(() => {
+                        const el = document.getElementById('sparkline-section');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }, 100);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isTrading
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <ChartSpline size={14} className={isTrading ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Sparkline Focus</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Detailed single-chart analyzer</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setActiveView('risk');
+                      setDashboardMode('risk');
+                      setShowTradingDropdown(false);
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
+                      isRisk
+                        ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
+                        : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
+                    }`}
+                  >
+                    <ShieldAlert size={14} className={isRisk ? 'text-[#ffb800]' : 'text-gray-400'} />
+                    <div className="flex flex-col">
+                      <span>Risk Dashboard</span>
+                      <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Sizing, balance & daily limits</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* Settings Dropdown Portal */}
+            <div className="relative ml-2" ref={settingsDropdownRef}>
               <TopBarIconButton
                 onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
                 title="Settings"
@@ -491,6 +525,111 @@ export default function TopBar() {
                       <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Capital, Payout, Sizing, Guardrails</span>
                     </div>
                   </button>
+                </div>
+              )}
+            </div>
+          </div>
+ 
+          <div className="flex items-center gap-2 border-l border-white/5 pl-4">
+            {/* AI Assistant Menu */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setShowAiDropdown(!showAiDropdown)}
+                title="AI Assistant Menu"
+                className={`flex h-11 w-11 items-center justify-center rounded-lg border transition-all duration-350 ${
+                  isAI || showAiDropdown
+                    ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
+                    : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'
+                }`}
+              >
+                <AiChipIcon size={38} />
+              </button>
+              {showAiDropdown && (
+                <div className="absolute right-0 mt-2 w-80 rounded-xl border-2 border-[#1a1c22] bg-gradient-to-br from-[#f5df19] to-[#ffb800] p-3 shadow-[0_10px_30px_rgba(245,223,25,0.25)] z-[100] space-y-3 text-left">
+                  <div className="flex items-center justify-between border-b border-black/10 pb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#1a1c22]">AI Assistant Menu</span>
+                    {oteoAiEnabled ? (
+                      <span className="rounded bg-black/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-[#1a1c22] border border-black/10">
+                        Active Advisor
+                      </span>
+                    ) : (
+                      <span className="rounded bg-black/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-black/50 border border-black/10">
+                        Inactive
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <button
+                      onClick={() => {
+                        setActiveView('ai');
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
+                    >
+                      <Bot size={14} className="text-[#ffb800]" />
+                      <span>Open AI Chat</span>
+                    </button>
+
+                    <div className="flex items-center justify-between rounded-lg bg-[#1a1c22] border border-white/5 p-2.5">
+                      <div className="flex flex-col text-left">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-white">Developer Mode</span>
+                        <span className="text-[8px] text-gray-500">Discuss platform upgrades</span>
+                      </div>
+                      <button
+                        onClick={() => setAiDevMode(!aiDevMode)}
+                        className={`h-4 w-8 rounded-full transition-colors shrink-0 ${aiDevMode ? 'bg-[#ffb800]' : 'bg-[#2d3139]'}`}
+                      >
+                        <div className={`h-2.5 w-2.5 rounded-full bg-white transition-transform ${aiDevMode ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+
+                    {aiDevMode && (
+                      <button
+                        onClick={() => {
+                          useAIStore.getState().setDraft("Grok, what features should we add to OTC SNIPER to increase the quality of AI outputs and trading performance?");
+                          setActiveView('ai');
+                          setShowAiDropdown(false);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-emerald-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-emerald-300 transition border border-emerald-500/10"
+                      >
+                        <Zap size={14} />
+                        <span>Platform Quality Insights</span>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setActiveView('analysis');
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-300 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
+                    >
+                      <TrendingUp size={14} />
+                      <span>Analyze Trade Results</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setActiveView('journal');
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
+                    >
+                      <BookOpen size={14} />
+                      <span>Open Trading Journal</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        useToastStore.getState().addToast({ type: 'success', message: '[AI Advisor] Attached active session context' });
+                        setShowAiDropdown(false);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg p-2 text-left text-xs font-bold text-gray-400 bg-[#1a1c22] hover:bg-[#25282f] hover:text-white transition border border-white/5"
+                    >
+                      <Save size={14} />
+                      <span>Upload Active Context</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

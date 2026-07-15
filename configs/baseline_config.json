@@ -1,0 +1,41 @@
+{
+  "payout_pct": 92.0,
+  "kalman": {
+    "enabled": false,
+    "q": 1e-9,
+    "r": 1e-7,
+    "upstream_of_hurst": false
+  },
+  "hurst": {
+    "veto_enabled": false,
+    "window_size": 300,
+    "mean_revert_limit": 0.44,
+    "trend_limit": 0.58
+  },
+  "ou": {
+    "veto_enabled": false,
+    "mode": "kalman",
+    "window_size": 300,
+    "q_c": 1e-10,
+    "q_beta": 1e-10,
+    "r": 1e-4
+  },
+  "expiry": {
+    "mode": "static",
+    "static_seconds": [15, 30, 60, 90, 120, 180, 300],
+    "adaptive_c": 10.0,
+    "adaptive_bounds": [30, 60, 120, 300]
+  },
+  "indicator": {
+    "level_mode": "all",
+    "cooldown_ticks": 30
+  },
+  "pocket": {
+    "veto_enabled": false,
+    "exclusion_list": []
+  },
+  "timeframe": {
+    "veto_enabled": false,
+    "exclusion_blocks": []
+  }
+}

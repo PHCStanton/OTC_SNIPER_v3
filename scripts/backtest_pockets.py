@@ -542,7 +542,43 @@ def run_backtest(
             "win_rate": (wins / settled * 100.0) if settled else 0.0
         }
         
+    # Compute overall stats for JSON summary
+    b_wins = sum(1 for r in trades if r["outcome"] == "win")
+    b_losses = sum(1 for r in trades if r["outcome"] == "loss")
+    b_draws = sum(1 for r in trades if r["outcome"] == "draw")
+    b_settled = b_wins + b_losses
+    b_win_rate = (b_wins / b_settled * 100.0) if b_settled else 0.0
+    b_pl = sum(r["net_pl"] for r in trades)
+    
+    # 4-hour block offsets stats
+    block_stats = {}
+    for block_idx in range(6):
+        block_trades = [t for t in trades if t["utc_4hour_offset"] == block_idx]
+        bw = sum(1 for t in block_trades if t["outcome"] == "win")
+        bl = sum(1 for t in block_trades if t["outcome"] == "loss")
+        bd = sum(1 for t in block_trades if t["outcome"] == "draw")
+        bs = bw + bl
+        bwr = (bw / bs * 100.0) if bs else 0.0
+        bnet = sum(t["net_pl"] for t in block_trades)
+        block_stats[block_idx] = {
+            "wins": bw,
+            "losses": bl,
+            "draws": bd,
+            "settled": bs,
+            "win_rate": bwr,
+            "net_pl": bnet
+        }
+        
     summary = {
+        "overall_stats": {
+            "wins": b_wins,
+            "losses": b_losses,
+            "draws": b_draws,
+            "settled": b_settled,
+            "win_rate": b_win_rate,
+            "net_pl": b_pl
+        },
+        "block_stats": block_stats,
         "by_pocket_expiry": summary_by_pocket_expiry
     }
     

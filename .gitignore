@@ -7,7 +7,14 @@ ssid_integration_package/**/.env
 # DATA
 app/data/
 
+# Backtester 
+app/backtesting/results/
+scripts/
+backtester_app/
+
 # AGENT SPECIFIC FOLDERS
+scratch/
+
 
 .clinerules/
 .zencoder/
@@ -24,3 +31,14 @@ Chrome_profile/
 
 # AGENT RELATED FILES
 # .agent-memory/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.vscode/
+.idea/
+.DS_Store
+

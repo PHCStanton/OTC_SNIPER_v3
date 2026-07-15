@@ -61,6 +61,7 @@ export const SETTINGS_DEFAULTS = {
   ghostBlacklist: [],
   hurstL2Enabled: true,
   hurstL3Enabled: true,
+  autoGhostRsiCciEnabled: false,
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -213,6 +214,7 @@ export function validateSettings(input = {}) {
     ghostBlacklist: Array.isArray(input.ghostBlacklist) ? input.ghostBlacklist : SETTINGS_DEFAULTS.ghostBlacklist,
     hurstL2Enabled: toBoolean(input.hurstL2Enabled, SETTINGS_DEFAULTS.hurstL2Enabled),
     hurstL3Enabled: toBoolean(input.hurstL3Enabled, SETTINGS_DEFAULTS.hurstL3Enabled),
+    autoGhostRsiCciEnabled: toBoolean(input.autoGhostRsiCciEnabled, SETTINGS_DEFAULTS.autoGhostRsiCciEnabled),
 
 
 
@@ -353,6 +355,7 @@ export const useSettingsStore = create()(
       setGhostBlacklist: (val) => commitSettingsPatch(set, { ghostBlacklist: val }),
       setHurstL2Enabled: (val) => commitSettingsPatch(set, { hurstL2Enabled: val }),
       setHurstL3Enabled: (val) => commitSettingsPatch(set, { hurstL3Enabled: val }),
+      setAutoGhostRsiCciEnabled: (val) => commitSettingsPatch(set, { autoGhostRsiCciEnabled: val }),
       loadGhostProtocol: (key) => {
         set((state) => {
           const protocols = state.ghostProtocols || {};
@@ -436,7 +439,11 @@ export const useSettingsStore = create()(
     }),
     {
       name: 'otc-sniper-settings-storage',
-      partialize: (state) => validateSettings(state),
+      partialize: (state) => {
+        const persisted = validateSettings(state);
+        delete persisted.ghostBlacklist;
+        return persisted;
+      },
     }
   )
 );

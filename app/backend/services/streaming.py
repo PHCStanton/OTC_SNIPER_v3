@@ -135,6 +135,7 @@ class StreamingService:
         auto_ghost_blacklist_assets: list[str] | None = None,
         auto_ghost_hurst_l2_enabled: bool | None = None,
         auto_ghost_hurst_l3_enabled: bool | None = None,
+        auto_ghost_rsi_cci_enabled: bool | None = None,
     ) -> dict[str, Any]:
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -193,6 +194,7 @@ class StreamingService:
             blacklist_assets=auto_ghost_blacklist_assets,
             hurst_l2_enabled=auto_ghost_hurst_l2_enabled,
             hurst_l3_enabled=auto_ghost_hurst_l3_enabled,
+            rsi_cci_enabled=auto_ghost_rsi_cci_enabled,
         )
 
         if getattr(self, "_streaming_active", False):
@@ -235,6 +237,22 @@ class StreamingService:
     def start(self) -> None:
         self._streaming_active = True
         self._loop = asyncio.get_running_loop()
+
+        # Handle ProactorEventLoop assertion error on Windows during abrupt client disconnects
+        def _handle_loop_exception(loop, context):
+            exception = context.get("exception")
+            message = context.get("message", "")
+            is_proactor_assert = (
+                isinstance(exception, AssertionError)
+                and ("_loop_writing" in message or "_ProactorBaseWritePipeTransport" in message)
+            )
+            if is_proactor_assert or "_ProactorBaseWritePipeTransport._loop_writing" in message:
+                logger.debug("Suppressed ProactorEventLoop write assertion (abrupt client disconnect): %s", message)
+                return
+            loop.default_exception_handler(context)
+
+        self._loop.set_exception_handler(_handle_loop_exception)
+
         self.perf_monitor.start()
         self.tick_logger.start()
         self.signal_logger.start()

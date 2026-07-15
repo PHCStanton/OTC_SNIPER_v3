@@ -1,0 +1,63 @@
+{
+  "payout_pct": 92.0,
+  "kalman": {
+    "enabled": true,
+    "q": 1e-09,
+    "r": 1e-07,
+    "upstream_of_hurst": false
+  },
+  "hurst": {
+    "veto_enabled": false,
+    "window_size": 300,
+    "mean_revert_limit": 0.44,
+    "trend_limit": 0.58
+  },
+  "ou": {
+    "veto_enabled": true,
+    "mode": "kalman",
+    "window_size": 300,
+    "q_c": 1e-10,
+    "q_beta": 1e-06,
+    "r": 1e-08
+  },
+  "expiry": {
+    "mode": "adaptive",
+    "static_seconds": [
+      60,
+      120,
+      300
+    ],
+    "adaptive_c": 10.0,
+    "adaptive_bounds": [
+      30,
+      60,
+      120,
+      300
+    ]
+  },
+  "indicator": {
+    "level_mode": "L3",
+    "cooldown_ticks": 30
+  },
+  "pocket": {
+    "veto_enabled": false,
+    "exclusion_list": []
+  },
+  "timeframe": {
+    "veto_enabled": false,
+    "exclusion_blocks": []
+  },
+  "bayesian": {
+    "enabled": true,
+    "alpha_prior": 2.0,
+    "beta_prior": 2.0,
+    "confidence_threshold": 0.9,
+    "breakeven_win_rate": 0.5208,
+    "risk_aversion": 2.0,
+    "max_fraction": 0.1
+  },
+  "manipulation": {
+    "veto_enabled": true,
+    "min_severity_level": "HIGH"
+  }
+}

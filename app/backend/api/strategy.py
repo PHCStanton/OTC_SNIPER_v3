@@ -52,6 +52,7 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_blacklist_assets: list[str] = Field(default_factory=list)
     auto_ghost_hurst_l2_enabled: bool = Field(default=True)
     auto_ghost_hurst_l3_enabled: bool = Field(default=True)
+    auto_ghost_rsi_cci_enabled: bool = Field(default=False)
     ai_trade_interval: int = Field(default=10, ge=1, le=100)
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
@@ -118,6 +119,7 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             auto_ghost_blacklist_assets=body.auto_ghost_blacklist_assets,
             auto_ghost_hurst_l2_enabled=body.auto_ghost_hurst_l2_enabled,
             auto_ghost_hurst_l3_enabled=body.auto_ghost_hurst_l3_enabled,
+            auto_ghost_rsi_cci_enabled=body.auto_ghost_rsi_cci_enabled,
         )
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:

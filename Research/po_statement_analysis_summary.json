@@ -1,0 +1,667 @@
+[
+  {
+    "asset":"AUD\/CHF ",
+    "trades":2429,
+    "win_rate":50.64,
+    "pnl":-5556.33,
+    "avg_payout":89.62
+  },
+  {
+    "asset":"AUD\/CAD ",
+    "trades":2413,
+    "win_rate":49.08,
+    "pnl":-11663.58,
+    "avg_payout":89.9
+  },
+  {
+    "asset":"EUR\/USD ",
+    "trades":2172,
+    "win_rate":51.1,
+    "pnl":-541.74,
+    "avg_payout":90.58
+  },
+  {
+    "asset":"AUD\/USD ",
+    "trades":1875,
+    "win_rate":49.7,
+    "pnl":-4338.18,
+    "avg_payout":90.04
+  },
+  {
+    "asset":"CAD\/CHF ",
+    "trades":1577,
+    "win_rate":49.9,
+    "pnl":-1334.49,
+    "avg_payout":89.47
+  },
+  {
+    "asset":"AUD\/NZD ",
+    "trades":1522,
+    "win_rate":48.88,
+    "pnl":-5453.16,
+    "avg_payout":89.59
+  },
+  {
+    "asset":"EUR\/GBP ",
+    "trades":1404,
+    "win_rate":48.88,
+    "pnl":-4442.4,
+    "avg_payout":88.18
+  },
+  {
+    "asset":"AED\/CNY ",
+    "trades":1309,
+    "win_rate":48.96,
+    "pnl":-6520.33,
+    "avg_payout":91.2
+  },
+  {
+    "asset":"CAD\/JPY ",
+    "trades":1256,
+    "win_rate":50.36,
+    "pnl":-622.33,
+    "avg_payout":89.85
+  },
+  {
+    "asset":"EUR\/CHF ",
+    "trades":1243,
+    "win_rate":54.53,
+    "pnl":3408.7,
+    "avg_payout":89.7
+  },
+  {
+    "asset":"EUR\/JPY ",
+    "trades":1131,
+    "win_rate":49.24,
+    "pnl":-4504.7,
+    "avg_payout":88.61
+  },
+  {
+    "asset":"BHD\/CNY ",
+    "trades":1025,
+    "win_rate":53.37,
+    "pnl":571.2,
+    "avg_payout":86.62
+  },
+  {
+    "asset":"CHF\/JPY ",
+    "trades":1020,
+    "win_rate":52.02,
+    "pnl":-4167.04,
+    "avg_payout":88.74
+  },
+  {
+    "asset":"GBP\/USD ",
+    "trades":847,
+    "win_rate":46.83,
+    "pnl":-3431.07,
+    "avg_payout":88.88
+  },
+  {
+    "asset":"EUR\/NZD ",
+    "trades":825,
+    "win_rate":50.18,
+    "pnl":28.17,
+    "avg_payout":88.4
+  },
+  {
+    "asset":"CHF\/NOK ",
+    "trades":789,
+    "win_rate":50.32,
+    "pnl":-2123.29,
+    "avg_payout":89.95
+  },
+  {
+    "asset":"GBP\/JPY ",
+    "trades":703,
+    "win_rate":50.43,
+    "pnl":-1940.3,
+    "avg_payout":88.06
+  },
+  {
+    "asset":"GBP\/AUD ",
+    "trades":513,
+    "win_rate":51.37,
+    "pnl":-2760.3,
+    "avg_payout":89.37
+  },
+  {
+    "asset":"EUR\/HUF ",
+    "trades":491,
+    "win_rate":55.31,
+    "pnl":776.03,
+    "avg_payout":87.57
+  },
+  {
+    "asset":"EUR\/RUB ",
+    "trades":478,
+    "win_rate":55.37,
+    "pnl":1993.4,
+    "avg_payout":88.19
+  },
+  {
+    "asset":"EUR\/TRY ",
+    "trades":451,
+    "win_rate":52.82,
+    "pnl":-1670.98,
+    "avg_payout":87.18
+  },
+  {
+    "asset":"NZD\/USD ",
+    "trades":392,
+    "win_rate":48.33,
+    "pnl":-1624.36,
+    "avg_payout":88.74
+  },
+  {
+    "asset":"KES\/USD ",
+    "trades":378,
+    "win_rate":47.04,
+    "pnl":-968.62,
+    "avg_payout":88.43
+  },
+  {
+    "asset":"MAD\/USD ",
+    "trades":364,
+    "win_rate":47.79,
+    "pnl":-3703.1,
+    "avg_payout":87.86
+  },
+  {
+    "asset":"LBP\/USD ",
+    "trades":362,
+    "win_rate":52.66,
+    "pnl":638.07,
+    "avg_payout":88.44
+  },
+  {
+    "asset":"USD\/CAD ",
+    "trades":323,
+    "win_rate":50.94,
+    "pnl":-307.23,
+    "avg_payout":90.07
+  },
+  {
+    "asset":"ZAR\/USD ",
+    "trades":297,
+    "win_rate":48.98,
+    "pnl":-2629.78,
+    "avg_payout":87.81
+  },
+  {
+    "asset":"QAR\/CNY ",
+    "trades":293,
+    "win_rate":52.07,
+    "pnl":953.64,
+    "avg_payout":88.21
+  },
+  {
+    "asset":"JOD\/CNY ",
+    "trades":279,
+    "win_rate":52.35,
+    "pnl":-347.35,
+    "avg_payout":87.41
+  },
+  {
+    "asset":"NZD\/JPY ",
+    "trades":276,
+    "win_rate":51.65,
+    "pnl":-649.29,
+    "avg_payout":83.99
+  },
+  {
+    "asset":"USD\/CHF ",
+    "trades":214,
+    "win_rate":53.99,
+    "pnl":913.67,
+    "avg_payout":89.77
+  },
+  {
+    "asset":"NGN\/USD ",
+    "trades":187,
+    "win_rate":44.39,
+    "pnl":-1075.86,
+    "avg_payout":89.58
+  },
+  {
+    "asset":"USD\/ARS ",
+    "trades":157,
+    "win_rate":47.37,
+    "pnl":-1533.54,
+    "avg_payout":89.96
+  },
+  {
+    "asset":"USD\/JPY ",
+    "trades":98,
+    "win_rate":50.52,
+    "pnl":-1054.35,
+    "avg_payout":84.43
+  },
+  {
+    "asset":"OMR\/CNY ",
+    "trades":98,
+    "win_rate":55.67,
+    "pnl":-387.8,
+    "avg_payout":89.83
+  },
+  {
+    "asset":"USD\/COP ",
+    "trades":86,
+    "win_rate":52.94,
+    "pnl":-79.09,
+    "avg_payout":90.69
+  },
+  {
+    "asset":"BITCOIN ETF ",
+    "trades":85,
+    "win_rate":60.0,
+    "pnl":447.55,
+    "avg_payout":90.61
+  },
+  {
+    "asset":"CARDANO ",
+    "trades":78,
+    "win_rate":53.85,
+    "pnl":-305.85,
+    "avg_payout":83.57
+  },
+  {
+    "asset":"AMERICAN EXPRESS ",
+    "trades":69,
+    "win_rate":41.79,
+    "pnl":-817.61,
+    "avg_payout":89.61
+  },
+  {
+    "asset":"SAR\/CNY ",
+    "trades":63,
+    "win_rate":40.98,
+    "pnl":-1555.05,
+    "avg_payout":85.48
+  },
+  {
+    "asset":"USD\/BRL ",
+    "trades":62,
+    "win_rate":35.48,
+    "pnl":-1255.5,
+    "avg_payout":90.0
+  },
+  {
+    "asset":"UAH\/USD ",
+    "trades":60,
+    "win_rate":52.54,
+    "pnl":171.11,
+    "avg_payout":91.52
+  },
+  {
+    "asset":"APPLE ",
+    "trades":56,
+    "win_rate":54.55,
+    "pnl":-42.56,
+    "avg_payout":90.6
+  },
+  {
+    "asset":"USD\/CNH ",
+    "trades":50,
+    "win_rate":52.17,
+    "pnl":-437.53,
+    "avg_payout":89.58
+  },
+  {
+    "asset":"USD\/DZD ",
+    "trades":50,
+    "win_rate":52.0,
+    "pnl":-376.04,
+    "avg_payout":90.23
+  },
+  {
+    "asset":"TND\/USD ",
+    "trades":47,
+    "win_rate":47.83,
+    "pnl":-232.7,
+    "avg_payout":88.82
+  },
+  {
+    "asset":"USD\/SGD ",
+    "trades":43,
+    "win_rate":46.51,
+    "pnl":30.9,
+    "avg_payout":82.6
+  },
+  {
+    "asset":"USD\/CLP ",
+    "trades":38,
+    "win_rate":48.65,
+    "pnl":-190.95,
+    "avg_payout":85.56
+  },
+  {
+    "asset":"USD\/IDR ",
+    "trades":36,
+    "win_rate":52.94,
+    "pnl":-34.98,
+    "avg_payout":90.78
+  },
+  {
+    "asset":"USD\/BDT ",
+    "trades":35,
+    "win_rate":51.43,
+    "pnl":-233.0,
+    "avg_payout":86.5
+  },
+  {
+    "asset":"USD\/RUB ",
+    "trades":34,
+    "win_rate":55.88,
+    "pnl":98.4,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"BITCOIN ",
+    "trades":28,
+    "win_rate":57.14,
+    "pnl":213.4,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"USD\/EGP ",
+    "trades":25,
+    "win_rate":44.0,
+    "pnl":-153.59,
+    "avg_payout":89.64
+  },
+  {
+    "asset":"USD\/VND ",
+    "trades":24,
+    "win_rate":43.48,
+    "pnl":-129.2,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"SOLANA ",
+    "trades":24,
+    "win_rate":70.83,
+    "pnl":371.7,
+    "avg_payout":90.0
+  },
+  {
+    "asset":"USD\/MXN ",
+    "trades":22,
+    "win_rate":45.45,
+    "pnl":-99.91,
+    "avg_payout":90.5
+  },
+  {
+    "asset":"POLYGON ",
+    "trades":18,
+    "win_rate":61.11,
+    "pnl":102.86,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"VISA ",
+    "trades":18,
+    "win_rate":55.56,
+    "pnl":110.4,
+    "avg_payout":87.6
+  },
+  {
+    "asset":"USD\/MYR ",
+    "trades":18,
+    "win_rate":66.67,
+    "pnl":168.18,
+    "avg_payout":91.0
+  },
+  {
+    "asset":"CHAINLINK ",
+    "trades":17,
+    "win_rate":47.06,
+    "pnl":-100.4,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"USD\/INR ",
+    "trades":15,
+    "win_rate":46.67,
+    "pnl":-439.28,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"BNB ",
+    "trades":15,
+    "win_rate":46.67,
+    "pnl":-99.06,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"LITECOIN ",
+    "trades":15,
+    "win_rate":46.67,
+    "pnl":-126.6,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"IRR\/USD ",
+    "trades":13,
+    "win_rate":30.77,
+    "pnl":-304.19,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"DOGECOIN ",
+    "trades":11,
+    "win_rate":36.36,
+    "pnl":-149.3,
+    "avg_payout":90.5
+  },
+  {
+    "asset":"BOEING COMPANY ",
+    "trades":11,
+    "win_rate":72.73,
+    "pnl":200.6,
+    "avg_payout":89.0
+  },
+  {
+    "asset":"EUR\/CAD",
+    "trades":11,
+    "win_rate":50.0,
+    "pnl":-59.45,
+    "avg_payout":74.6
+  },
+  {
+    "asset":"EUR\/USD",
+    "trades":10,
+    "win_rate":40.0,
+    "pnl":-337.43,
+    "avg_payout":89.0
+  },
+  {
+    "asset":"USD\/THB ",
+    "trades":10,
+    "win_rate":40.0,
+    "pnl":-72.09,
+    "avg_payout":90.75
+  },
+  {
+    "asset":"POLKADOT ",
+    "trades":10,
+    "win_rate":50.0,
+    "pnl":23.0,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"AVALANCHE ",
+    "trades":10,
+    "win_rate":33.33,
+    "pnl":-107.0,
+    "avg_payout":86.67
+  },
+  {
+    "asset":"EUR\/AUD",
+    "trades":9,
+    "win_rate":44.44,
+    "pnl":-83.12,
+    "avg_payout":85.5
+  },
+  {
+    "asset":"ETHEREUM ",
+    "trades":8,
+    "win_rate":37.5,
+    "pnl":-118.75,
+    "avg_payout":88.33
+  },
+  {
+    "asset":"CHF\/JPY",
+    "trades":8,
+    "win_rate":62.5,
+    "pnl":36.5,
+    "avg_payout":89.2
+  },
+  {
+    "asset":"MCDONALD'S ",
+    "trades":7,
+    "win_rate":85.71,
+    "pnl":125.0,
+    "avg_payout":88.0
+  },
+  {
+    "asset":"AUD\/USD",
+    "trades":6,
+    "win_rate":50.0,
+    "pnl":-15.25,
+    "avg_payout":79.67
+  },
+  {
+    "asset":"YER\/USD ",
+    "trades":6,
+    "win_rate":50.0,
+    "pnl":-6.8,
+    "avg_payout":89.33
+  },
+  {
+    "asset":"AMAZON ",
+    "trades":6,
+    "win_rate":33.33,
+    "pnl":-58.31,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"CAD\/JPY",
+    "trades":5,
+    "win_rate":60.0,
+    "pnl":12.5,
+    "avg_payout":83.33
+  },
+  {
+    "asset":"USD\/PKR ",
+    "trades":5,
+    "win_rate":40.0,
+    "pnl":-28.8,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"MICROSOFT ",
+    "trades":4,
+    "win_rate":25.0,
+    "pnl":-82.25,
+    "avg_payout":91.0
+  },
+  {
+    "asset":"TESLA ",
+    "trades":4,
+    "win_rate":25.0,
+    "pnl":-56.4,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"INTEL ",
+    "trades":4,
+    "win_rate":25.0,
+    "pnl":-113.53,
+    "avg_payout":92.01
+  },
+  {
+    "asset":"VIX ",
+    "trades":3,
+    "win_rate":0.0,
+    "pnl":-70.0,
+    "avg_payout":0.0
+  },
+  {
+    "asset":"CITIGROUP INC ",
+    "trades":3,
+    "win_rate":33.33,
+    "pnl":-27.0,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"FACEBOOK INC ",
+    "trades":3,
+    "win_rate":0.0,
+    "pnl":-130.0,
+    "avg_payout":0.0
+  },
+  {
+    "asset":"TONCOIN ",
+    "trades":3,
+    "win_rate":66.67,
+    "pnl":14.0,
+    "avg_payout":92.0
+  },
+  {
+    "asset":"ADVANCED MICRO DEVICES ",
+    "trades":2,
+    "win_rate":100.0,
+    "pnl":57.45,
+    "avg_payout":81.5
+  },
+  {
+    "asset":"USD\/PHP ",
+    "trades":2,
+    "win_rate":0.0,
+    "pnl":-55.0,
+    "avg_payout":0.0
+  },
+  {
+    "asset":"AUD\/CAD",
+    "trades":2,
+    "win_rate":100.0,
+    "pnl":20.75,
+    "avg_payout":83.0
+  },
+  {
+    "asset":"AUD\/CHF",
+    "trades":2,
+    "win_rate":0.0,
+    "pnl":-50.0,
+    "avg_payout":0.0
+  },
+  {
+    "asset":"AUD\/JPY ",
+    "trades":1,
+    "win_rate":100.0,
+    "pnl":16.0,
+    "avg_payout":80.0
+  },
+  {
+    "asset":"AUD\/JPY",
+    "trades":1,
+    "win_rate":0.0,
+    "pnl":0.0,
+    "avg_payout":0.0
+  },
+  {
+    "asset":"MARATHON DIGITAL HOLDINGS ",
+    "trades":1,
+    "win_rate":0.0,
+    "pnl":-150.0,
+    "avg_payout":0.0
+  },
+  {
+    "asset":"EUR\/CHF",
+    "trades":1,
+    "win_rate":100.0,
+    "pnl":22.5,
+    "avg_payout":90.0
+  }
+]

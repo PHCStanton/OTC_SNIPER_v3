@@ -46,4 +46,18 @@ Based on our findings, here are the top three tests we recommend running next to
 *   **Test 6: Kalman-Smoothed Level 2/3 Pivot Trading (No-Hurst Baseline):**
     Benchmark high-volume execution of Level 2/3 structural pivot indicator setups smoothed with a Kalman filter, completely bypassing the Hurst exponent regime vetoes, to maximize trade volume for semi-manual operations while preserving 55%+ win-rates.
 
+---
+
+## 3. Database & GCP Architecture Assessment (2026-07-12)
+
+### 3.1 Google Cloud Data Agent Kit & Redis Evaluation
+*   **Redis Integration Postponed:** Determined that an external Redis instance is not immediately required. Current single-process FastAPI in-memory structures (`deque` and thread-safe queues) handle low-latency checks at microsecond speeds.
+*   **GCP Data Agent Kit Sufficiency:** Standard database, data warehouse, and streaming tools (AlloyDB/PostgreSQL, BigQuery, and Dataflow) along with the agent extensions are fully sufficient for data scaling, migration, and ETL feature engineering.
+*   **AlloyDB Omni for Development:** Can run AlloyDB Omni locally inside a Docker container for high-performance PostgreSQL testing at zero cloud cost.
+
+### 3.2 Database Migration Strategy (Hybrid Solution)
+*   **Supabase for App State & Auth:** Migrate user accounts, Ghost configurations, active trading sessions, and trade execution outcomes to Supabase (utilizing its generous free tier/predictable $25 flat rate for Auth, Realtime, and auto-generated APIs).
+*   **BigQuery for Tick History:** Upload high-frequency raw tick logs to BigQuery (leveraging the 10 GB storage and 1 TB query scans free monthly tier) to perform backtests, Hurst calculations, and streak pattern analysis, thereby bypassing Supabase storage and compute limits.
+
+
 

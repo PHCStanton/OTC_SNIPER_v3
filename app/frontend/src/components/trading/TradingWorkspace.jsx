@@ -51,14 +51,14 @@ export default function TradingWorkspace() {
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_top,_rgba(255,237,109,0.10),_transparent_35%),linear-gradient(180deg,#0c0f0f_0%,#111414_54%,#171a1b_100%)] px-4 py-4 text-[#e3e6e7] lg:px-6 lg:py-6">
       <div className="mx-auto flex max-w-[1700px] flex-col gap-4">
-        <section className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+        <section id="multi-chart-view-section" className="grid gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
           <TradePanel />
           <MultiChartView />
         </section>
 
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_380px] xl:items-start">
           {/* Left column: Sparkline + Trade History stacked */}
-          <div className="flex flex-col gap-4">
+          <div id="sparkline-section" className="flex flex-col gap-4">
             <Sparkline
               asset={selectedAsset}
               ticks={selectedTicks}

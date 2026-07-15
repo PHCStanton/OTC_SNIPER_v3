@@ -46,6 +46,8 @@ from .session.pocket_option_session import PocketOptionSession
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 streaming_service = StreamingService(sio_server=sio)
 
+logger = logging.getLogger(__name__)
+
 # Hook live broker ticks into the streaming pipeline
 PocketOptionSession.set_tick_callback(streaming_service.process_tick)
 
@@ -54,8 +56,14 @@ PocketOptionSession.set_tick_callback(streaming_service.process_tick)
 
 @sio.event
 async def connect(sid, environ):
+    logger.info("Client %s connected", sid)
     await sio.save_session(sid, {"rooms": []})
     await sio.emit("status", {"status": "connected"}, to=sid)
+
+
+@sio.event
+async def disconnect(sid):
+    logger.info("Client %s disconnected", sid)
 
 
 @sio.event

@@ -1,0 +1,109 @@
+{
+  "payout_pct": 92.0,
+  "kalman": {
+    "enabled": false,
+    "q": 1e-09,
+    "r": 1e-07,
+    "upstream_of_hurst": false
+  },
+  "hurst": {
+    "veto_enabled": false,
+    "window_size": 300,
+    "mean_revert_limit": 0.44,
+    "trend_limit": 0.58,
+    "allowed_regimes": [
+      "mean_reverting",
+      "random_walk",
+      "trending"
+    ],
+    "filter_threshold": null,
+    "min_scale_cutoff": 12
+  },
+  "ou": {
+    "veto_enabled": false,
+    "mode": "kalman",
+    "window_size": 300,
+    "q_c": 1e-10,
+    "q_beta": 1e-06,
+    "r": 1e-08
+  },
+  "expiry": {
+    "mode": "static",
+    "static_seconds": [
+      60,
+      120,
+      300
+    ],
+    "adaptive_c": 10.0,
+    "adaptive_bounds": [
+      30,
+      60,
+      120,
+      300
+    ]
+  },
+  "indicator": {
+    "level_mode": "L3",
+    "cooldown_ticks": 30
+  },
+  "pocket": {
+    "veto_enabled": false,
+    "exclusion_list": [],
+    "blacklist_assets": []
+  },
+  "timeframe": {
+    "veto_enabled": false,
+    "exclusion_blocks": []
+  },
+  "bayesian": {
+    "enabled": false,
+    "alpha_prior": 2.0,
+    "beta_prior": 2.0,
+    "confidence_threshold": 0.82,
+    "breakeven_win_rate": 0.525,
+    "risk_aversion": 2.0,
+    "max_fraction": 0.1
+  },
+  "manipulation": {
+    "veto_enabled": true,
+    "severity_threshold": 0.3
+  },
+  "oteo_gate": {
+    "min_zscore_enabled": true,
+    "min_zscore": -0.5,
+    "max_zscore_enabled": true,
+    "max_zscore": 1.0,
+    "min_score_enabled": true,
+    "min_score": 75.0,
+    "max_score_enabled": true,
+    "max_score": 95.0
+  },
+  "regime": {
+    "enabled": true,
+    "allowed_regimes": [
+      "RANGE_BOUND",
+      "TREND_PULLBACK",
+      "TREND_REVERSAL",
+      "MOMENTUM"
+    ],
+    "require_stable": true
+  },
+  "oteo_params": {
+    "min_abs_z_score": 0.35,
+    "min_pressure_pct": 12.0,
+    "score_center": 0.85,
+    "score_slope": 3.5,
+    "cooldown_ticks": 30,
+    "buffer_size": 300,
+    "pressure_window": 24,
+    "macro_window": 150
+  },
+  "volatility": {
+    "high_ratio": 2.0,
+    "medium_ratio": 1.2
+  },
+  "liquidity": {
+    "high_freq": 40.0,
+    "medium_freq": 15.0
+  }
+}

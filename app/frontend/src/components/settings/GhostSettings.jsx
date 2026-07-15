@@ -47,6 +47,7 @@ export default function GhostSettings() {
     hurstL3Enabled,
     ghostBlacklist,
     sidebarPayoutThreshold,
+    autoGhostRsiCciEnabled,
 
     setGhostAmount,
     setAutoGhostEnabled,
@@ -74,6 +75,7 @@ export default function GhostSettings() {
     setHurstL3Enabled,
     setGhostBlacklist,
     setSidebarPayoutThreshold,
+    setAutoGhostRsiCciEnabled,
   } = useSettingsStore();
 
   const { availableAssets, assetPayouts } = useAssetStore();
@@ -120,16 +122,6 @@ export default function GhostSettings() {
             Auto-Ghost Protocol Settings
           </h1>
           <p className="mt-2 text-sm font-medium text-gray-500">Configure background trade protocol, regime gates, and asset blacklists.</p>
-        </div>
-        <div className="flex gap-4">
-          <button
-            onClick={handleClearBlacklist}
-            disabled={ghostBlacklist.length === 0}
-            className="flex items-center gap-2 rounded-lg bg-red-500/10 px-6 py-3 text-xs font-black uppercase tracking-widest text-red-400 border border-red-500/25 transition hover:bg-red-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Trash2 size={14} />
-            Reset Blacklist
-          </button>
         </div>
       </div>
 
@@ -225,9 +217,9 @@ export default function GhostSettings() {
             </div>
           </SectionCard>
 
-          {/* HURST FILTER & EXTENSION GATES */}
+          {/* EXTENSIONS */}
           <SectionCard
-            title="Hurst Exponent & Volatility Gates"
+            title="Extensions"
             subtitle="Core algorithmic boundaries and premium multi-scale extensions."
             icon={Activity}
           >
@@ -328,12 +320,121 @@ export default function GhostSettings() {
                   </div>
                 )}
               </div>
+
+              {/* RSI/CCI Momentum Confluence Gate */}
+              <div className="space-y-3 rounded-lg bg-white/[0.02] p-4 border border-white/5">
+                <div className="flex items-center justify-between pb-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoGhostRsiCciEnabled}
+                      onChange={(e) => setAutoGhostRsiCciEnabled(e.target.checked)}
+                      className="accent-[#ffb800] rounded"
+                    />
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${autoGhostRsiCciEnabled ? 'text-amber-400' : 'text-gray-500'}`}>
+                      RSI/CCI Momentum Confluence (Extension)
+                    </span>
+                  </label>
+                </div>
+                <div className="text-[10px] text-gray-500 leading-normal">
+                  Vetoes entry signals if RSI(7) and CCI(9) on 30s candles are not parallel in the direction of the trade from extreme zones.
+                </div>
+              </div>
             </div>
           </SectionCard>
         </div>
 
         {/* Right Column */}
         <div className="space-y-6">
+          {/* ASSET BLACKLIST CONTROL */}
+          <SectionCard
+            title="Ghost Asset Blacklist"
+            subtitle="Manually exclude assets from protocol execution or let the dynamic payout scanner automatically filter them."
+            icon={ShieldAlert}
+            action={
+              <button
+                type="button"
+                onClick={handleClearBlacklist}
+                disabled={ghostBlacklist.length === 0}
+                className="flex items-center justify-center p-2 rounded-lg text-gray-500 hover:bg-red-500/10 hover:text-red-400 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-gray-500 transition-colors"
+                title="Reset/Clear Blacklist"
+              >
+                <RefreshCcw size={16} />
+              </button>
+            }
+          >
+            <div className="space-y-4">
+              {/* Manual Add Blacklist */}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <select
+                    value={selectedAssetToAdd}
+                    onChange={(e) => setSelectedAssetToAdd(e.target.value)}
+                    className="h-10 w-full appearance-none rounded-lg bg-[#25282f] px-3 pr-8 text-xs font-black uppercase tracking-wider text-white outline-none border border-white/5"
+                  >
+                    <option value="">-- Select Asset to Blacklist --</option>
+                    {assetsToSelect.map((asset) => (
+                      <option key={asset} value={asset}>
+                        {asset.replace('_otc', '').toUpperCase()} ({(assetPayouts[asset] ? Math.round(assetPayouts[asset] * 100) : 0)}%)
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddBlacklist}
+                  disabled={!selectedAssetToAdd}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#ffb800] text-black transition hover:bg-white disabled:opacity-40"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              {/* Blacklisted items list */}
+              {ghostBlacklist.length === 0 ? (
+                <div className="text-center py-6 text-xs text-gray-600 italic uppercase">
+                  No assets currently blacklisted
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1 scrollbar-thin">
+                  {ghostBlacklist.map((asset) => {
+                    const payout = assetPayouts[asset];
+                    const belowSidebarPayout = payout !== undefined && payout * 100 < sidebarPayoutThreshold;
+
+                    return (
+                      <div
+                        key={asset}
+                        className="flex items-center justify-between rounded-xl bg-[#25282f]/30 border border-white/5 p-3 hover:border-red-500/20 transition-all"
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-xs font-black text-white uppercase tracking-wider">
+                            {asset.replace('_otc', '').toUpperCase()}
+                          </span>
+                          <span className={`text-[8.5px] font-bold mt-0.5 uppercase flex items-center gap-1 ${
+                            belowSidebarPayout ? 'text-red-400' : 'text-gray-500'
+                          }`}>
+                            {belowSidebarPayout ? <AlertTriangle size={10} /> : null}
+                            Payout: {payout !== undefined ? `${Math.round(payout * 100)}%` : '—'} 
+                            {belowSidebarPayout ? `(<${sidebarPayoutThreshold}% minimum)` : ''}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveBlacklist(asset)}
+                          className="p-1.5 rounded-lg text-gray-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                          title="Remove from blacklist"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
           {/* ADVANCED GATING BOUNDARIES */}
           <SectionCard
             title="Algorithmic Gate Boundaries"
@@ -581,83 +682,7 @@ export default function GhostSettings() {
             </div>
           </SectionCard>
 
-          {/* ASSET BLACKLIST CONTROL */}
-          <SectionCard
-            title="Ghost Asset Blacklist"
-            subtitle="Manually exclude assets from protocol execution or let the dynamic payout scanner automatically filter them."
-            icon={ShieldAlert}
-          >
-            <div className="space-y-4">
-              {/* Manual Add Blacklist */}
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <select
-                    value={selectedAssetToAdd}
-                    onChange={(e) => setSelectedAssetToAdd(e.target.value)}
-                    className="h-10 w-full appearance-none rounded-lg bg-[#25282f] px-3 pr-8 text-xs font-black uppercase tracking-wider text-white outline-none border border-white/5"
-                  >
-                    <option value="">-- Select Asset to Blacklist --</option>
-                    {assetsToSelect.map((asset) => (
-                      <option key={asset} value={asset}>
-                        {asset.replace('_otc', '').toUpperCase()} ({(assetPayouts[asset] ? Math.round(assetPayouts[asset] * 100) : 0)}%)
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleAddBlacklist}
-                  disabled={!selectedAssetToAdd}
-                  className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#ffb800] text-black transition hover:bg-white disabled:opacity-40"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
 
-              {/* Blacklisted items list */}
-              {ghostBlacklist.length === 0 ? (
-                <div className="text-center py-6 text-xs text-gray-600 italic uppercase">
-                  No assets currently blacklisted
-                </div>
-              ) : (
-                <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1 scrollbar-thin">
-                  {ghostBlacklist.map((asset) => {
-                    const payout = assetPayouts[asset];
-                    const belowSidebarPayout = payout !== undefined && payout * 100 < sidebarPayoutThreshold;
-
-                    return (
-                      <div
-                        key={asset}
-                        className="flex items-center justify-between rounded-xl bg-[#25282f]/30 border border-white/5 p-3 hover:border-red-500/20 transition-all"
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-xs font-black text-white uppercase tracking-wider">
-                            {asset.replace('_otc', '').toUpperCase()}
-                          </span>
-                          <span className={`text-[8.5px] font-bold mt-0.5 uppercase flex items-center gap-1 ${
-                            belowSidebarPayout ? 'text-red-400' : 'text-gray-500'
-                          }`}>
-                            {belowSidebarPayout ? <AlertTriangle size={10} /> : null}
-                            Payout: {payout !== undefined ? `${Math.round(payout * 100)}%` : '—'} 
-                            {belowSidebarPayout ? `(<${sidebarPayoutThreshold}% minimum)` : ''}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBlacklist(asset)}
-                          className="p-1.5 rounded-lg text-gray-500 hover:bg-red-500/10 hover:text-red-400 transition-colors"
-                          title="Remove from blacklist"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </SectionCard>
         </div>
       </div>
     </div>

@@ -12,8 +12,8 @@ import { useRiskStore } from '../../stores/useRiskStore.js';
 import { 
   formatAssetLabel, 
   formatPrice, 
-  getTrendPercent, 
-  extractNumericSeries,
+  getTrendPercentFromTicks, 
+  getLatestPriceFromTicks,
   getSignalDirection,
   getSignalConfidence
 } from './chartUtils.js';
@@ -70,17 +70,16 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
   const assetStats = useRiskStore((s) => s.assetStats?.[asset] ?? null);
   const [isHovered, setIsHovered] = React.useState(false);
 
-  const series = React.useMemo(() => extractNumericSeries(ticks), [ticks]);
   const { latest, trend, positive, direction, confidence } = React.useMemo(() => {
-    const t = getTrendPercent(series);
+    const t = getTrendPercentFromTicks(ticks);
     return {
-      latest: latestPrice ?? (series.length > 0 ? series[series.length - 1] : null),
+      latest: latestPrice ?? getLatestPriceFromTicks(ticks),
       trend: t,
       positive: t >= 0,
       direction: getSignalDirection(signal),
       confidence: getSignalConfidence(signal),
     };
-  }, [series, signal, latestPrice]);
+  }, [ticks, signal, latestPrice]);
   
   // Prefer L3 regime_label (Phase 5); fall back to legacy alias for L1/L2 mode
   const regime = signal?.regime_label ?? signal?.regime ?? null;
@@ -260,7 +259,7 @@ const MultiChartCard = React.memo(function MultiChartCard({ asset, isSelected, o
               <span className="text-[#ffb800] uppercase tracking-widest text-[8px] font-black mr-1 animate-pulse">Warmup</span>
             ) : null}
             <Layers3 size={10} />
-            <span>{series.length}</span>
+            <span>{ticks.length}</span>
           </div>
         </div>
       </div>

@@ -57,29 +57,51 @@ export function getConfluenceItems(signal, direction) {
   return items.slice(0, 8);
 }
 
+export function getNumericValue(tick) {
+  if (typeof tick === 'number' && Number.isFinite(tick)) return tick;
+  if (!tick || typeof tick !== 'object') return null;
+  const candidates = [tick.price, tick.value, tick.close, tick.last, tick.mid, tick.bid, tick.ask];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+export function getLatestPriceFromTicks(ticks) {
+  if (!Array.isArray(ticks) || ticks.length === 0) return null;
+  for (let i = ticks.length - 1; i >= 0; i--) {
+    const val = getNumericValue(ticks[i]);
+    if (val !== null) return val;
+  }
+  return null;
+}
+
+export function getTrendPercentFromTicks(ticks) {
+  if (!Array.isArray(ticks) || ticks.length < 2) return 0;
+  
+  let first = null;
+  for (let i = 0; i < ticks.length; i++) {
+    first = getNumericValue(ticks[i]);
+    if (first !== null) break;
+  }
+  
+  let last = null;
+  for (let i = ticks.length - 1; i >= 0; i--) {
+    last = getNumericValue(ticks[i]);
+    if (last !== null) break;
+  }
+  
+  if (first === null || last === null || first === 0) return 0;
+  return ((last - first) / Math.abs(first)) * 100;
+}
+
 export function extractNumericSeries(ticks) {
   if (!Array.isArray(ticks)) return [];
 
   const series = [];
   for (const tick of ticks) {
-    if (typeof tick === 'number' && Number.isFinite(tick)) {
-      series.push(tick);
-      continue;
-    }
-
-    if (!tick || typeof tick !== 'object') continue;
-
-    const candidates = [tick.price, tick.value, tick.close, tick.last, tick.mid, tick.bid, tick.ask];
-    let parsed = null;
-
-    for (const candidate of candidates) {
-      const numeric = Number(candidate);
-      if (Number.isFinite(numeric)) {
-        parsed = numeric;
-        break;
-      }
-    }
-
+    const parsed = getNumericValue(tick);
     if (parsed !== null) series.push(parsed);
   }
 

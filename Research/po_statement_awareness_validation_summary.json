@@ -1,0 +1,16 @@
+{
+  "total_matched": 11720,
+  "draws_count": 128,
+  "active_evaluated": 11592,
+  "unaware_manual": 11394,
+  "system_aligned": 198,
+  "approved_wins": 0,
+  "approved_losses": 1,
+  "vetoed_wins": 106,
+  "vetoed_losses": 91,
+  "baseline_win_rate": 53.5354,
+  "aware_win_rate": 0.0,
+  "veto_efficiency_losses": 98.913,
+  "veto_efficiency_wins": 100.0,
+  "net_savings_usd": -88.0
+}

@@ -248,6 +248,7 @@ export default function App() {
           auto_ghost_blacklist_assets: state.ghostBlacklist,
           auto_ghost_hurst_l2_enabled: state.hurstL2Enabled,
           auto_ghost_hurst_l3_enabled: state.hurstL3Enabled,
+          auto_ghost_rsi_cci_enabled: state.autoGhostRsiCciEnabled,
           auto_ghost_hurst_filter_enabled: state.hurstFilterEnabled,
           auto_ghost_hurst_filter_threshold: state.hurstFilterThreshold,
           auto_ghost_hurst_mean_revert_threshold: state.hurstMeanRevertThreshold,

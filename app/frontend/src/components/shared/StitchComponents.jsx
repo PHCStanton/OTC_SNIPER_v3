@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Info } from 'lucide-react';
 
-export function SectionCard({ title, subtitle, icon: Icon, children, badge, toggle, onToggle }) {
+export function SectionCard({ title, subtitle, icon: Icon, children, badge, toggle, onToggle, action }) {
   return (
     <section className="relative overflow-hidden rounded-[20px] bg-[#1a1c22] p-6 shadow-xl border border-white/5">
       <div className="mb-6 flex items-start justify-between">
@@ -23,21 +23,24 @@ export function SectionCard({ title, subtitle, icon: Icon, children, badge, togg
             <p className="mt-1 text-sm text-gray-500 font-medium">{subtitle}</p>
           </div>
         </div>
-        {toggle !== undefined && (
-          <button
-            type="button"
-            onClick={() => onToggle(!toggle)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-              toggle ? 'bg-[#ffb800]' : 'bg-[#2d3139]'
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                toggle ? 'translate-x-6' : 'translate-x-1'
+        <div className="flex items-center gap-3">
+          {action && action}
+          {toggle !== undefined && (
+            <button
+              type="button"
+              onClick={() => onToggle(!toggle)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                toggle ? 'bg-[#ffb800]' : 'bg-[#2d3139]'
               }`}
-            />
-          </button>
-        )}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                  toggle ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          )}
+        </div>
       </div>
       <div className="space-y-6">{children}</div>
     </section>
