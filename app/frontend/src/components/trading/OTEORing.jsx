@@ -25,8 +25,25 @@ const REGIME_STYLES = {
   INSUFFICIENT_DATA: { text: 'text-gray-500',    border: 'border-gray-600/30',    bg: 'bg-gray-500/5',     label: 'Insufficient Data' },
 };
 
+const getVolatilityClass = (score) => {
+  if (score < 30) return { label: 'LOW', color: '#10b981', textClass: 'text-emerald-400', glow: 'rgba(16, 185, 129, 0.4)' };
+  if (score < 70) return { label: 'MED', color: '#f5df19', textClass: 'text-yellow-400', glow: 'rgba(245, 223, 25, 0.4)' };
+  return { label: 'HIGH', color: '#ef4444', textClass: 'text-red-500', glow: 'rgba(239, 68, 68, 0.4)' };
+};
+
+const getLiquidityClass = (score) => {
+  if (score < 30) return { label: 'LOW', color: '#ef4444', textClass: 'text-red-500', glow: 'rgba(239, 68, 68, 0.4)' };
+  if (score < 70) return { label: 'MED', color: '#f5df19', textClass: 'text-yellow-400', glow: 'rgba(245, 223, 25, 0.4)' };
+  return { label: 'HIGH', color: '#06b6d4', textClass: 'text-cyan-400', glow: 'rgba(6, 182, 212, 0.4)' };
+};
+
 export default function OTEORing({ asset, signal, manipulation = null, warmup = false }) {
+  const volScore = warmup ? 0 : (signal?.market_context?.volatility_score ?? 0);
+  const liqScore = warmup ? 0 : (signal?.market_context?.liquidity_score ?? 0);
+  const volStyle = getVolatilityClass(volScore);
+  const liqStyle = getLiquidityClass(liqScore);
   const confidence = warmup ? 0 : getSignalConfidence(signal);
+
   const direction  = getSignalDirection(signal);
   const label      = getSignalLabel(signal);
   const size        = 300;
@@ -136,19 +153,83 @@ export default function OTEORing({ asset, signal, manipulation = null, warmup = 
         </div>
       </div>
 
-      {/* Direction label pill */}
+      {/* Direction label pill with Volatility & Liquidity half-gauges */}
       {!warmup && (
-        <div className="mt-6 flex items-center gap-2 rounded-full border border-white/5 bg-[#1a1717]/80 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-gray-300 shadow-lg backdrop-blur">
-          {isPut ? (
-            <ArrowDownRight size={14} className="text-[#fe7453]" />
-          ) : isCall ? (
-            <ArrowUpRight size={14} className="text-emerald-400" />
-          ) : (
-            <Minus size={14} className="text-blue-400" />
-          )}
-          <span className={accentClass}>{label}</span>
+        <div className="mt-6 flex w-full max-w-sm items-center justify-between px-4">
+          {/* Volatility Half-Gauge */}
+          <div className="flex flex-col items-center">
+            <div className="relative h-8 w-16">
+              <svg className="w-full h-full" viewBox="0 0 64 32">
+                <path
+                  d="M 8 30 A 24 24 0 0 1 56 30"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.05)"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M 8 30 A 24 24 0 0 1 56 30"
+                  fill="none"
+                  stroke={volStyle.color}
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeDasharray="75.4"
+                  strokeDashoffset={75.4 - (volScore / 100) * 75.4}
+                  className="transition-all duration-1000 ease-out"
+                  style={{ filter: `drop-shadow(0 0 4px ${volStyle.glow})` }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-end justify-center pb-1">
+                <span className={`text-[10px] font-black ${volStyle.textClass}`}>{Math.round(volScore)}%</span>
+              </div>
+            </div>
+            <span className={`mt-1 text-[9px] font-black uppercase tracking-[0.1em] ${volStyle.textClass}`}>Vol • {volStyle.label}</span>
+          </div>
+
+          {/* Direction Pill */}
+          <div className="flex items-center gap-2 rounded-full border border-white/5 bg-[#1a1717]/80 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.15em] text-gray-300 shadow-lg backdrop-blur">
+            {isPut ? (
+              <ArrowDownRight size={14} className="text-[#fe7453]" />
+            ) : isCall ? (
+              <ArrowUpRight size={14} className="text-emerald-400" />
+            ) : (
+              <Minus size={14} className="text-blue-400" />
+            )}
+            <span className={accentClass}>{label}</span>
+          </div>
+
+          {/* Liquidity Half-Gauge */}
+          <div className="flex flex-col items-center">
+            <div className="relative h-8 w-16">
+              <svg className="w-full h-full" viewBox="0 0 64 32">
+                <path
+                  d="M 8 30 A 24 24 0 0 1 56 30"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.05)"
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M 8 30 A 24 24 0 0 1 56 30"
+                  fill="none"
+                  stroke={liqStyle.color}
+                  strokeWidth="5"
+                  strokeLinecap="round"
+                  strokeDasharray="75.4"
+                  strokeDashoffset={75.4 - (liqScore / 100) * 75.4}
+                  className="transition-all duration-1000 ease-out"
+                  style={{ filter: `drop-shadow(0 0 4px ${liqStyle.glow})` }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-end justify-center pb-1">
+                <span className={`text-[10px] font-black ${liqStyle.textClass}`}>{Math.round(liqScore)}%</span>
+              </div>
+            </div>
+            <span className={`mt-1 text-[9px] font-black uppercase tracking-[0.1em] ${liqStyle.textClass}`}>Liq • {liqStyle.label}</span>
+          </div>
         </div>
       )}
+
 
       {/* Level 3 Regime Badge — shown when L3 is enabled and regime is classified */}
       {!warmup && signal?.level3_enabled && signal?.regime_label && (

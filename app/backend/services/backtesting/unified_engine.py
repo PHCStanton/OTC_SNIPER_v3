@@ -305,18 +305,29 @@ class PocketTracker:
         self.last_price = price
 
         self.tick_timestamps.append(timestamp)
-        liq_level = "LOW"
         freq = 0.0
         if len(self.tick_timestamps) >= 2:
             dt = self.tick_timestamps[-1] - self.tick_timestamps[0]
             if dt > 0:
                 freq = ((len(self.tick_timestamps) - 1) / dt) * 60.0
-            if freq >= 40.0:
-                liq_level = "HIGH"
-            elif freq >= 15.0:
-                liq_level = "MEDIUM"
-            else:
-                liq_level = "LOW"
+
+        # Sigmoid liquidity score — mirrors the live MarketContextEngine exactly.
+        # Midpoint 120 ticks/min = 50%; derived label matches live UI thresholds.
+        _LIQ_MIDPOINT = 120.0
+        _LIQ_STEEPNESS = 4.0
+        if freq <= 0:
+            liq_base = 0.0
+        else:
+            _x = (freq - _LIQ_MIDPOINT) / _LIQ_MIDPOINT
+            liq_base = 1.0 / (1.0 + math.exp(-_LIQ_STEEPNESS * _x))
+        liq_score_pct = liq_base * 100.0
+
+        if liq_score_pct >= 70.0:
+            liq_level = "HIGH"
+        elif liq_score_pct >= 30.0:
+            liq_level = "MEDIUM"
+        else:
+            liq_level = "LOW"
 
         manip_flags = self.manip_detector.update(timestamp, price)
         push_snap = manip_flags.get("push_snap", 0.0)
@@ -331,7 +342,7 @@ class PocketTracker:
             manip_level = "LOW"
             
         pocket_state = f"Vol:{vol_level} | Liq:{liq_level} | Manip:{manip_level}"
-        return vol_level, liq_level, manip_level, pocket_state
+        return vol_level, liq_level, manip_level, pocket_state, round(liq_score_pct, 1)
 
 def calculate_time_offsets(timestamp: float) -> tuple[int, int]:
     dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -536,7 +547,7 @@ class UnifiedBacktester:
                 self._ou_last_price = (raw_price, tick.timestamp)
 
             # Spike Pocket Classification
-            vol_lvl, liq_lvl, manip_lvl, pocket_state = self.pocket_tracker.update(tick.timestamp, raw_price)
+            vol_lvl, liq_lvl, manip_lvl, pocket_state, liq_score = self.pocket_tracker.update(tick.timestamp, raw_price)
             hour_offset, four_hour_offset = calculate_time_offsets(tick.timestamp)
 
             # 3. Evaluate Policies and Signals
@@ -661,6 +672,7 @@ class UnifiedBacktester:
                             "pocket_state": pocket_state,
                             "vol_level": vol_lvl,
                             "liq_level": liq_lvl,
+                            "liquidity_score": liq_score,
                             "manip_level": manip_lvl,
                             "utc_hour_offset": hour_offset,
                             "utc_4hour_offset": four_hour_offset,

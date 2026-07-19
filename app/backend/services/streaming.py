@@ -136,7 +136,14 @@ class StreamingService:
         auto_ghost_hurst_l2_enabled: bool | None = None,
         auto_ghost_hurst_l3_enabled: bool | None = None,
         auto_ghost_rsi_cci_enabled: bool | None = None,
+        volatility_gate_enabled: bool | None = None,
+        min_volatility: float | None = None,
+        max_volatility: float | None = None,
+        liquidity_gate_enabled: bool | None = None,
+        min_liquidity: float | None = None,
+        max_liquidity: float | None = None,
     ) -> dict[str, Any]:
+
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
             self.level2_enabled = bool(level2_enabled)
@@ -195,7 +202,15 @@ class StreamingService:
             hurst_l2_enabled=auto_ghost_hurst_l2_enabled,
             hurst_l3_enabled=auto_ghost_hurst_l3_enabled,
             rsi_cci_enabled=auto_ghost_rsi_cci_enabled,
+
+            volatility_gate_enabled=volatility_gate_enabled,
+            min_volatility=min_volatility,
+            max_volatility=max_volatility,
+            liquidity_gate_enabled=liquidity_gate_enabled,
+            min_liquidity=min_liquidity,
+            max_liquidity=max_liquidity,
         )
+
 
         if getattr(self, "_streaming_active", False):
             should_run_pulse = self.oteo_ai_enabled and self.auto_ghost.config.ai_pulse_enabled

@@ -53,7 +53,14 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_hurst_l2_enabled: bool = Field(default=True)
     auto_ghost_hurst_l3_enabled: bool = Field(default=True)
     auto_ghost_rsi_cci_enabled: bool = Field(default=False)
+    auto_ghost_volatility_gate_enabled: bool = Field(default=False)
+    auto_ghost_min_volatility: float = Field(default=0.0, ge=0.0, le=100.0)
+    auto_ghost_max_volatility: float = Field(default=100.0, ge=0.0, le=100.0)
+    auto_ghost_liquidity_gate_enabled: bool = Field(default=False)
+    auto_ghost_min_liquidity: float = Field(default=0.0, ge=0.0, le=100.0)
+    auto_ghost_max_liquidity: float = Field(default=100.0, ge=0.0, le=100.0)
     ai_trade_interval: int = Field(default=10, ge=1, le=100)
+
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
 
@@ -120,7 +127,14 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             auto_ghost_hurst_l2_enabled=body.auto_ghost_hurst_l2_enabled,
             auto_ghost_hurst_l3_enabled=body.auto_ghost_hurst_l3_enabled,
             auto_ghost_rsi_cci_enabled=body.auto_ghost_rsi_cci_enabled,
+            volatility_gate_enabled=body.auto_ghost_volatility_gate_enabled,
+            min_volatility=body.auto_ghost_min_volatility,
+            max_volatility=body.auto_ghost_max_volatility,
+            liquidity_gate_enabled=body.auto_ghost_liquidity_gate_enabled,
+            min_liquidity=body.auto_ghost_min_liquidity,
+            max_liquidity=body.auto_ghost_max_liquidity,
         )
+
         return JSONResponse(content={"ok": True, **config})
     except Exception as exc:
         logger.error("Failed to update runtime config: %s", exc)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
@@ -271,7 +272,7 @@ class MarketContextEngine:
         self._closed_candles: deque[Candle] = deque(maxlen=self.config.max_candles)
         self._current_candle: Candle | None = None
         self._cached_context: dict[str, Any] | None = None
-        self._tick_timestamps: deque[float] = deque(maxlen=60)
+        self._tick_timestamps: deque[float] = deque(maxlen=120)
         self._tick_prices: deque[float] = deque(maxlen=400)
         self._adx_state: dict[str, Any] | None = None
         self.extensions_override_hurst: bool = False
@@ -588,6 +589,48 @@ class MarketContextEngine:
         structure_atr_candidates = [value for value in [nearest_support_atr, nearest_resistance_atr] if value is not None]
         nearest_structure_atr = min(structure_atr_candidates) if structure_atr_candidates else None
 
+        # Compute volatility score
+        prices_array = np.array(self._tick_prices)
+        if len(prices_array) >= 10:
+            returns = np.diff(prices_array) / prices_array[:-1]
+            returns_std = float(np.std(returns))
+        else:
+            returns_std = 0.0
+
+        # Normalization ceilings — must match backtesting/unified_engine.py to ensure
+        # gate thresholds calibrated in backtests remain valid in live execution.
+        _MAX_RETURNS_STD = 0.002   # Max expected tick-by-tick log-return std dev (aligned with backtest engine)
+        _MAX_ATR_RATIO   = 0.005   # Max expected ATR/price ratio
+
+        vol_score = 0.0
+        if price > 0:
+            norm_std = min(1.0, returns_std / _MAX_RETURNS_STD)
+            if atr is not None and atr > 0:
+                atr_ratio = atr / price
+                norm_atr = min(1.0, atr_ratio / _MAX_ATR_RATIO)
+                composite = (norm_atr * 0.5) + (norm_std * 0.5)
+            else:
+                composite = norm_std
+            frequency_multiplier = min(1.0, tick_frequency / 30.0)
+            vol_score = float(np.clip(composite * frequency_multiplier, 0.0, 1.0)) * 100.0
+
+
+        # Compute liquidity score — sigmoid normalization centred on the empirical
+        # Pocket Option OTC tick rate of ~120 ticks/min (≈0.5 s/tick).
+        #   freq=0   → ~2%   (dead)       freq=60  → ~27%  (slow)
+        #   freq=120 → 50%   (normal PO)  freq=200 → ~73%  (fast)
+        #   freq=300 → ~88%  (never hard-saturates at 100% under normal conditions)
+        # Startup dampening prevents premature HIGH scores while the buffer warms up.
+        _LIQ_MIDPOINT = 120.0   # ticks/min that maps to exactly 50%
+        _LIQ_STEEPNESS = 4.0    # sigmoid transition sharpness
+        if tick_frequency <= 0:
+            liq_base = 0.0
+        else:
+            _x = (tick_frequency - _LIQ_MIDPOINT) / _LIQ_MIDPOINT
+            liq_base = 1.0 / (1.0 + math.exp(-_LIQ_STEEPNESS * _x))
+        buffer_ratio = min(1.0, len(self._tick_timestamps) / 30.0)
+        liq_score = (liq_base * buffer_ratio) * 100.0
+
         return {
             "ready": c["ready"],
             "candle_count": c["candle_count"],
@@ -618,6 +661,8 @@ class MarketContextEngine:
             "tick_health": tick_health,
             "cci_divergence": c["cci_divergence"],
             "hurst": round(float(c.get("hurst", 0.5)), 3),
+            "volatility_score": round(vol_score, 1),
+            "liquidity_score": round(liq_score, 1),
         }
 
 

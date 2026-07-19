@@ -66,6 +66,13 @@ class AutoGhostConfig:
     hurst_l2_enabled: bool = True
     hurst_l3_enabled: bool = True
     rsi_cci_enabled: bool = False
+    volatility_gate_enabled: bool = False
+    min_volatility: float = 0.0
+    max_volatility: float = 100.0
+    liquidity_gate_enabled: bool = False
+    min_liquidity: float = 0.0
+    max_liquidity: float = 100.0
+
 
 
 class AutoGhostService:
@@ -146,6 +153,13 @@ class AutoGhostService:
         hurst_l2_enabled: bool | None = None,
         hurst_l3_enabled: bool | None = None,
         rsi_cci_enabled: bool | None = None,
+        volatility_gate_enabled: bool | None = None,
+        min_volatility: float | None = None,
+        max_volatility: float | None = None,
+        liquidity_gate_enabled: bool | None = None,
+        min_liquidity: float | None = None,
+        max_liquidity: float | None = None,
+
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
         updates: dict[str, Any] = {}
@@ -229,6 +243,19 @@ class AutoGhostService:
             updates["hurst_l3_enabled"] = bool(hurst_l3_enabled)
         if rsi_cci_enabled is not None:
             updates["rsi_cci_enabled"] = bool(rsi_cci_enabled)
+        if volatility_gate_enabled is not None:
+            updates["volatility_gate_enabled"] = bool(volatility_gate_enabled)
+        if min_volatility is not None:
+            updates["min_volatility"] = float(min_volatility)
+        if max_volatility is not None:
+            updates["max_volatility"] = float(max_volatility)
+        if liquidity_gate_enabled is not None:
+            updates["liquidity_gate_enabled"] = bool(liquidity_gate_enabled)
+        if min_liquidity is not None:
+            updates["min_liquidity"] = float(min_liquidity)
+        if max_liquidity is not None:
+            updates["max_liquidity"] = float(max_liquidity)
+
  
         self.config = replace(self.config, **updates)
  
@@ -341,6 +368,14 @@ class AutoGhostService:
             "auto_ghost_allowed_regimes": self.config.allowed_regimes,
             "auto_ghost_require_regime_stable": self.config.require_regime_stable,
             "auto_ghost_hurst_filter_enabled": self.config.hurst_filter_enabled,
+
+            "auto_ghost_volatility_gate_enabled": self.config.volatility_gate_enabled,
+            "auto_ghost_min_volatility": self.config.min_volatility,
+            "auto_ghost_max_volatility": self.config.max_volatility,
+            "auto_ghost_liquidity_gate_enabled": self.config.liquidity_gate_enabled,
+            "auto_ghost_min_liquidity": self.config.min_liquidity,
+            "auto_ghost_max_liquidity": self.config.max_liquidity,
+
             "auto_ghost_hurst_filter_threshold": self.config.hurst_filter_threshold,
             "auto_ghost_hurst_mean_revert_threshold": self.config.hurst_mean_revert_threshold,
             "auto_ghost_hurst_trend_threshold": self.config.hurst_trend_threshold,
@@ -621,6 +656,37 @@ class AutoGhostService:
                     self.config.hurst_filter_threshold,
                 )
                 return self._reject(asset, 'hurst_filter')
+
+        # Volatility Gate checks
+        vol_score = oteo_result.get("market_context", {}).get("volatility_score") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("volatility_score")
+        if vol_score is None:
+            vol_score = oteo_result.get("volatility_score")
+        if self.config.volatility_gate_enabled and vol_score is not None:
+            if vol_score < self.config.min_volatility or vol_score > self.config.max_volatility:
+                logger.info(
+                    "Auto-Ghost skipped %s: volatility score %.1f outside gate [%.1f, %.1f] (Volatility Gate)",
+                    asset,
+                    vol_score,
+                    self.config.min_volatility,
+                    self.config.max_volatility,
+                )
+                return self._reject(asset, 'volatility_gate')
+
+        # Liquidity Gate checks
+        liq_score = oteo_result.get("market_context", {}).get("liquidity_score") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("liquidity_score")
+        if liq_score is None:
+            liq_score = oteo_result.get("liquidity_score")
+        if self.config.liquidity_gate_enabled and liq_score is not None:
+            if liq_score < self.config.min_liquidity or liq_score > self.config.max_liquidity:
+                logger.info(
+                    "Auto-Ghost skipped %s: liquidity score %.1f outside gate [%.1f, %.1f] (Liquidity Gate)",
+                    asset,
+                    liq_score,
+                    self.config.min_liquidity,
+                    self.config.max_liquidity,
+                )
+                return self._reject(asset, 'liquidity_gate')
+
         # Plugin veto check
         if getattr(self, "extension_manager", None) is not None:
             for ext in self.extension_manager.get_active_extensions():

@@ -14,6 +14,36 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
+
+# Windows ProactorEventLoop assertion error monkeypatch
+if sys.platform == "win32":
+    try:
+        import asyncio.proactor_events
+        _classes = [
+            '_ProactorBaseWritePipeTransport',
+            '_ProactorDatagramTransport',
+            '_ProactorDuplexPipeTransport',
+            '_ProactorSocketTransport',
+            '_ProactorWritePipeTransport'
+        ]
+        for _name in _classes:
+            _cls = getattr(asyncio.proactor_events, _name, None)
+            if _cls:
+                _orig = getattr(_cls, '_loop_writing', None)
+                if _orig:
+                    def _make_wrapper(orig, name):
+                        def wrapper(self, *args, **kwargs):
+                            try:
+                                return orig(self, *args, **kwargs)
+                            except AssertionError:
+                                # Suppress known windows proactor assertion errors on abrupt client disconnect
+                                pass
+                        return wrapper
+                    setattr(_cls, '_loop_writing', _make_wrapper(_orig, _name))
+    except Exception as _patch_err:
+        pass
+
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from dataclasses import asdict

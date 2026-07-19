@@ -62,6 +62,13 @@ export const SETTINGS_DEFAULTS = {
   hurstL2Enabled: true,
   hurstL3Enabled: true,
   autoGhostRsiCciEnabled: false,
+  autoGhostVolatilityGateEnabled: false,
+  minVolatilityScore: 0,
+  maxVolatilityScore: 100,
+  autoGhostLiquidityGateEnabled: false,
+  minLiquidityScore: 0,
+  maxLiquidityScore: 100,
+
 
   // Trade Markers
   showGhostEntryMarkers: true,
@@ -215,6 +222,13 @@ export function validateSettings(input = {}) {
     hurstL2Enabled: toBoolean(input.hurstL2Enabled, SETTINGS_DEFAULTS.hurstL2Enabled),
     hurstL3Enabled: toBoolean(input.hurstL3Enabled, SETTINGS_DEFAULTS.hurstL3Enabled),
     autoGhostRsiCciEnabled: toBoolean(input.autoGhostRsiCciEnabled, SETTINGS_DEFAULTS.autoGhostRsiCciEnabled),
+    autoGhostVolatilityGateEnabled: toBoolean(input.autoGhostVolatilityGateEnabled, SETTINGS_DEFAULTS.autoGhostVolatilityGateEnabled),
+    minVolatilityScore: toNumber(input.minVolatilityScore, SETTINGS_DEFAULTS.minVolatilityScore, { min: 0, max: 100, integer: false }),
+    maxVolatilityScore: toNumber(input.maxVolatilityScore, SETTINGS_DEFAULTS.maxVolatilityScore, { min: 0, max: 100, integer: false }),
+    autoGhostLiquidityGateEnabled: toBoolean(input.autoGhostLiquidityGateEnabled, SETTINGS_DEFAULTS.autoGhostLiquidityGateEnabled),
+    minLiquidityScore: toNumber(input.minLiquidityScore, SETTINGS_DEFAULTS.minLiquidityScore, { min: 0, max: 100, integer: false }),
+    maxLiquidityScore: toNumber(input.maxLiquidityScore, SETTINGS_DEFAULTS.maxLiquidityScore, { min: 0, max: 100, integer: false }),
+
 
 
 
@@ -356,6 +370,14 @@ export const useSettingsStore = create()(
       setHurstL2Enabled: (val) => commitSettingsPatch(set, { hurstL2Enabled: val }),
       setHurstL3Enabled: (val) => commitSettingsPatch(set, { hurstL3Enabled: val }),
       setAutoGhostRsiCciEnabled: (val) => commitSettingsPatch(set, { autoGhostRsiCciEnabled: val }),
+
+      setAutoGhostVolatilityGateEnabled: (val) => commitSettingsPatch(set, { autoGhostVolatilityGateEnabled: val }),
+      setMinVolatilityScore: (val) => commitSettingsPatch(set, { minVolatilityScore: val }),
+      setMaxVolatilityScore: (val) => commitSettingsPatch(set, { maxVolatilityScore: val }),
+      setAutoGhostLiquidityGateEnabled: (val) => commitSettingsPatch(set, { autoGhostLiquidityGateEnabled: val }),
+      setMinLiquidityScore: (val) => commitSettingsPatch(set, { minLiquidityScore: val }),
+      setMaxLiquidityScore: (val) => commitSettingsPatch(set, { maxLiquidityScore: val }),
+
       loadGhostProtocol: (key) => {
         set((state) => {
           const protocols = state.ghostProtocols || {};

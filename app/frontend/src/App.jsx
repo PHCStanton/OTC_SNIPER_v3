@@ -271,9 +271,16 @@ export default function App() {
           auto_ghost_regime_gate_enabled: state.ghostRegimeGateEnabled,
           auto_ghost_allowed_regimes: state.ghostAllowedRegimes,
           auto_ghost_require_regime_stable: state.ghostRequireRegimeStable,
+          auto_ghost_volatility_gate_enabled: state.autoGhostVolatilityGateEnabled,
+          auto_ghost_min_volatility: state.minVolatilityScore,
+          auto_ghost_max_volatility: state.maxVolatilityScore,
+          auto_ghost_liquidity_gate_enabled: state.autoGhostLiquidityGateEnabled,
+          auto_ghost_min_liquidity: state.minLiquidityScore,
+          auto_ghost_max_liquidity: state.maxLiquidityScore,
           ai_trade_interval: state.aiTradeInterval,
           ai_pulse_enabled: state.aiPulseEnabled,
           ai_pulse_interval_seconds: state.aiPulseIntervalSeconds,
+
         });
       } catch (err) {
         console.warn('[App] Failed to sync runtime strategy config:', err.message);
