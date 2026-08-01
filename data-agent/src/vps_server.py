@@ -95,7 +95,26 @@ def run_http_server(port: int = 8090) -> HTTPServer:
     return server
 
 
+def load_env_file() -> None:
+    """Load key-value pairs from .env or data-agent/.env into os.environ."""
+    for env_path in [Path(".env"), Path("data-agent/.env"), _DATA_AGENT_DIR / ".env"]:
+        if env_path.exists():
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip().strip("'\"")
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+            except Exception as err:
+                logger.warning(f"Could not load {env_path}: {err}")
+            break
+
+
 if __name__ == "__main__":
+    load_env_file()
     port = int(os.getenv("TELEMETRY_PORT", "8090"))
     t = Thread(target=run_http_server, args=(port,), daemon=True)
     t.start()
@@ -105,7 +124,15 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.create_task(sink.start())
-        # loop.create_task(collector.start()) # Launched when valid SSID is configured
+
+        po_ssid = os.getenv("PO_SSID", "").strip()
+        if po_ssid and po_ssid != "demo_ssid_placeholder":
+            collector.ssid = po_ssid
+            loop.create_task(collector.start())
+            logger.info("🟢 SSIDTickCollector task launched for live streaming.")
+        else:
+            logger.info("ℹ️ PO_SSID not configured. Tick Collector standby (GCP Sink & Telemetry API active).")
+
         loop.run_forever()
     except KeyboardInterrupt:
         logger.info("Shutting down VPS Data Agent...")
