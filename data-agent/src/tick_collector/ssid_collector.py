@@ -135,7 +135,10 @@ class SSIDTickCollector:
 
     async def _send_auth(self, ws: Any) -> None:
         """Send authentication frame using session SSID."""
-        auth_msg = f'42["auth",{{"session":"{self.ssid}","isDemo":{self.is_demo}}}]'
+        if self.ssid.startswith("42"):
+            auth_msg = self.ssid
+        else:
+            auth_msg = f'42["auth",{{"session":"{self.ssid}","isDemo":{self.is_demo}}}]'
         await ws.send(auth_msg)
         logger.info("Sent WebSocket authentication frame.")
 
@@ -164,10 +167,15 @@ class SSIDTickCollector:
                 event_name = data[0]
                 payload = data[1]
 
-                if event_name in ("tick", "quote", "updateStream"):
-                    self._dispatch_tick(payload)
-                elif event_name == "auth_success":
-                    logger.info("Authentication confirmed by remote server.")
+                if event_name in ("tick", "quote", "updateStream", "updateTick", "loadHistory"):
+                    if isinstance(payload, list):
+                        for item in payload:
+                            if isinstance(item, dict):
+                                self._dispatch_tick(item)
+                    elif isinstance(payload, dict):
+                        self._dispatch_tick(payload)
+                elif "success" in str(event_name).lower() or "auth" in str(event_name).lower():
+                    logger.info(f"Auth/Server event: {event_name}")
             except Exception as parse_err:
                 logger.debug(f"Failed parsing message frame: {parse_err}")
 
