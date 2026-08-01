@@ -24,11 +24,12 @@ scratch/
 .zencoder/
 .zenflow/
 
-# .ENV
+# .ENV & SECRETS
 .env
 .env.*
 **/.env
 **/.env.*
+data-agent/configs/*.json
 
 # CHROME PROFILE
 Chrome_profile/
