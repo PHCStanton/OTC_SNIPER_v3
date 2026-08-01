@@ -35,7 +35,7 @@ class SSIDTickCollector:
         ssid: str,
         assets: Optional[List[str]] = None,
         is_demo: bool = True,
-        ws_url: str = "wss://api-fin.po.market/socket.io/?EIO=4&transport=websocket",
+        ws_url: str = "wss://api-us-north.po.market/socket.io/?EIO=4&transport=websocket",
         reconnect_delay_base: float = 2.0,
         max_reconnect_delay: float = 60.0,
     ):
@@ -85,12 +85,22 @@ class SSIDTickCollector:
                     logger.warning(f"Reconnecting in {delay:.1f}s (attempt {attempt})...")
                     await asyncio.sleep(delay)
 
-                async with websockets.connect(
-                    self.ws_url,
-                    ping_interval=20,
-                    ping_timeout=10,
-                    extra_headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
-                ) as ws:
+                import inspect
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                    "Origin": "https://po.market",
+                }
+                connect_kwargs = {"ping_interval": 20, "ping_timeout": 10, "open_timeout": 10}
+                try:
+                    sig = inspect.signature(websockets.connect)
+                    if "additional_headers" in sig.parameters:
+                        connect_kwargs["additional_headers"] = headers
+                    else:
+                        connect_kwargs["extra_headers"] = headers
+                except Exception:
+                    connect_kwargs["additional_headers"] = headers
+
+                async with websockets.connect(self.ws_url, **connect_kwargs) as ws:
                     self._ws = ws
                     attempt = 0  # Reset on successful connect
                     logger.info("Connected to Pocket Option WebSocket server.")
