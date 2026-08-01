@@ -228,44 +228,6 @@ def _detect_cci_divergence(candles: list[Candle], cci_values: list[float]) -> st
     return None
 
 
-def calculate_single_scale_hurst(prices: list[float] | np.ndarray, window: int = 200) -> float:
-    """
-    Calculate Hurst Exponent using simplified Rescaled Range (R/S) analysis for a single reference window.
-    Optimized for baseline L1 filtering.
-    """
-    if len(prices) < 100:
-        return 0.5
-        
-    prices = np.asarray(prices[-window:])
-    if len(prices) < 50:
-        return 0.5
-        
-    # Calculate log returns
-    returns = np.diff(np.log(prices))
-    N = len(returns)
-    if N < 10:
-        return 0.5
-        
-    # Basic forward fill NaNs
-    mask = np.isnan(returns)
-    if np.any(mask):
-        if np.all(mask):
-            return 0.5
-        idx = np.where(~mask, np.arange(mask.shape[0]), 0)
-        np.maximum.accumulate(idx, out=idx)
-        returns = returns[idx]
-        
-    mean = np.mean(returns)
-    y = np.cumsum(returns - mean)
-    r = np.max(y) - np.min(y)
-    s = np.std(returns, ddof=1)
-    
-    if s > 0:
-        h = np.log(r / s) / np.log(N)
-        return float(np.clip(h, 0.0, 1.0))
-    return 0.5
-
-
 class MarketContextEngine:
     def __init__(self, config: Level2Config | None = None):
         self.config = config or Level2Config()
@@ -275,7 +237,6 @@ class MarketContextEngine:
         self._tick_timestamps: deque[float] = deque(maxlen=120)
         self._tick_prices: deque[float] = deque(maxlen=400)
         self._adx_state: dict[str, Any] | None = None
-        self.extensions_override_hurst: bool = False
 
     def _bootstrap_adx_state(self, closed_candles: list[Candle], period: int) -> dict[str, Any] | None:
         if len(closed_candles) < period + 2:
@@ -533,12 +494,6 @@ class MarketContextEngine:
             else:
                 cci_state = "neutral"
 
-            # Calculate single-scale Hurst exponent on the rolling tick prices
-            if not self.extensions_override_hurst:
-                hurst_val = calculate_single_scale_hurst(list(self._tick_prices), window=300)
-            else:
-                hurst_val = self._cached_context.get("hurst", 0.5) if self._cached_context else 0.5
-
             self._cached_context = {
                 "ready": len(closed_candles) >= max(self.config.adx_period + 2, self.config.cci_period, self.config.micro_pivot_span * 3 + 2),
                 "candle_count": len(closed_candles),
@@ -560,7 +515,6 @@ class MarketContextEngine:
                 "reversal_friendly": adx is not None and (adx < 28 or (adx_slope is not None and adx_slope < -0.5)),
                 "distant_structure_atr_threshold": self.config.distant_structure_atr,
                 "cci_divergence": cci_divergence,
-                "hurst": hurst_val,
             }
 
         c = self._cached_context
@@ -660,7 +614,6 @@ class MarketContextEngine:
             "tick_frequency": round(float(tick_frequency), 1),
             "tick_health": tick_health,
             "cci_divergence": c["cci_divergence"],
-            "hurst": round(float(c.get("hurst", 0.5)), 3),
             "volatility_score": round(vol_score, 1),
             "liquidity_score": round(liq_score, 1),
         }

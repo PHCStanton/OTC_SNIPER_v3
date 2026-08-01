@@ -246,16 +246,9 @@ export default function App() {
           auto_ghost_drawdown_cooldown_seconds: state.autoGhostDrawdownCooldownSeconds,
           auto_ghost_minimum_payout: state.autoGhostMinimumPayout / 100,
           auto_ghost_blacklist_assets: state.ghostBlacklist,
-          auto_ghost_hurst_l2_enabled: state.hurstL2Enabled,
-          auto_ghost_hurst_l3_enabled: state.hurstL3Enabled,
           auto_ghost_rsi_cci_enabled: state.autoGhostRsiCciEnabled,
-          auto_ghost_hurst_filter_enabled: state.hurstFilterEnabled,
-          auto_ghost_hurst_filter_threshold: state.hurstFilterThreshold,
-          auto_ghost_hurst_mean_revert_threshold: state.hurstMeanRevertThreshold,
-          auto_ghost_hurst_trend_threshold: state.hurstTrendThreshold,
+          auto_ghost_adaptive_expiry_enabled: state.adaptiveExpiryEnabled,
           auto_ghost_min_adaptive_expiry: state.minAdaptiveExpiry,
-          auto_ghost_hurst_min_scale_cutoff: state.hurstMinScaleCutoff,
-          auto_ghost_hurst_ai_confidence_threshold: state.hurstAiConfidenceThreshold,
           auto_ghost_manipulation_severity_threshold: state.autoGhostManipulationSeverityThreshold,
           auto_ghost_block_on_manipulation: state.autoGhostBlockOnManipulation,
           auto_ghost_max_trades_per_timeframe: state.ghostMaxTradesPerTimeframe,
@@ -277,10 +270,13 @@ export default function App() {
           auto_ghost_liquidity_gate_enabled: state.autoGhostLiquidityGateEnabled,
           auto_ghost_min_liquidity: state.minLiquidityScore,
           auto_ghost_max_liquidity: state.maxLiquidityScore,
+          auto_ghost_adx_gate_enabled: state.autoGhostAdxGateEnabled,
+          auto_ghost_cci_gate_enabled: state.autoGhostCciGateEnabled,
+          auto_ghost_bayesian_filter_enabled: state.autoGhostBayesianFilterEnabled,
+          auto_ghost_bayesian_min_probability: state.autoGhostBayesianMinProbability / 100.0,
           ai_trade_interval: state.aiTradeInterval,
           ai_pulse_enabled: state.aiPulseEnabled,
           ai_pulse_interval_seconds: state.aiPulseIntervalSeconds,
-
         });
       } catch (err) {
         console.warn('[App] Failed to sync runtime strategy config:', err.message);

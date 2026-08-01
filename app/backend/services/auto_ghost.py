@@ -55,16 +55,9 @@ class AutoGhostConfig:
     regime_gate_enabled: bool = False
     allowed_regimes: list[str] | None = None
     require_regime_stable: bool = False
-    hurst_filter_enabled: bool = False
-    hurst_filter_threshold: float = 0.48
-    hurst_mean_revert_threshold: float = 0.44
-    hurst_trend_threshold: float = 0.58
+    adaptive_expiry_enabled: bool = True
     min_adaptive_expiry: int = 60
-    hurst_min_scale_cutoff: int = 12
-    hurst_ai_confidence_threshold: float = 80.0
     blacklist_assets: list[str] | None = None
-    hurst_l2_enabled: bool = True
-    hurst_l3_enabled: bool = True
     rsi_cci_enabled: bool = False
     volatility_gate_enabled: bool = False
     min_volatility: float = 0.0
@@ -72,6 +65,13 @@ class AutoGhostConfig:
     liquidity_gate_enabled: bool = False
     min_liquidity: float = 0.0
     max_liquidity: float = 100.0
+    adx_gate_enabled: bool = False
+    cci_gate_enabled: bool = False
+    bayesian_filter_enabled: bool = False
+    bayesian_min_probability: float = 0.55
+
+    def __post_init__(self):
+        pass
 
 
 
@@ -142,6 +142,7 @@ class AutoGhostService:
         regime_gate_enabled: bool | None = None,
         allowed_regimes: list[str] | None = None,
         require_regime_stable: bool | None = None,
+        adaptive_expiry_enabled: bool | None = None,
         hurst_filter_enabled: bool | None = None,
         hurst_filter_threshold: float | None = None,
         hurst_mean_revert_threshold: float | None = None,
@@ -159,6 +160,10 @@ class AutoGhostService:
         liquidity_gate_enabled: bool | None = None,
         min_liquidity: float | None = None,
         max_liquidity: float | None = None,
+        adx_gate_enabled: bool | None = None,
+        cci_gate_enabled: bool | None = None,
+        bayesian_filter_enabled: bool | None = None,
+        bayesian_min_probability: float | None = None,
 
     ) -> dict[str, Any]:
         previous_enabled = self.config.enabled
@@ -221,26 +226,12 @@ class AutoGhostService:
             updates["allowed_regimes"] = [str(r).strip().upper() for r in allowed_regimes if str(r).strip()]
         if require_regime_stable is not None:
             updates["require_regime_stable"] = bool(require_regime_stable)
-        if hurst_filter_enabled is not None:
-            updates["hurst_filter_enabled"] = bool(hurst_filter_enabled)
-        if hurst_filter_threshold is not None:
-            updates["hurst_filter_threshold"] = float(hurst_filter_threshold)
-        if hurst_mean_revert_threshold is not None:
-            updates["hurst_mean_revert_threshold"] = float(hurst_mean_revert_threshold)
-        if hurst_trend_threshold is not None:
-            updates["hurst_trend_threshold"] = float(hurst_trend_threshold)
+        if adaptive_expiry_enabled is not None:
+            updates["adaptive_expiry_enabled"] = bool(adaptive_expiry_enabled)
         if min_adaptive_expiry is not None:
             updates["min_adaptive_expiry"] = int(min_adaptive_expiry)
-        if hurst_min_scale_cutoff is not None:
-            updates["hurst_min_scale_cutoff"] = int(hurst_min_scale_cutoff)
-        if hurst_ai_confidence_threshold is not None:
-            updates["hurst_ai_confidence_threshold"] = float(hurst_ai_confidence_threshold)
         if blacklist_assets is not None:
             updates["blacklist_assets"] = [str(a).strip() for a in blacklist_assets if str(a).strip()]
-        if hurst_l2_enabled is not None:
-            updates["hurst_l2_enabled"] = bool(hurst_l2_enabled)
-        if hurst_l3_enabled is not None:
-            updates["hurst_l3_enabled"] = bool(hurst_l3_enabled)
         if rsi_cci_enabled is not None:
             updates["rsi_cci_enabled"] = bool(rsi_cci_enabled)
         if volatility_gate_enabled is not None:
@@ -255,20 +246,30 @@ class AutoGhostService:
             updates["min_liquidity"] = float(min_liquidity)
         if max_liquidity is not None:
             updates["max_liquidity"] = float(max_liquidity)
+        if adx_gate_enabled is not None:
+            updates["adx_gate_enabled"] = bool(adx_gate_enabled)
+        if cci_gate_enabled is not None:
+            updates["cci_gate_enabled"] = bool(cci_gate_enabled)
+        if bayesian_filter_enabled is not None:
+            updates["bayesian_filter_enabled"] = bool(bayesian_filter_enabled)
+        if bayesian_min_probability is not None:
+            updates["bayesian_min_probability"] = float(bayesian_min_probability)
 
- 
         self.config = replace(self.config, **updates)
- 
+
         # Update extensions' enabled flags dynamically
         if getattr(self, "extension_manager", None) is not None:
             for ext in self.extension_manager.get_active_extensions():
-                if ext.__class__.__name__ == "HurstAdaptiveExpiry":
-                    ext.enabled = self.config.hurst_l2_enabled
-                elif ext.__class__.__name__ == "HurstAiNoise":
-                    ext.enabled = self.config.hurst_l3_enabled
+                if ext.__class__.__name__ == "VolatilityAdaptiveExpiry":
+                    ext.enabled = self.config.adaptive_expiry_enabled
+                elif ext.__class__.__name__ == "VolatilityLiquidityGates":
+                    ext.enabled = self.config.volatility_gate_enabled or self.config.liquidity_gate_enabled
                 elif ext.__class__.__name__ == "RSICCIConfluenceExtension":
                     ext.enabled = self.config.rsi_cci_enabled
- 
+                elif ext.__class__.__name__ == "BayesianSignalFilter":
+                    ext.enabled = self.config.bayesian_filter_enabled
+                    ext.min_win_probability = self.config.bayesian_min_probability
+
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
             self._pending_signals.clear()
@@ -294,45 +295,21 @@ class AutoGhostService:
         elif not self.config.enabled and previous_enabled:
             self._pending_signals.clear()
         return self.status
- 
+
     def clear_plugin_cache(self) -> None:
         """Invalidate cached extension detection flags (called on plugin reload)."""
-        for attr in ("_has_premium_hurst", "_has_elite_hurst"):
-            if hasattr(self, attr):
-                delattr(self, attr)
         # Re-apply current enablement state to extensions
         if getattr(self, "extension_manager", None) is not None:
             for ext in self.extension_manager.get_active_extensions():
-                if ext.__class__.__name__ == "HurstAdaptiveExpiry":
-                    ext.enabled = self.config.hurst_l2_enabled
-                elif ext.__class__.__name__ == "HurstAiNoise":
-                    ext.enabled = self.config.hurst_l3_enabled
+                if ext.__class__.__name__ == "VolatilityAdaptiveExpiry":
+                    ext.enabled = self.config.adaptive_expiry_enabled
+                elif ext.__class__.__name__ == "VolatilityLiquidityGates":
+                    ext.enabled = self.config.volatility_gate_enabled or self.config.liquidity_gate_enabled
                 elif ext.__class__.__name__ == "RSICCIConfluenceExtension":
                     ext.enabled = self.config.rsi_cci_enabled
-
-    @property
-    def has_premium_hurst(self) -> bool:
-        if not hasattr(self, "_has_premium_hurst"):
-            if getattr(self, "extension_manager", None) is not None:
-                self._has_premium_hurst = any(
-                    ext.__class__.__name__ == "HurstAdaptiveExpiry"
-                    for ext in self.extension_manager.get_active_extensions()
-                )
-            else:
-                return False
-        return self._has_premium_hurst
-
-    @property
-    def has_elite_hurst(self) -> bool:
-        if not hasattr(self, "_has_elite_hurst"):
-            if getattr(self, "extension_manager", None) is not None:
-                self._has_elite_hurst = any(
-                    ext.__class__.__name__ == "HurstAiNoise"
-                    for ext in self.extension_manager.get_active_extensions()
-                )
-            else:
-                return False
-        return self._has_elite_hurst
+                elif ext.__class__.__name__ == "BayesianSignalFilter":
+                    ext.enabled = self.config.bayesian_filter_enabled
+                    ext.min_win_probability = self.config.bayesian_min_probability
 
     @property
     def status(self) -> dict[str, Any]:
@@ -344,8 +321,6 @@ class AutoGhostService:
             "auto_ghost_per_asset_cooldown_seconds": self.config.per_asset_cooldown_seconds,
             "auto_ghost_minimum_payout_pct": self.config.minimum_payout_pct,
             "auto_ghost_blacklist_assets": self.config.blacklist_assets or [],
-            "auto_ghost_hurst_l2_enabled": self.config.hurst_l2_enabled,
-            "auto_ghost_hurst_l3_enabled": self.config.hurst_l3_enabled,
             "auto_ghost_rsi_cci_enabled": self.config.rsi_cci_enabled,
             "auto_ghost_manipulation_severity_threshold": self.config.manipulation_severity_threshold,
             "auto_ghost_block_on_manipulation": self.config.block_on_manipulation,
@@ -367,7 +342,6 @@ class AutoGhostService:
             "auto_ghost_regime_gate_enabled": self.config.regime_gate_enabled,
             "auto_ghost_allowed_regimes": self.config.allowed_regimes,
             "auto_ghost_require_regime_stable": self.config.require_regime_stable,
-            "auto_ghost_hurst_filter_enabled": self.config.hurst_filter_enabled,
 
             "auto_ghost_volatility_gate_enabled": self.config.volatility_gate_enabled,
             "auto_ghost_min_volatility": self.config.min_volatility,
@@ -375,15 +349,13 @@ class AutoGhostService:
             "auto_ghost_liquidity_gate_enabled": self.config.liquidity_gate_enabled,
             "auto_ghost_min_liquidity": self.config.min_liquidity,
             "auto_ghost_max_liquidity": self.config.max_liquidity,
-
-            "auto_ghost_hurst_filter_threshold": self.config.hurst_filter_threshold,
-            "auto_ghost_hurst_mean_revert_threshold": self.config.hurst_mean_revert_threshold,
-            "auto_ghost_hurst_trend_threshold": self.config.hurst_trend_threshold,
+            "auto_ghost_adx_gate_enabled": self.config.adx_gate_enabled,
+            "auto_ghost_cci_gate_enabled": self.config.cci_gate_enabled,
+            "auto_ghost_adaptive_expiry_enabled": self.config.adaptive_expiry_enabled,
             "auto_ghost_min_adaptive_expiry": self.config.min_adaptive_expiry,
-            "auto_ghost_hurst_min_scale_cutoff": self.config.hurst_min_scale_cutoff,
-            "auto_ghost_hurst_ai_confidence_threshold": self.config.hurst_ai_confidence_threshold,
-            "hasPremiumHurst": self.has_premium_hurst,
-            "hasEliteHurst": self.has_elite_hurst,
+            "auto_ghost_bayesian_filter_enabled": self.config.bayesian_filter_enabled,
+            "auto_ghost_bayesian_min_probability": self.config.bayesian_min_probability,
+
             "auto_ghost_active_trades": len(self._active_assets),
             "auto_ghost_session_id": self._session_id,
             "auto_ghost_session_pnl": self._session_pnl,
@@ -425,7 +397,35 @@ class AutoGhostService:
             "regime_label": entry_context.get("regime_label", "UNKNOWN") if entry_context else "UNKNOWN",
             "entry_context": entry_context,
         })
-        # deque(maxlen=200) handles eviction automatically
+        # deque(maxlen=200) handles eviction automatically
+
+        # Dynamic Knowledge Base updating
+        if asset and entry_context and outcome in {"win", "loss"}:
+            try:
+                from .ai_review import KnowledgeBaseLoader
+                kb_loader = KnowledgeBaseLoader.get_instance()
+                
+                strategy_level = "level1"
+                if entry_context.get("level3_enabled") and (entry_context.get("regime_label") or entry_context.get("regime")):
+                    strategy_level = "level3"
+                elif entry_context.get("level2_enabled"):
+                    strategy_level = "level2"
+                    
+                regime_label = entry_context.get("regime_label") or (entry_context.get("regime", {}).get("regime_label") if isinstance(entry_context.get("regime"), dict) else entry_context.get("regime"))
+                if not regime_label:
+                    regime_label = "RANGE_BOUND"
+                    
+                kb_loader.record_trade_outcome(
+                    asset=asset,
+                    strategy_level=strategy_level,
+                    oteo_score=float(entry_context.get("oteo_score", 50.0)),
+                    regime_label=str(regime_label),
+                    direction=direction or str(entry_context.get("recommended", "CALL")),
+                    outcome=outcome,
+                    profit=profit,
+                )
+            except Exception as kb_err:
+                logger.error("Failed to dynamically update Knowledge Base in report_outcome: %s", kb_err)
 
         if outcome == "win":
             self._session_wins += 1
@@ -486,6 +486,20 @@ class AutoGhostService:
                     )
             elif outcome == "win":
                 self._consecutive_losses.pop(asset, None)
+
+        if getattr(self, "extension_manager", None) is not None:
+            for ext in self.extension_manager.get_active_extensions():
+                if hasattr(ext, "on_trade_outcome"):
+                    try:
+                        ext.on_trade_outcome({
+                            "asset": asset,
+                            "outcome": outcome,
+                            "profit": profit,
+                            "direction": direction,
+                            "entry_context": entry_context,
+                        })
+                    except Exception as ext_err:
+                        logger.error("Error calling on_trade_outcome on %s: %s", ext.__class__.__name__, ext_err)
 
         if entry_context and outcome in {"win", "loss"}:
             is_win = outcome == "win"
@@ -641,22 +655,6 @@ class AutoGhostService:
             logger.info("Auto-Ghost skipped %s: regime %s is unstable (Ghost Protocol gate)", asset, regime_label)
             return self._reject(asset, 'regime_unstable')
 
-        # Hurst Exponent Gate check (L1 Core)
-        hurst = oteo_result.get("market_context", {}).get("hurst") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("hurst")
-        if hurst is None:
-            # Fallback to direct payload key if market_context nesting is skipped
-            hurst = oteo_result.get("hurst")
-            
-        if self.config.hurst_filter_enabled and hurst is not None:
-            if hurst >= self.config.hurst_filter_threshold:
-                logger.info(
-                    "Auto-Ghost skipped %s: hurst exponent %.3f >= threshold %.3f (L1 Hurst Gate)",
-                    asset,
-                    hurst,
-                    self.config.hurst_filter_threshold,
-                )
-                return self._reject(asset, 'hurst_filter')
-
         # Volatility Gate checks
         vol_score = oteo_result.get("market_context", {}).get("volatility_score") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("volatility_score")
         if vol_score is None:
@@ -686,6 +684,36 @@ class AutoGhostService:
                     self.config.max_liquidity,
                 )
                 return self._reject(asset, 'liquidity_gate')
+
+        # ADX Gate checks
+        adx_regime = oteo_result.get("market_context", {}).get("adx_regime") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("adx_regime")
+        if adx_regime is None:
+            adx_regime = oteo_result.get("adx_regime")
+        reversal_friendly = oteo_result.get("market_context", {}).get("reversal_friendly") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("reversal_friendly")
+        if reversal_friendly is None:
+            reversal_friendly = oteo_result.get("reversal_friendly")
+
+        if self.config.adx_gate_enabled and adx_regime is not None:
+            if str(adx_regime).upper() == "STRONG" and not reversal_friendly:
+                logger.info(
+                    "Auto-Ghost skipped %s: ADX regime is strong and not reversal friendly (ADX Gate)",
+                    asset
+                )
+                return self._reject(asset, 'adx_gate_trend_block')
+
+        # CCI Gate checks
+        cci_state = oteo_result.get("market_context", {}).get("cci_state") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("cci_state")
+        if cci_state is None:
+            cci_state = oteo_result.get("cci_state")
+        direction = str(oteo_result.get("recommended")).upper()
+
+        if self.config.cci_gate_enabled and cci_state is not None:
+            if direction == "CALL" and str(cci_state).upper() == "OVERBOUGHT":
+                logger.info("Auto-Ghost skipped %s: CCI is overbought but signal recommended CALL (CCI Gate)", asset)
+                return self._reject(asset, 'cci_gate_overbought_call')
+            if direction == "PUT" and str(cci_state).upper() == "OVERSOLD":
+                logger.info("Auto-Ghost skipped %s: CCI is oversold but signal recommended PUT (CCI Gate)", asset)
+                return self._reject(asset, 'cci_gate_oversold_put')
 
         # Plugin veto check
         if getattr(self, "extension_manager", None) is not None:
@@ -772,7 +800,6 @@ class AutoGhostService:
             "regime_stable": oteo_result.get("regime_stable"),
             "regime_detail": oteo_result.get("regime_detail"),
             "market_context": oteo_result.get("market_context"),
-            "hurst": hurst,
             "manipulation": manipulation,
             "payout_pct": payout_pct,
         }
@@ -803,15 +830,16 @@ class AutoGhostService:
         # Record trade execution timestamp for timeframe gating
         self._trade_timestamps.append(timestamp)
 
+        actual_expiry = request.expiration
         self._active_assets.add(asset)
-        self._cooldown_until[asset] = unix_time() + self.config.expiration_seconds + self.config.per_asset_cooldown_seconds
-        task = asyncio.create_task(self._release_asset(asset, self.config.expiration_seconds + 1))
+        self._cooldown_until[asset] = unix_time() + actual_expiry + self.config.per_asset_cooldown_seconds
+        task = asyncio.create_task(self._release_asset(asset, actual_expiry + 1))
         task.add_done_callback(lambda t: logger.error("_release_asset failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
         logger.info(
             "Auto-Ghost trade opened for %s (%s, %ss)",
             asset,
             oteo_result.get("recommended"),
-            self.config.expiration_seconds,
+            actual_expiry,
         )
         return result
 
@@ -898,12 +926,17 @@ class AutoGhostService:
             "Answer with EXACTLY 'CONFIRM' or 'REJECT' (no other text, explanation, or punctuation)."
         )
 
+        # Expiry duration context
+        vol_adaptive_expiry = market_context.get("volatility_adaptive_expiry")
+        suggested_expiry_str = f"{vol_adaptive_expiry}s (Volatility-Adaptive)" if vol_adaptive_expiry else f"{self.config.expiration_seconds}s (Static)"
+
         user_msg = (
             f"Trade Setup to Verify:\n"
             f"Asset: {asset}\n"
             f"Direction: {direction}\n"
             f"OTEO Score: {oteo_score}\n"
             f"Strategy Level: {strategy_level.upper()}\n"
+            f"Suggested Expiry: {suggested_expiry_str}\n"
             f"Regime: {regime_label} (confidence: {regime_confidence}%, stable: {regime_stable})\n"
             f"Trend Direction: {trend}\n"
             f"ADX: {adx}\n"

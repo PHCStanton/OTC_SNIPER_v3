@@ -42,16 +42,9 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_regime_gate_enabled: bool = Field(default=False)
     auto_ghost_allowed_regimes: list[str] | None = Field(default=None)
     auto_ghost_require_regime_stable: bool = Field(default=False)
-    auto_ghost_hurst_filter_enabled: bool = Field(default=False)
-    auto_ghost_hurst_filter_threshold: float = Field(default=0.48, ge=0.0, le=1.0)
-    auto_ghost_hurst_mean_revert_threshold: float = Field(default=0.44, ge=0.0, le=1.0)
-    auto_ghost_hurst_trend_threshold: float = Field(default=0.58, ge=0.0, le=1.0)
+    auto_ghost_adaptive_expiry_enabled: bool = Field(default=True)
     auto_ghost_min_adaptive_expiry: int = Field(default=60, ge=5, le=3600)
-    auto_ghost_hurst_min_scale_cutoff: int = Field(default=12, ge=4, le=50)
-    auto_ghost_hurst_ai_confidence_threshold: float = Field(default=80.0, ge=50.0, le=100.0)
     auto_ghost_blacklist_assets: list[str] = Field(default_factory=list)
-    auto_ghost_hurst_l2_enabled: bool = Field(default=True)
-    auto_ghost_hurst_l3_enabled: bool = Field(default=True)
     auto_ghost_rsi_cci_enabled: bool = Field(default=False)
     auto_ghost_volatility_gate_enabled: bool = Field(default=False)
     auto_ghost_min_volatility: float = Field(default=0.0, ge=0.0, le=100.0)
@@ -59,6 +52,10 @@ class RuntimeStrategyConfigRequest(BaseModel):
     auto_ghost_liquidity_gate_enabled: bool = Field(default=False)
     auto_ghost_min_liquidity: float = Field(default=0.0, ge=0.0, le=100.0)
     auto_ghost_max_liquidity: float = Field(default=100.0, ge=0.0, le=100.0)
+    auto_ghost_adx_gate_enabled: bool = Field(default=False)
+    auto_ghost_cci_gate_enabled: bool = Field(default=False)
+    auto_ghost_bayesian_filter_enabled: bool = Field(default=False)
+    auto_ghost_bayesian_min_probability: float = Field(default=0.55, ge=0.50, le=0.90)
     ai_trade_interval: int = Field(default=10, ge=1, le=100)
 
     ai_pulse_enabled: bool = Field(default=False)
@@ -116,16 +113,9 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             ai_trade_interval=body.ai_trade_interval,
             ai_pulse_enabled=body.ai_pulse_enabled,
             ai_pulse_interval_seconds=body.ai_pulse_interval_seconds,
-            auto_ghost_hurst_filter_enabled=body.auto_ghost_hurst_filter_enabled,
-            auto_ghost_hurst_filter_threshold=body.auto_ghost_hurst_filter_threshold,
-            hurst_mean_revert_threshold=body.auto_ghost_hurst_mean_revert_threshold,
-            hurst_trend_threshold=body.auto_ghost_hurst_trend_threshold,
+            adaptive_expiry_enabled=body.auto_ghost_adaptive_expiry_enabled,
             min_adaptive_expiry=body.auto_ghost_min_adaptive_expiry,
-            hurst_min_scale_cutoff=body.auto_ghost_hurst_min_scale_cutoff,
-            hurst_ai_confidence_threshold=body.auto_ghost_hurst_ai_confidence_threshold,
             auto_ghost_blacklist_assets=body.auto_ghost_blacklist_assets,
-            auto_ghost_hurst_l2_enabled=body.auto_ghost_hurst_l2_enabled,
-            auto_ghost_hurst_l3_enabled=body.auto_ghost_hurst_l3_enabled,
             auto_ghost_rsi_cci_enabled=body.auto_ghost_rsi_cci_enabled,
             volatility_gate_enabled=body.auto_ghost_volatility_gate_enabled,
             min_volatility=body.auto_ghost_min_volatility,
@@ -133,6 +123,10 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             liquidity_gate_enabled=body.auto_ghost_liquidity_gate_enabled,
             min_liquidity=body.auto_ghost_min_liquidity,
             max_liquidity=body.auto_ghost_max_liquidity,
+            adx_gate_enabled=body.auto_ghost_adx_gate_enabled,
+            cci_gate_enabled=body.auto_ghost_cci_gate_enabled,
+            bayesian_filter_enabled=body.auto_ghost_bayesian_filter_enabled,
+            bayesian_min_probability=body.auto_ghost_bayesian_min_probability,
         )
 
         return JSONResponse(content={"ok": True, **config})

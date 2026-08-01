@@ -319,39 +319,209 @@ async def test_auto_ghost():
     assert res_bl2 and res_bl2["success"] is True, "Should succeed as USDJPY is not blacklisted"
     print("Test 9 passed: Asset blacklisting verified.")
 
-    # Test 10: Hurst L2/L3 extension dynamic enabling/disabling
-    print("Starting Test 10 (Hurst L2/L3 extension toggles)...")
+    # Test 10: Extension Manager plugin discovery & dynamic toggles
+    print("Starting Test 10 (Extension Manager plugin discovery)...")
     from app.backend.services.extensions.manager import ExtensionManager
     service.extension_manager = ExtensionManager()
     
     # Verify extensions are discovered
     exts = service.extension_manager.get_active_extensions()
-    assert len(exts) >= 2, "Should discover at least the two Hurst extensions"
+    assert len(exts) >= 2, "Should discover active plugin extensions"
     
     # Find the extension instances
-    l2_ext = next((e for e in exts if e.__class__.__name__ == "HurstAdaptiveExpiry"), None)
-    l3_ext = next((e for e in exts if e.__class__.__name__ == "HurstAiNoise"), None)
+    adaptive_ext = next((e for e in exts if e.__class__.__name__ == "VolatilityAdaptiveExpiry"), None)
+    vol_liq_ext = next((e for e in exts if e.__class__.__name__ == "VolatilityLiquidityGates"), None)
     
-    assert l2_ext is not None
-    assert l3_ext is not None
+    assert adaptive_ext is not None, "VolatilityAdaptiveExpiry extension should be discovered"
+    assert vol_liq_ext is not None, "VolatilityLiquidityGates extension should be discovered"
     
-    # Toggle enabled to False
-    service.update_config(hurst_l2_enabled=False, hurst_l3_enabled=False)
-    assert l2_ext.enabled is False
-    assert l3_ext.enabled is False
-    
-    # Toggle enabled to True
-    service.update_config(hurst_l2_enabled=True, hurst_l3_enabled=True)
-    assert l2_ext.enabled is True
-    assert l3_ext.enabled is True
-
     # Test clear_plugin_cache propagates status
-    service.update_config(hurst_l2_enabled=False, hurst_l3_enabled=True)
+    service.update_config(volatility_gate_enabled=True)
     service.clear_plugin_cache()
-    assert l2_ext.enabled is False
-    assert l3_ext.enabled is True
+    assert vol_liq_ext.enabled is True
 
-    print("Test 10 passed: Hurst L2/L3 extension dynamic toggles verified.")
+    print("Test 10 passed: Extension Manager plugin discovery verified.")
+
+    # Test 11: Volatility & Liquidity Gates
+    print("Starting Test 11 (Volatility & Liquidity Gates)...")
+    service.update_config(
+        volatility_gate_enabled=True,
+        min_volatility=20.0,
+        max_volatility=80.0,
+        liquidity_gate_enabled=True,
+        min_liquidity=30.0,
+        max_liquidity=70.0
+    )
+    
+    # 11a. Reject due to Volatility too high (vol=90, liq=50)
+    service._active_assets.clear()
+    service._cooldown_until.clear()
+    res_vol1 = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=5000.0,
+        oteo_result={
+            "recommended": "CALL", "actionable": True, "confidence": "HIGH", "oteo_score": 85.0,
+            "market_context": {"volatility_score": 90.0, "liquidity_score": 50.0}
+        },
+        manipulation={}
+    )
+    assert res_vol1 is None, "Should be rejected because Volatility is too high"
+    assert service._last_reject_reason_by_asset.get("USDJPY") == "volatility_gate"
+
+    # 11b. Reject due to Liquidity too low (vol=50, liq=10)
+    service._active_assets.clear()
+    res_liq1 = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=5001.0,
+        oteo_result={
+            "recommended": "CALL", "actionable": True, "confidence": "HIGH", "oteo_score": 85.0,
+            "market_context": {"volatility_score": 50.0, "liquidity_score": 10.0}
+        },
+        manipulation={}
+    )
+    assert res_liq1 is None, "Should be rejected because Liquidity is too low"
+    assert service._last_reject_reason_by_asset.get("USDJPY") == "liquidity_gate"
+
+    # 11c. Accept valid Volatility & Liquidity (vol=50, liq=50)
+    service._active_assets.clear()
+    res_ok = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=5002.0,
+        oteo_result={
+            "recommended": "CALL", "actionable": True, "confidence": "HIGH", "oteo_score": 85.0,
+            "market_context": {"volatility_score": 50.0, "liquidity_score": 50.0}
+        },
+        manipulation={}
+    )
+    assert res_ok and res_ok["success"] is True, "Should succeed as Vol & Liq are in range"
+    print("Test 11 passed: Volatility & Liquidity gates verified.")
+
+    # Test 12: ADX & CCI Gates
+    print("Starting Test 12 (ADX & CCI Gates)...")
+    service.update_config(
+        volatility_gate_enabled=False,
+        liquidity_gate_enabled=False,
+        adx_gate_enabled=True,
+        cci_gate_enabled=True
+    )
+
+    # 12a. Reject due to Strong ADX and not reversal friendly
+    service._active_assets.clear()
+    res_adx = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=6000.0,
+        oteo_result={
+            "recommended": "CALL", "actionable": True, "confidence": "HIGH", "oteo_score": 85.0,
+            "market_context": {"adx_regime": "STRONG", "reversal_friendly": False}
+        },
+        manipulation={}
+    )
+    assert res_adx is None, "Should be rejected due to strong ADX without reversal friendliness"
+    assert service._last_reject_reason_by_asset.get("USDJPY") == "adx_gate_trend_block"
+
+    # 12b. Reject due to CCI Extreme Overbought on CALL
+    service._active_assets.clear()
+    res_cci = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=6001.0,
+        oteo_result={
+            "recommended": "CALL", "actionable": True, "confidence": "HIGH", "oteo_score": 85.0,
+            "market_context": {"cci_state": "OVERBOUGHT"}
+        },
+        manipulation={}
+    )
+    assert res_cci is None, "Should be rejected due to CCI overbought on CALL signal"
+    assert service._last_reject_reason_by_asset.get("USDJPY") == "cci_gate_overbought_call"
+
+    # 12c. Accept when ADX and CCI align
+    service._active_assets.clear()
+    service._cooldown_until.clear()
+    res_ok2 = await service.consider_signal(
+        asset="USDJPY", price=1.3, timestamp=6002.0,
+        oteo_result={
+            "recommended": "CALL", "actionable": True, "confidence": "HIGH", "oteo_score": 85.0,
+            "market_context": {"adx_regime": "WEAK", "reversal_friendly": True, "cci_state": "NEUTRAL"}
+        },
+        manipulation={}
+    )
+    assert res_ok2 and res_ok2["success"] is True, "Should succeed as ADX & CCI are friendly"
+    print("Test 12 passed: ADX & CCI gates verified.")
+
+    # Test 13: Dynamic Knowledge Base Outcome Logging
+    print("Starting Test 13 (Dynamic KB Outcome Logging)...")
+    from app.backend.services.ai_review import KnowledgeBaseLoader
+    from pathlib import Path
+    import os
+    
+    kb_loader = KnowledgeBaseLoader.get_instance()
+    # Mock kb_path to temporary file
+    temp_kb_path = Path("c:/v3/OTC_SNIPER/scratch_test_kb.json")
+    original_kb_path = kb_loader.kb_path
+    original_patterns = list(kb_loader.patterns)
+    original_metadata = dict(kb_loader.metadata)
+    
+    kb_loader.kb_path = temp_kb_path
+    kb_loader.patterns = []
+    kb_loader.metadata = {}
+    kb_loader.loaded = True  # force loaded
+    
+    # Report a win
+    entry_context = {
+        "oteo_score": 88.5,
+        "level3_enabled": True,
+        "regime_label": "RANGE_BOUND",
+        "recommended": "CALL"
+    }
+    service.report_outcome(
+        trade_id="trade_test_13",
+        outcome="win",
+        profit=5.0,
+        asset="USDJPY",
+        entry_context=entry_context,
+        direction="CALL"
+    )
+    
+    assert len(kb_loader.patterns) == 1, "Should have added exactly 1 new pattern to the KB list"
+    new_pattern = kb_loader.patterns[0]
+    assert new_pattern["pattern_key"] == "USDJPY|level3|85-92|RANGE_BOUND|CALL"
+    assert new_pattern["sample_size"] == 1
+    assert new_pattern["win_rate_pct"] == 100.0
+    assert new_pattern["net_profit"] == 5.0
+    assert temp_kb_path.exists(), "Dynamic KB JSON file should be created/updated on disk"
+    
+    # Report a loss for the same pattern
+    service.report_outcome(
+        trade_id="trade_test_13_2",
+        outcome="loss",
+        profit=-5.0,
+        asset="USDJPY",
+        entry_context=entry_context,
+        direction="CALL"
+    )
+    assert len(kb_loader.patterns) == 1, "Should still have 1 pattern key"
+    assert new_pattern["sample_size"] == 2
+    assert new_pattern["win_rate_pct"] == 50.0
+    assert new_pattern["net_profit"] == 0.0
+    
+    # Clean up temp file and restore original state
+    if temp_kb_path.exists():
+        os.remove(temp_kb_path)
+    kb_loader.kb_path = original_kb_path
+    kb_loader.patterns = original_patterns
+    kb_loader.metadata = original_metadata
+    print("Test 13 passed: Dynamic KB outcome logging verified.")
+
+    # Test 14: Adaptive Expiry Toggle Check
+    from app.backend.services.extensions.volatility_adaptive_expiry import VolatilityAdaptiveExpiry
+    ext = VolatilityAdaptiveExpiry({"enabled": True, "min_adaptive_expiry": 30})
+    
+    # When enabled = True, volatility score < 30 maps to 300s expiry
+    oteo_res = {"recommended": "CALL", "actionable": True, "oteo_score": 80.0}
+    mkt_ctx = {"volatility_score": 20.0}
+    ext.on_tick_processed("EURUSD", 1.1, 1000.0, oteo_res, mkt_ctx)
+    assert oteo_res.get("override_expiration_seconds") == 300, "Should override expiration to 300s when enabled"
+    
+    # When enabled = False, on_tick_processed does NOT inject override_expiration_seconds
+    ext.enabled = False
+    oteo_res_disabled = {"recommended": "CALL", "actionable": True, "oteo_score": 80.0}
+    ext.on_tick_processed("EURUSD", 1.1, 1000.0, oteo_res_disabled, mkt_ctx)
+    assert "override_expiration_seconds" not in oteo_res_disabled, "Should NOT set override_expiration_seconds when extension disabled"
+    print("Test 14 passed: Adaptive Expiry toggle (enabled vs disabled) verified.")
 
     print("All tests passed successfully!")
 

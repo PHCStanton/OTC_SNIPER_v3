@@ -12,6 +12,10 @@ app/backtesting/results/
 scripts/
 backtester_app/
 
+# REPO'S INFO
+data-agent/hermes-agent/
+data-agent/OpenWA/
+
 # AGENT SPECIFIC FOLDERS
 scratch/
 

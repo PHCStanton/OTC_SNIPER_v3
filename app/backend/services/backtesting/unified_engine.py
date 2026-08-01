@@ -28,14 +28,6 @@ class KalmanConfig:
     enabled: bool = False
     q: float = 1e-9
     r: float = 1e-7
-    upstream_of_hurst: bool = False
-
-@dataclass
-class HurstConfig:
-    veto_enabled: bool = False
-    window_size: int = 300
-    mean_revert_limit: float = 0.44
-    trend_limit: float = 0.58
 
 @dataclass
 class OUConfig:
@@ -72,7 +64,6 @@ class TimeframeConfig:
 class UnifiedBacktestConfig:
     payout_pct: float = 92.0
     kalman: KalmanConfig = field(default_factory=KalmanConfig)
-    hurst: HurstConfig = field(default_factory=HurstConfig)
     ou: OUConfig = field(default_factory=OUConfig)
     expiry: ExpiryConfig = field(default_factory=ExpiryConfig)
     indicator: IndicatorConfig = field(default_factory=IndicatorConfig)
@@ -82,7 +73,6 @@ class UnifiedBacktestConfig:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> UnifiedBacktestConfig:
         kalman_data = data.get("kalman", {})
-        hurst_data = data.get("hurst", {})
         ou_data = data.get("ou", {})
         expiry_data = data.get("expiry", {})
         indicator_data = data.get("indicator", {})
@@ -95,13 +85,6 @@ class UnifiedBacktestConfig:
                 enabled=bool(kalman_data.get("enabled", False)),
                 q=float(kalman_data.get("q", 1e-9)),
                 r=float(kalman_data.get("r", 1e-7)),
-                upstream_of_hurst=bool(kalman_data.get("upstream_of_hurst", False)),
-            ),
-            hurst=HurstConfig(
-                veto_enabled=bool(hurst_data.get("veto_enabled", False)),
-                window_size=int(hurst_data.get("window_size", 300)),
-                mean_revert_limit=float(hurst_data.get("mean_revert_limit", 0.44)),
-                trend_limit=float(hurst_data.get("trend_limit", 0.58)),
             ),
             ou=OUConfig(
                 veto_enabled=bool(ou_data.get("veto_enabled", False)),
@@ -222,62 +205,7 @@ class ParameterKalmanTracker:
         self.beta = max(-0.999, min(0.999, self.beta))
         return 0.0, float(self.beta)
 
-class UnifiedHurstTracker:
-    def __init__(self, mean_revert_limit: float, trend_limit: float) -> None:
-        self.mean_revert_limit = mean_revert_limit
-        self.trend_limit = trend_limit
-        self.prices = deque(maxlen=1000)
-        self.regime = "random_walk"
-        self.last_h = 0.5
 
-    def add_price(self, price: float) -> None:
-        self.prices.append(price)
-
-    def calculate_vectorized_hurst(self) -> float:
-        prices_arr = np.array(self.prices)
-        if len(prices_arr) < 50:
-            return 0.5
-        returns = np.diff(np.log(prices_arr))
-        N = len(returns)
-        scales = [16, 32, 64, 128, 256]
-        rs_list = []
-        for scale in scales:
-            if N < scale:
-                continue
-            num_segments = N // scale
-            segments = returns[:num_segments * scale].reshape((num_segments, scale))
-            means = np.mean(segments, axis=1, keepdims=True)
-            cum_dev = np.cumsum(segments - means, axis=1)
-            ranges = np.max(cum_dev, axis=1) - np.min(cum_dev, axis=1)
-            stds = np.std(segments, axis=1, ddof=1)
-            valid = stds > 0
-            if np.any(valid):
-                rs_list.append(np.mean(ranges[valid] / stds[valid]))
-            else:
-                rs_list.append(1.0)
-        if len(rs_list) < 2:
-            return 0.5
-        try:
-            h, _ = np.polyfit(np.log(scales[:len(rs_list)]), np.log(rs_list), 1)
-            self.last_h = float(np.clip(h, 0.0, 1.0))
-            return self.last_h
-        except Exception:
-            return self.last_h
-
-    def update_regime(self) -> str:
-        current_h = self.calculate_vectorized_hurst()
-        if self.regime == "mean_reverting":
-            if current_h > 0.48:
-                self.regime = "random_walk"
-        elif self.regime == "trending":
-            if current_h < 0.52:
-                self.regime = "random_walk"
-        else:
-            if current_h < self.mean_revert_limit:
-                self.regime = "mean_reverting"
-            elif current_h > self.trend_limit:
-                self.regime = "trending"
-        return self.regime
 
 class PocketTracker:
     def __init__(self) -> None:
@@ -453,7 +381,6 @@ class UnifiedBacktester:
         
         # Pre-filters and parameters trackers
         self.kalman_filter = KalmanFilter(config.kalman.q, config.kalman.r)
-        self.hurst_tracker = UnifiedHurstTracker(config.hurst.mean_revert_limit, config.hurst.trend_limit)
         self.ou_kalman_tracker = ParameterKalmanTracker(config.ou.q_beta, config.ou.r)
         
         # Buffer for returns std calculation (adaptive expiry)
@@ -492,29 +419,12 @@ class UnifiedBacktester:
             else:
                 kalman_price = raw_price
                 
-            # Determine which price to feed to estimators and indicator engines
-            indicator_price = kalman_price
-            
-            # Hurst pre-smoothing bypass logic
-            if self.config.kalman.enabled and not self.config.kalman.upstream_of_hurst:
-                hurst_price = raw_price
-            else:
-                hurst_price = kalman_price
-
             # 2. Update Context and Engines
             oteo_res = self.oteo.update_tick(indicator_price, timestamp=tick.timestamp)
             context_res = self.context.update_tick(indicator_price, timestamp=tick.timestamp)
             
             if bool(context_res.get("candle_closed")) and bool(context_res.get("ready")):
-                self.hurst_tracker.update_regime()
                 last_regime = self.regime_classifier.classify(context_res)
-
-            # Update Hurst price buffer
-            self.hurst_tracker.add_price(hurst_price)
-            
-            # Calculate continuous features
-            h_val = self.hurst_tracker.last_h
-            h_regime = self.hurst_tracker.regime
             
             # Volatility features
             atr = context_res.get("atr")
@@ -580,15 +490,6 @@ class UnifiedBacktester:
                     # 4. Evaluate Veto Gates
                     vetoed = False
                     veto_reason = None
-
-                    # Hurst veto gate
-                    if self.config.hurst.veto_enabled:
-                        if h_regime == "trending":
-                            vetoed = True
-                            veto_reason = "hurst_veto_trend"
-                        elif h_regime == "random_walk":
-                            vetoed = True
-                            veto_reason = "hurst_veto_chop"
 
                     # OU veto gate
                     if not vetoed and self.config.ou.veto_enabled:

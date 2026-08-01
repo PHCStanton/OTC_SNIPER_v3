@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  openwa-gateway:
+    image: openwa/wa-automate:latest
+    container_name: openwa_whatsapp_gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - API_KEY=${OPENWA_API_KEY:-secret_wa_key}
+    restart: unless-stopped
+
+  vps-data-agent:
+    build:
+      context: ..
+      dockerfile: data-agent/Dockerfile.vps
+    container_name: otc_vps_data_agent
+    ports:
+      - "8090:8090"
+    environment:
+      - PO_SSID=${PO_SSID}
+      - XAI_API_KEY=${XAI_API_KEY}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-otc-sniper-prod}
+      - OPENWA_API_URL=http://openwa-gateway:8080
+      - OPENWA_RECIPIENT_PHONE=${OPENWA_RECIPIENT_PHONE}
+    depends_on:
+      - openwa-gateway
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data-agent/data
+      - ../app/data/ghost_trades/stats:/app/app/data/ghost_trades/stats

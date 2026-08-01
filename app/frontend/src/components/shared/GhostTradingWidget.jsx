@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import HurstAiSettings from './HurstAiSettings.jsx';
-import HurstExpirySettings from './HurstExpirySettings.jsx';
+import AdaptiveExpirySettings from './AdaptiveExpirySettings.jsx';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useRiskStore } from '../../stores/useRiskStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
@@ -9,7 +8,7 @@ import { useTradingStore } from '../../stores/useTradingStore.js';
 import { useNotificationStore } from '../../stores/useNotificationStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useAIStore } from '../../stores/useAIStore.js';
-import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award, ChevronDown } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award, ChevronDown, RotateCcw } from 'lucide-react';
 import { Tooltip } from './StitchComponents.jsx';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
@@ -117,19 +116,12 @@ export default function GhostTradingWidget() {
     setAiTradeInterval,
     dontDisturbEnabled,
     setDontDisturbEnabled,
-    // Hurst & Plugins state
-    hurstFilterEnabled,
-    hurstFilterThreshold,
-    hasPremiumHurst,
-    hasEliteHurst,
-    hurstL2Enabled,
-    hurstL3Enabled,
-    setHurstFilterEnabled,
-    setHurstFilterThreshold,
-    setHurstL2Enabled,
-    setHurstL3Enabled,
     autoGhostRsiCciEnabled,
     setAutoGhostRsiCciEnabled,
+    autoGhostBayesianFilterEnabled,
+    autoGhostBayesianMinProbability,
+    setAutoGhostBayesianFilterEnabled,
+    setAutoGhostBayesianMinProbability,
   } = useSettingsStore();
 
   const currentPresetIndex = PULSE_PRESETS.reduce((closestIdx, currVal, idx) => {
@@ -208,8 +200,7 @@ export default function GhostTradingWidget() {
     if (suggestions.ghostMaxTradesPerTimeframe !== undefined) setGhostMaxTradesPerTimeframe(suggestions.ghostMaxTradesPerTimeframe);
     if (suggestions.ghostTimeframeSeconds !== undefined) setGhostTimeframeSeconds(suggestions.ghostTimeframeSeconds);
 
-    if (suggestions.autoGhostHurstFilterEnabled !== undefined) setHurstFilterEnabled(suggestions.autoGhostHurstFilterEnabled);
-    if (suggestions.autoGhostHurstFilterThreshold !== undefined) setHurstFilterThreshold(suggestions.autoGhostHurstFilterThreshold);
+
 
     let starredAddedCount = 0;
     const currentStarred = useAssetStore.getState().starredAssets;
@@ -354,16 +345,10 @@ export default function GhostTradingWidget() {
     const assetLabel = trade.asset.replace(/_otc$/i, ' OTC').replace(/_/g, '/');
     useAssetStore.getState().setSelectedAsset(trade.asset);
 
-    useToastStore.getState().addToast({
-      type: 'success',
-      message: `Selected Ghost Asset: ${assetLabel.toUpperCase()}`,
-      duration: 3000
-    });
+    const direction = trade.direction ? trade.direction.toLowerCase() : 'call';
+    const duration = trade.expirationSeconds || autoGhostExpirationSeconds || 60;
 
     if (autoGhostCopyMode === 'execute') {
-      const direction = trade.direction ? trade.direction.toLowerCase() : 'call';
-      const duration = trade.expirationSeconds || 60;
-
       useTradingStore.getState().setDirection(direction);
       useTradingStore.getState().setDuration(duration);
       useTradingStore.getState().executeTrade('pocket_option', trade.asset);
@@ -371,6 +356,18 @@ export default function GhostTradingWidget() {
       useToastStore.getState().addToast({
         type: 'info',
         message: `Executing Live Trade: ${assetLabel.toUpperCase()} | ${direction.toUpperCase()} | ${duration}s`,
+        duration: 3000
+      });
+    } else {
+      // 'copy' (Only Copy) mode: Pre-select asset, direction, and adaptive expiry time for quick manual execution
+      useTradingStore.getState().setDirection(direction);
+      useTradingStore.getState().setDuration(duration);
+
+      const adaptiveExpiryEnabled = useSettingsStore.getState().adaptiveExpiryEnabled;
+
+      useToastStore.getState().addToast({
+        type: 'success',
+        message: `Pre-set Quick Execution: ${assetLabel.toUpperCase()} | ${direction.toUpperCase()} | Expiry ${duration}s${adaptiveExpiryEnabled ? ' (Adaptive)' : ''}`,
         duration: 3000
       });
     }
@@ -381,7 +378,7 @@ export default function GhostTradingWidget() {
   return (
     <div 
       ref={containerRef}
-      className="absolute bottom-6 left-6 z-50"
+      className="fixed bottom-6 left-6 z-[9990] pointer-events-auto select-none"
       style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
     >
       {/* The Popup */}
@@ -405,12 +402,29 @@ export default function GhostTradingWidget() {
               </button>
               <Tooltip content="These stats reflect the simulated performance of the ghost trader module. Live account balances remain completely unaffected. Auto-Ghost mode is active on streamed nodes." />
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="rounded-lg p-1 text-gray-500 hover:bg-white/5 hover:text-white transition-colors"
-            >
-              <X size={16} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  useSettingsStore.getState().resetGhostControllerDefaults();
+                  useNotificationStore.getState().clearAll();
+                  setSelectedSuggestedWhitelist([]);
+                  setSelectedSuggestedBlacklist([]);
+                  useToastStore.getState().addToast({ type: 'success', message: 'Global Protocol Reset: Position, calibration defaults & AI Tools state restored.' });
+                }}
+                className="rounded-lg p-1 text-gray-500 hover:bg-white/5 hover:text-white transition-colors"
+                title="Global Protocol Reset (Position, Calibration & AI Tools)"
+              >
+                <RotateCcw size={14} />
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="rounded-lg p-1 text-gray-500 hover:bg-white/5 hover:text-white transition-colors"
+                title="Close Controller"
+              >
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Navigation Tabs */}
@@ -487,28 +501,51 @@ export default function GhostTradingWidget() {
 
                       const directionColor = trade.direction === 'call' ? 'text-emerald-400' : 'text-red-400';
 
+                      // Asset Win Rate calculation
+                      const assetTrades = ghostTrades.filter((t) => t.asset === trade.asset && (t.outcome === 'win' || t.outcome === 'loss'));
+                      const assetWins = assetTrades.filter((t) => t.outcome === 'win').length;
+                      const assetWinRate = assetTrades.length > 0 ? Math.round((assetWins / assetTrades.length) * 100) : null;
+
+                      // Triggered Expiry duration
+                      const expirySeconds = trade.expirationSeconds || autoGhostExpirationSeconds || 60;
+                      const expiryText = formatInterval(expirySeconds);
+
                       return (
                         <button
                           key={trade.id || idx}
                           onClick={() => handleTradeClick(trade)}
                           className="flex w-full items-center justify-between rounded-xl bg-[#25282f]/30 border border-white/5 p-2.5 transition hover:bg-[#25282f]/60 hover:border-[#ffb800]/20 text-left"
-                          title={autoGhostCopyMode === 'execute' ? 'Click to Copy & Execute on Live' : 'Click to Select Asset'}
+                          title={autoGhostCopyMode === 'execute' ? `Click to Copy & Execute on Live (${expiryText})` : `Click to Pre-set Asset & Expiry (${expiryText})`}
                         >
-                          <div className="flex flex-col w-[110px] shrink-0">
+                          <div className="flex flex-col w-[105px] shrink-0">
                             <span className="text-[10px] font-black uppercase text-white tracking-wide">{assetLabel}</span>
-                            <span className={`text-[8.5px] font-black uppercase ${directionColor} mt-0.5`}>
-                              {directionLabel}
-                            </span>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={`text-[8.5px] font-black uppercase ${directionColor}`}>
+                                {directionLabel}
+                              </span>
+                              {assetWinRate !== null && (
+                                <span className={`text-[7.5px] font-black font-mono px-1 py-0.2 rounded border ${
+                                  assetWinRate >= 50 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+                                }`} title={`Session Win Rate for ${assetLabel}`}>
+                                  {assetWinRate}% WR
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex flex-col items-center justify-center shrink-0">
-                            <span className="text-[7.5px] font-black uppercase tracking-widest text-gray-500">OTEO Score</span>
-                            <span className="text-[11px] font-black text-[#ffb800] font-mono leading-none mt-0.5">
-                              {trade.oteo_score != null ? `${Math.round(trade.oteo_score)}%` : '—'}
-                            </span>
+                            <span className="text-[7.5px] font-black uppercase tracking-widest text-gray-500">OTEO / EXPIRY</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <span className="text-[11px] font-black text-[#ffb800] font-mono leading-none">
+                                {trade.oteo_score != null ? `${Math.round(trade.oteo_score)}%` : '—'}
+                              </span>
+                              <span className="text-[8px] font-black font-mono text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded px-1 py-0.2" title={`Triggered Expiry: ${expiryText}`}>
+                                ⏱ {expiryText}
+                              </span>
+                            </div>
                           </div>
 
-                          <div className="flex items-center justify-end gap-2 w-[110px] shrink-0">
+                          <div className="flex items-center justify-end gap-2 w-[105px] shrink-0">
                             <span className={`rounded-md border px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider ${outcomeColor}`}>
                               {outcomeLabel}
                             </span>
@@ -844,106 +881,17 @@ export default function GhostTradingWidget() {
               <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
                 <span className="text-[9px] font-black uppercase tracking-wider text-gray-400 block border-b border-white/5 pb-1 mb-1">Extensions</span>
                 
-                {/* L1 Core Hurst Filter Toggle */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input 
-                        type="checkbox"
-                        checked={hurstFilterEnabled}
-                        onChange={(e) => setHurstFilterEnabled(e.target.checked)}
-                        className="accent-[#ffb800] rounded h-3 w-3"
-                      />
-                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${hurstFilterEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
-                        L1 Hurst Filter (Free Core)
-                      </span>
-                    </label>
-                    <span className={`text-[10px] font-black ${hurstFilterEnabled ? 'text-white' : 'text-gray-600'}`}>
-                      H &lt; {hurstFilterThreshold.toFixed(2)}
+                {/* Volatility-Adaptive Expiry Plugin Slot */}
+                <div className="border-t border-white/5 pt-2 mt-1">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
+                    <span className="text-[8.5px] font-black uppercase tracking-wider text-emerald-400">
+                      Volatility-Adaptive Expiry
+                    </span>
+                    <span className="rounded px-1 py-0.2 text-[7px] font-black uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/25">
+                      Active Plugin
                     </span>
                   </div>
-                  <input 
-                    type="range"
-                    min="0.30"
-                    max="0.60"
-                    step="0.01"
-                    disabled={!hurstFilterEnabled}
-                    value={hurstFilterThreshold}
-                    onChange={(e) => setHurstFilterThreshold(Number(e.target.value))}
-                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
-                  />
-                  <div className="text-[7.5px] text-gray-500">
-                    Blocks reversal trades in trending or random-noise markets.
-                  </div>
-                </div>
-
-                {/* EXTENSION_SETTINGS_SLOT */}
-                {/* L2 Premium Plugin Slot */}
-                <div className={`border-t border-white/5 pt-2 mt-1 ${hasPremiumHurst ? '' : 'opacity-60'}`}>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input 
-                        type="checkbox"
-                        disabled={!hasPremiumHurst}
-                        checked={hurstL2Enabled}
-                        onChange={(e) => setHurstL2Enabled(e.target.checked)}
-                        className="accent-[#ffb800] rounded h-3 w-3 disabled:cursor-not-allowed"
-                      />
-                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${hurstL2Enabled && hasPremiumHurst ? 'text-emerald-400' : 'text-gray-500'}`}>
-                        L2 Adaptive Expiry (Premium)
-                      </span>
-                    </label>
-                    <span className={`rounded px-1 py-0.2 text-[7px] font-black uppercase border ${
-                      hasPremiumHurst 
-                        ? (hurstL2Enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' : 'bg-gray-500/15 text-gray-400 border-white/10')
-                        : 'bg-yellow-500/10 text-[#ffb800] border-yellow-500/25'
-                    }`}>
-                      {hasPremiumHurst ? (hurstL2Enabled ? 'Active' : 'Suspended') : 'Locked'}
-                    </span>
-                  </div>
-                  {hasPremiumHurst && hurstL2Enabled ? (
-                    <div className="text-[7.5px] text-gray-600 italic mt-0.5">
-                      <HurstExpirySettings />
-                    </div>
-                  ) : (
-                    <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
-                      Unlocks vectorized multi-scale R/S and 30s-3m adaptive durations.
-                    </div>
-                  )}
-                </div>
-
-                {/* L3 Elite Plugin Slot */}
-                <div className={`border-t border-white/5 pt-2 ${hasEliteHurst ? '' : 'opacity-60'}`}>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                      <input 
-                        type="checkbox"
-                        disabled={!hasEliteHurst}
-                        checked={hurstL3Enabled}
-                        onChange={(e) => setHurstL3Enabled(e.target.checked)}
-                        className="accent-[#ffb800] rounded h-3 w-3 disabled:cursor-not-allowed"
-                      />
-                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${hurstL3Enabled && hasEliteHurst ? 'text-purple-400' : 'text-gray-500'}`}>
-                        L3 AI Auto-Calibration (Elite)
-                      </span>
-                    </label>
-                    <span className={`rounded px-1 py-0.2 text-[7px] font-black uppercase border ${
-                      hasEliteHurst 
-                        ? (hurstL3Enabled ? 'bg-purple-500/10 text-purple-400 border-purple-500/25' : 'bg-gray-500/15 text-gray-400 border-white/10')
-                        : 'bg-[#ff4a4a]/10 text-red-400 border-[#ff4a4a]/25'
-                    }`}>
-                      {hasEliteHurst ? (hurstL3Enabled ? 'Active' : 'Suspended') : 'Locked'}
-                    </span>
-                  </div>
-                  {hasEliteHurst && hurstL3Enabled ? (
-                    <div className="text-[7.5px] text-gray-600 italic mt-0.5">
-                      <HurstAiSettings />
-                    </div>
-                  ) : (
-                    <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
-                      Unlocks scale-cutoff noise filters and dynamic AI boundary adjustments.
-                    </div>
-                  )}
+                  <AdaptiveExpirySettings />
                 </div>
 
                 {/* RSI/CCI Confluence Slot */}
@@ -970,6 +918,49 @@ export default function GhostTradingWidget() {
                   </div>
                   <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
                     Vetoes entry signals if RSI(7) and CCI(9) are not parallel from extreme zones.
+                  </div>
+                </div>
+
+                {/* Bayesian Signal Filter Extension */}
+                <div className="border-t border-white/5 pt-2">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <input 
+                        type="checkbox"
+                        checked={autoGhostBayesianFilterEnabled}
+                        onChange={(e) => setAutoGhostBayesianFilterEnabled(e.target.checked)}
+                        className="accent-[#ffb800] rounded h-3 w-3"
+                      />
+                      <span className={`text-[8.5px] font-black uppercase tracking-wider ${autoGhostBayesianFilterEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                        Bayesian Win Probability Filter
+                      </span>
+                    </label>
+                    <span className={`rounded px-1 py-0.2 text-[7px] font-black uppercase border ${
+                      autoGhostBayesianFilterEnabled 
+                        ? 'bg-[#ffb800]/10 text-[#ffb800] border-[#ffb800]/25' 
+                        : 'bg-gray-500/15 text-gray-400 border-white/10'
+                    }`}>
+                      {autoGhostBayesianFilterEnabled ? `${autoGhostBayesianMinProbability}% Floor` : 'Off'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[7.5px] font-black uppercase text-gray-400">Min Win Probability Floor</span>
+                      <span className="text-[9px] font-black font-mono text-white">{autoGhostBayesianMinProbability}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="75"
+                      step="1"
+                      disabled={!autoGhostBayesianFilterEnabled}
+                      value={autoGhostBayesianMinProbability}
+                      onChange={(e) => setAutoGhostBayesianMinProbability(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                    />
+                  </div>
+                  <div className="text-[7.5px] text-gray-500 mt-0.5 leading-normal italic">
+                    Uses cross-asset market context priors (13.7k trades) to veto low-probability setups.
                   </div>
                 </div>
               </div>

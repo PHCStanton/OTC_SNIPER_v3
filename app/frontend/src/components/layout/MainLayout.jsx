@@ -42,9 +42,6 @@ export default function MainLayout() {
           <ErrorBoundary label="Main View">
             <ActiveView view={activeView} mode={dashboardMode} />
           </ErrorBoundary>
-
-          {/* Floating Ghost Trading Widget */}
-          <GhostTradingWidget />
         </main>
 
         <ErrorBoundary label="Right Sidebar">
@@ -57,6 +54,11 @@ export default function MainLayout() {
           <GlobalTimer />
         </ErrorBoundary>
       )}
+
+      {/* Floating Ghost Trading Widget — global overlay */}
+      <ErrorBoundary label="Ghost Widget">
+        <GhostTradingWidget />
+      </ErrorBoundary>
 
       {/* Global toast notification layer — always on top */}
       <ToastContainer />

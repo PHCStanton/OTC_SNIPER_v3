@@ -8,9 +8,9 @@ import {
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
+import { useNotificationStore } from '../../stores/useNotificationStore.js';
 import { SectionCard, InputGroup, NumberInput, Tooltip } from '../shared/StitchComponents.jsx';
-import HurstExpirySettings from '../shared/HurstExpirySettings.jsx';
-import HurstAiSettings from '../shared/HurstAiSettings.jsx';
+import AdaptiveExpirySettings from '../shared/AdaptiveExpirySettings.jsx';
 
 export default function GhostSettings() {
   const {
@@ -34,20 +34,21 @@ export default function GhostSettings() {
     ghostRegimeGateEnabled,
     ghostAllowedRegimes,
     ghostRequireRegimeStable,
-    hurstFilterEnabled,
-    hurstFilterThreshold,
-    hurstMeanRevertThreshold,
-    hurstTrendThreshold,
     minAdaptiveExpiry,
-    hurstMinScaleCutoff,
-    hurstAiConfidenceThreshold,
-    hasPremiumHurst,
-    hasEliteHurst,
-    hurstL2Enabled,
-    hurstL3Enabled,
+    adaptiveExpiryEnabled,
     ghostBlacklist,
     sidebarPayoutThreshold,
     autoGhostRsiCciEnabled,
+    autoGhostVolatilityGateEnabled,
+    minVolatilityScore,
+    maxVolatilityScore,
+    autoGhostLiquidityGateEnabled,
+    minLiquidityScore,
+    maxLiquidityScore,
+    autoGhostAdxGateEnabled,
+    autoGhostCciGateEnabled,
+    autoGhostBayesianFilterEnabled,
+    autoGhostBayesianMinProbability,
 
     setGhostAmount,
     setAutoGhostEnabled,
@@ -69,13 +70,20 @@ export default function GhostSettings() {
     setGhostRegimeGateEnabled,
     setGhostAllowedRegimes,
     setGhostRequireRegimeStable,
-    setHurstFilterEnabled,
-    setHurstFilterThreshold,
-    setHurstL2Enabled,
-    setHurstL3Enabled,
     setGhostBlacklist,
     setSidebarPayoutThreshold,
     setAutoGhostRsiCciEnabled,
+    setAutoGhostVolatilityGateEnabled,
+    setMinVolatilityScore,
+    setMaxVolatilityScore,
+    setAutoGhostLiquidityGateEnabled,
+    setMinLiquidityScore,
+    setMaxLiquidityScore,
+    setAutoGhostAdxGateEnabled,
+    setAutoGhostCciGateEnabled,
+    setAutoGhostBayesianFilterEnabled,
+    setAutoGhostBayesianMinProbability,
+    setGhostWidgetPosition,
   } = useSettingsStore();
 
   const { availableAssets, assetPayouts } = useAssetStore();
@@ -214,6 +222,26 @@ export default function GhostSettings() {
                   </button>
                 </div>
               </InputGroup>
+
+              {/* Global Protocol & Widget Position Reset */}
+              <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-gray-300 block">Global Protocol Reset</span>
+                  <span className="text-[9px] text-gray-500 block">Restores widget position & baseline calibration parameters</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    useSettingsStore.getState().resetGhostControllerDefaults();
+                    useNotificationStore.getState().clearAll();
+                    useToastStore.getState().addToast({ type: 'success', message: 'Global Protocol Reset: Position, calibration defaults & AI Tools state restored.' });
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-white/5 border border-white/10 px-3 py-1.5 text-[9px] font-black uppercase tracking-wider text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] hover:border-[#ffb800]/30 transition-colors"
+                >
+                  <RefreshCcw size={12} />
+                  Reset Controller Defaults
+                </button>
+              </div>
             </div>
           </SectionCard>
 
@@ -224,101 +252,19 @@ export default function GhostSettings() {
             icon={Activity}
           >
             <div className="space-y-6">
-              {/* L1 Core Hurst Filter */}
+              {/* Adaptive Expiry Extension Slot */}
               <div className="space-y-3 rounded-lg bg-white/[0.02] p-4 border border-white/5">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={hurstFilterEnabled}
-                      onChange={(e) => setHurstFilterEnabled(e.target.checked)}
-                      className="accent-[#ffb800] rounded"
-                    />
-                    <span className={`text-[10px] font-black uppercase tracking-wider ${hurstFilterEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
-                      L1 Hurst Exponent Filter
-                    </span>
-                  </label>
-                  <span className={`text-xs font-black ${hurstFilterEnabled ? 'text-white' : 'text-gray-600'}`}>
-                    H &lt; {hurstFilterThreshold.toFixed(2)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0.30"
-                  max="0.60"
-                  step="0.01"
-                  disabled={!hurstFilterEnabled}
-                  value={hurstFilterThreshold}
-                  onChange={(e) => setHurstFilterThreshold(Number(e.target.value))}
-                  className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer"
-                />
-                <div className="text-[10px] text-gray-500 leading-normal">
-                  Prevents executing counter-trend setups in strong trending or random-noise markets.
-                </div>
-              </div>
-
-              {/* L2 Premium Slot */}
-              <div className={`space-y-3 rounded-lg bg-white/[0.02] p-4 border border-white/5 transition-opacity duration-200 ${hasPremiumHurst ? '' : 'opacity-50'}`}>
                 <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        disabled={!hasPremiumHurst}
-                        checked={hurstL2Enabled}
-                        onChange={(e) => setHurstL2Enabled(e.target.checked)}
-                        className="accent-[#ffb800] rounded disabled:cursor-not-allowed"
-                      />
-                      <span className={`text-[10px] font-black uppercase tracking-wider ${hurstL2Enabled && hasPremiumHurst ? 'text-emerald-400' : 'text-gray-500'}`}>
-                        L2 Adaptive Expiry (Premium)
-                      </span>
-                    </label>
-                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-wider ${adaptiveExpiryEnabled ? 'text-emerald-400' : 'text-gray-400'}`}>
+                    Volatility-Adaptive Expiry Extension
+                  </span>
                   <span className={`rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${
-                    hasPremiumHurst ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-yellow-500/10 text-[#ffb800] border border-[#ffb800]/20'
+                    adaptiveExpiryEnabled ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
                   }`}>
-                    {hasPremiumHurst ? 'Unlocked' : 'Locked'}
+                    {adaptiveExpiryEnabled ? 'Active Plugin' : 'Disabled'}
                   </span>
                 </div>
-                {hasPremiumHurst && hurstL2Enabled ? (
-                  <HurstExpirySettings />
-                ) : (
-                  <div className="text-[10px] text-gray-500 leading-normal italic">
-                    Vectorized multi-scale R/S and dynamic 30s-3m contract durations.
-                  </div>
-                )}
-              </div>
-
-              {/* L3 Elite Slot */}
-              <div className={`space-y-3 rounded-lg bg-white/[0.02] p-4 border border-white/5 transition-opacity duration-200 ${hasEliteHurst ? '' : 'opacity-50'}`}>
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        disabled={!hasEliteHurst}
-                        checked={hurstL3Enabled}
-                        onChange={(e) => setHurstL3Enabled(e.target.checked)}
-                        className="accent-[#ffb800] rounded disabled:cursor-not-allowed"
-                      />
-                      <span className={`text-[10px] font-black uppercase tracking-wider ${hurstL3Enabled && hasEliteHurst ? 'text-purple-400' : 'text-gray-500'}`}>
-                        L3 AI Auto-Calibration (Elite)
-                      </span>
-                    </label>
-                  </div>
-                  <span className={`rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${
-                    hasEliteHurst ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                  }`}>
-                    {hasEliteHurst ? 'Unlocked' : 'Locked'}
-                  </span>
-                </div>
-                {hasEliteHurst && hurstL3Enabled ? (
-                  <HurstAiSettings />
-                ) : (
-                  <div className="text-[10px] text-gray-500 leading-normal italic">
-                    Microstructure scale-cutoff noise filters and dynamic AI boundary adjustments.
-                  </div>
-                )}
+                <AdaptiveExpirySettings />
               </div>
 
               {/* RSI/CCI Momentum Confluence Gate */}
@@ -338,6 +284,47 @@ export default function GhostSettings() {
                 </div>
                 <div className="text-[10px] text-gray-500 leading-normal">
                   Vetoes entry signals if RSI(7) and CCI(9) on 30s candles are not parallel in the direction of the trade from extreme zones.
+                </div>
+              </div>
+
+              {/* Cross-Asset Bayesian Win Probability Filter Extension */}
+              <div className="space-y-3 rounded-lg bg-white/[0.02] p-4 border border-white/5">
+                <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoGhostBayesianFilterEnabled}
+                      onChange={(e) => setAutoGhostBayesianFilterEnabled(e.target.checked)}
+                      className="accent-[#ffb800] rounded"
+                    />
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${autoGhostBayesianFilterEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      Cross-Asset Bayesian Win Probability Filter
+                    </span>
+                  </label>
+                  <span className={`rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${
+                    autoGhostBayesianFilterEnabled ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20' : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+                  }`}>
+                    {autoGhostBayesianFilterEnabled ? `${autoGhostBayesianMinProbability}% Floor` : 'Disabled'}
+                  </span>
+                </div>
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-400">Min Win Probability Floor</span>
+                    <span className="text-xs font-black text-white font-mono">{autoGhostBayesianMinProbability}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="75"
+                    step="1"
+                    disabled={!autoGhostBayesianFilterEnabled}
+                    value={autoGhostBayesianMinProbability}
+                    onChange={(e) => setAutoGhostBayesianMinProbability(Number(e.target.value))}
+                    className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1.5 rounded-lg bg-[#25282f]"
+                  />
+                </div>
+                <div className="text-[10px] text-gray-500 leading-normal italic">
+                  Vetoes low-expectancy trade setups using Laplace-smoothed Naive Bayes computed over 13,700+ pre-seeded historical ghost trade signals.
                 </div>
               </div>
             </div>
@@ -677,6 +664,139 @@ export default function GhostSettings() {
                     onChange={(e) => setAutoGhostManipulationSeverityThreshold(Number(e.target.value))}
                     className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer"
                   />
+                </div>
+              </InputGroup>
+
+              {/* Volatility Score Gate */}
+              <InputGroup label="Volatility Score Gate" tooltip="Vetoes Auto-Ghost entries if the market's volatility score falls outside the selected bounds.">
+                <div className="space-y-4 rounded-xl bg-white/[0.02] p-4 border border-white/5">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoGhostVolatilityGateEnabled}
+                          onChange={(e) => setAutoGhostVolatilityGateEnabled(e.target.checked)}
+                          className="accent-[#ffb800] rounded"
+                        />
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${autoGhostVolatilityGateEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                          Enable Volatility Gate
+                        </span>
+                      </label>
+                      <span className={`text-xs font-black font-mono ${autoGhostVolatilityGateEnabled ? 'text-white' : 'text-gray-600'}`}>
+                        {minVolatilityScore}% - {maxVolatilityScore}%
+                      </span>
+                    </div>
+                    {autoGhostVolatilityGateEnabled && (
+                      <div className="space-y-3 pt-2 border-t border-white/5">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[8px] text-gray-500">
+                            <span>Min Volatility: {minVolatilityScore}%</span>
+                            <span>Max Volatility: {maxVolatilityScore}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={maxVolatilityScore}
+                            onChange={(e) => setMaxVolatilityScore(Number(e.target.value))}
+                            className="w-full accent-[#ffb800] cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </InputGroup>
+
+              {/* Liquidity Score Gate */}
+              <InputGroup label="Liquidity Score Gate" tooltip="Vetoes Auto-Ghost entries if the market's liquidity (sigmoid tick rate) falls outside the selected bounds.">
+                <div className="space-y-4 rounded-xl bg-white/[0.02] p-4 border border-white/5">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={autoGhostLiquidityGateEnabled}
+                          onChange={(e) => setAutoGhostLiquidityGateEnabled(e.target.checked)}
+                          className="accent-[#ffb800] rounded"
+                        />
+                        <span className={`text-[10px] font-black uppercase tracking-wider ${autoGhostLiquidityGateEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                          Enable Liquidity Gate
+                        </span>
+                      </label>
+                      <span className={`text-xs font-black font-mono ${autoGhostLiquidityGateEnabled ? 'text-white' : 'text-gray-600'}`}>
+                        {minLiquidityScore}% - {maxLiquidityScore}%
+                      </span>
+                    </div>
+                    {autoGhostLiquidityGateEnabled && (
+                      <div className="space-y-3 pt-2 border-t border-white/5">
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[8px] text-gray-500">
+                            <span>Min Liquidity: {minLiquidityScore}%</span>
+                            <span>Max Liquidity: {maxLiquidityScore}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={maxLiquidityScore}
+                            onChange={(e) => setMaxLiquidityScore(Number(e.target.value))}
+                            className="w-full accent-[#ffb800] cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </InputGroup>
+
+              {/* Trend Risk Gates (ADX / CCI) */}
+              <InputGroup label="Trend & Exhaustion Gates" tooltip="Advanced filters to avoid executing trades against strong trends or invalid momentum states.">
+                <div className="space-y-4 rounded-xl bg-[#25282f]/20 border border-white/5 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-white">ADX Trend Gate</span>
+                      <span className="text-[8px] text-gray-500 mt-0.5">Vetoes counter-trend setups under strong trending regimes.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoGhostAdxGateEnabled}
+                        onChange={(e) => setAutoGhostAdxGateEnabled(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div className={`w-9 h-5 rounded-full transition-colors relative ${
+                        autoGhostAdxGateEnabled ? 'bg-[#ffb800]' : 'bg-[#25282f]'
+                      }`}>
+                        <div className={`absolute top-[2px] left-[2px] bg-white rounded-full h-4 w-4 transition-transform duration-200 ${
+                          autoGhostAdxGateEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-white">CCI Extreme Gate</span>
+                      <span className="text-[8px] text-gray-500 mt-0.5">Bypasses entries during misaligned CCI overbought/oversold extremes.</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoGhostCciGateEnabled}
+                        onChange={(e) => setAutoGhostCciGateEnabled(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div className={`w-9 h-5 rounded-full transition-colors relative ${
+                        autoGhostCciGateEnabled ? 'bg-[#ffb800]' : 'bg-[#25282f]'
+                      }`}>
+                        <div className={`absolute top-[2px] left-[2px] bg-white rounded-full h-4 w-4 transition-transform duration-200 ${
+                          autoGhostCciGateEnabled ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </InputGroup>
             </div>

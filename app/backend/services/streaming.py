@@ -125,16 +125,9 @@ class StreamingService:
         ai_trade_interval: int | None = None,
         ai_pulse_enabled: bool | None = None,
         ai_pulse_interval_seconds: int | None = None,
-        auto_ghost_hurst_filter_enabled: bool | None = None,
-        auto_ghost_hurst_filter_threshold: float | None = None,
-        hurst_mean_revert_threshold: float | None = None,
-        hurst_trend_threshold: float | None = None,
         min_adaptive_expiry: int | None = None,
-        hurst_min_scale_cutoff: int | None = None,
-        hurst_ai_confidence_threshold: float | None = None,
+        adaptive_expiry_enabled: bool | None = None,
         auto_ghost_blacklist_assets: list[str] | None = None,
-        auto_ghost_hurst_l2_enabled: bool | None = None,
-        auto_ghost_hurst_l3_enabled: bool | None = None,
         auto_ghost_rsi_cci_enabled: bool | None = None,
         volatility_gate_enabled: bool | None = None,
         min_volatility: float | None = None,
@@ -142,6 +135,10 @@ class StreamingService:
         liquidity_gate_enabled: bool | None = None,
         min_liquidity: float | None = None,
         max_liquidity: float | None = None,
+        adx_gate_enabled: bool | None = None,
+        cci_gate_enabled: bool | None = None,
+        bayesian_filter_enabled: bool | None = None,
+        bayesian_min_probability: float | None = None,
     ) -> dict[str, Any]:
 
         previous_level3_enabled = self.level3_enabled
@@ -191,16 +188,9 @@ class StreamingService:
             ai_trade_interval=ai_trade_interval,
             ai_pulse_enabled=ai_pulse_enabled,
             ai_pulse_interval_seconds=ai_pulse_interval_seconds,
-            hurst_filter_enabled=auto_ghost_hurst_filter_enabled,
-            hurst_filter_threshold=auto_ghost_hurst_filter_threshold,
-            hurst_mean_revert_threshold=hurst_mean_revert_threshold,
-            hurst_trend_threshold=hurst_trend_threshold,
+            adaptive_expiry_enabled=adaptive_expiry_enabled,
             min_adaptive_expiry=min_adaptive_expiry,
-            hurst_min_scale_cutoff=hurst_min_scale_cutoff,
-            hurst_ai_confidence_threshold=hurst_ai_confidence_threshold,
             blacklist_assets=auto_ghost_blacklist_assets,
-            hurst_l2_enabled=auto_ghost_hurst_l2_enabled,
-            hurst_l3_enabled=auto_ghost_hurst_l3_enabled,
             rsi_cci_enabled=auto_ghost_rsi_cci_enabled,
 
             volatility_gate_enabled=volatility_gate_enabled,
@@ -209,6 +199,10 @@ class StreamingService:
             liquidity_gate_enabled=liquidity_gate_enabled,
             min_liquidity=min_liquidity,
             max_liquidity=max_liquidity,
+            adx_gate_enabled=adx_gate_enabled,
+            cci_gate_enabled=cci_gate_enabled,
+            bayesian_filter_enabled=bayesian_filter_enabled,
+            bayesian_min_probability=bayesian_min_probability,
         )
 
 
@@ -333,7 +327,6 @@ class StreamingService:
             
             self._oteo_engines[asset] = oteo
             self._market_context_engines[asset] = market_context
-            market_context.extensions_override_hurst = bool(self.extension_manager.get_active_extensions())
             self._manip_engines[asset] = ManipulationDetector()
             self._tick_counts[asset] = len(valid_ticks)
 
@@ -524,7 +517,6 @@ class StreamingService:
                 "level3_suppressed_reason": enriched_result.get("level3_suppressed_reason"),
                 "manipulation_penalty": enriched_result.get("manipulation_penalty", 0.0),
                 "market_context": enriched_result["market_context"],
-                "hurst": enriched_result["market_context"].get("hurst", 0.5),
             })
             oteo_result = enriched_result
         else:
@@ -540,7 +532,6 @@ class StreamingService:
                 "level3_score_adjustment": 0.0,
                 "level3_suppressed_reason": None,
                 "market_context": market_context,
-                "hurst": market_context.get("hurst", 0.5),
             })
 
         if self.level3_enabled and regime is not None:
@@ -753,9 +744,14 @@ class StreamingService:
 
         system_msg = (
             "You are OTC SNIPER's real-time AI market pulse and calibration assistant.\n"
-            "Your job is to write a highly informative, concise market insight and recommend optimizations for the Ghost Controller gate settings.\n\n"
+            "Your job is to write a highly informative, structured market insight and recommend optimizations for the Ghost Controller gate settings.\n\n"
             "CRITICAL INSTRUCTIONS:\n"
-            "1. Output a user-facing text insight message. Detail the current market state, spotted asset-specific manipulation, and provide EXPLICIT trade direction guidance (CALL/PUT) with target price levels/ranges and estimated wait times (e.g. 'wait 2 mins for pullback to 1.0850'). Keep this message under 75 words. Tone must be professional, alert, and highly actionable.\n"
+            "1. Output a user-facing text insight message with structured formatting and emojis:\n"
+            "   - Emojis/Colors for Directions: Use 🟢 CALL for buy setups and 🔴 PUT for sell setups.\n"
+            "   - Format suggestion entries like: '🟢 CALL: EURUSD | Target: 1.0850 | Wait: 2m'\n"
+            "   - Explicitly list '🔥 FOCUS:' (assets/regimes with high win rates/low risk) and '⚠️ AVOID:' (assets/regimes with high manipulation severity or choppiness).\n"
+            "   - Keep the total message under 120 words. Format with clean line breaks and section markers.\n"
+            "   - Tone must be professional, alert, and highly actionable.\n"
             "2. If you see recurring losses or clear patterns under certain conditions (e.g. low win rate in CHOPPY regime, low Z-scores, high manipulation), suggest gate adjustments for the Ghost Controller. Format the suggested adjustments inside a strict JSON code block:\n"
             "```json\n"
             "{\n"

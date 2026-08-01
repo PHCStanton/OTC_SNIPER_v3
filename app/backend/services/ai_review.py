@@ -266,6 +266,7 @@ class KnowledgeBaseLoader:
         self.patterns: list[dict[str, Any]] = []
         self.metadata: dict[str, Any] = {}
         self.loaded: bool = False
+        self.kb_path: Path | None = None
 
     @classmethod
     def get_instance(cls) -> KnowledgeBaseLoader:
@@ -278,6 +279,7 @@ class KnowledgeBaseLoader:
         if self.loaded:
             return
         kb_path = self._find_kb_path()
+        self.kb_path = kb_path
         if not kb_path or not kb_path.exists():
             logger.warning("Knowledge Base file not found. AI confirmation will run without historical patterns.")
             return
@@ -290,6 +292,89 @@ class KnowledgeBaseLoader:
                 logger.info("Successfully loaded %d patterns from Knowledge Base.", len(self.patterns))
         except Exception as e:
             logger.error("Failed to load Knowledge Base from %s: %s", kb_path, e)
+
+    def record_trade_outcome(
+        self,
+        *,
+        asset: str,
+        strategy_level: str,
+        oteo_score: float,
+        regime_label: str,
+        direction: str,
+        outcome: str,
+        profit: float,
+    ) -> None:
+        if not self.loaded:
+            self.lazy_load()
+            
+        score_band = get_score_band(oteo_score)
+        pattern_key = f"{asset}|{strategy_level}|{score_band}|{regime_label}|{direction}"
+        
+        # Find existing pattern
+        matched = None
+        for p in self.patterns:
+            if p.get("pattern_key") == pattern_key:
+                matched = p
+                break
+                
+        is_win = outcome.strip().lower() == "win"
+        
+        if matched:
+            n = matched.get("sample_size", 0)
+            win_rate = matched.get("win_rate_pct", 0.0)
+            wins = (win_rate / 100.0) * n
+            
+            new_n = n + 1
+            new_wins = wins + (1 if is_win else 0)
+            new_wr = (new_wins / new_n) * 100.0
+            new_net = matched.get("net_profit", 0.0) + profit
+            
+            matched["sample_size"] = new_n
+            matched["win_rate_pct"] = round(new_wr, 1)
+            matched["net_profit"] = round(new_net, 2)
+            matched["expectancy"] = round(new_net / new_n, 2)
+            
+            if new_n >= 20:
+                matched["confidence_tier"] = "HIGH"
+            elif new_n >= 10:
+                matched["confidence_tier"] = "MEDIUM"
+            elif new_n >= 5:
+                matched["confidence_tier"] = "LOW"
+            else:
+                matched["confidence_tier"] = "VERY_LOW"
+        else:
+            # Create new pattern
+            matched = {
+                "pattern_key": pattern_key,
+                "asset": asset,
+                "strategy_level": strategy_level,
+                "oteo_score_band": score_band,
+                "regime_label": regime_label,
+                "direction": direction,
+                "sample_size": 1,
+                "win_rate_pct": 100.0 if is_win else 0.0,
+                "expectancy": round(profit, 2),
+                "net_profit": round(profit, 2),
+                "confidence_tier": "VERY_LOW",
+                "suppression_candidate": False,
+                "boost_candidate": False,
+            }
+            self.patterns.append(matched)
+            
+        if self.kb_path:
+            try:
+                self.kb_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(self.kb_path, "w", encoding="utf-8") as f:
+                    json.dump({
+                        "metadata": {
+                            "total_patterns": len(self.patterns),
+                            "generated_utc": self.metadata.get("generated_utc", "live-update"),
+                        },
+                        "patterns": self.patterns
+                    }, f, indent=2)
+                logger.info("Knowledge Base successfully updated for %s.", pattern_key)
+            except Exception as write_err:
+                logger.error("Failed to write updated Knowledge Base to %s: %s", self.kb_path, write_err)
 
     def _find_kb_path(self) -> Path | None:
         try:
