@@ -144,11 +144,24 @@ class SSIDTickCollector:
 
     async def _subscribe_assets(self, ws: Any) -> None:
         """Subscribe to quote streams for configured assets."""
-        for asset in self.assets:
+        for asset in list(self.assets):
             sub_msg = f'42["sub", "{asset}"]'
             await ws.send(sub_msg)
             self._subscribed_assets.add(asset)
             logger.info(f"Subscribed to asset: {asset}")
+
+    async def add_asset(self, asset: str) -> bool:
+        """Dynamically subscribe to any new asset ticker symbol at runtime."""
+        asset_clean = asset.strip()
+        if not asset_clean:
+            return False
+        self.assets.add(asset_clean)
+        if self._ws and self._running:
+            sub_msg = f'42["sub", "{asset_clean}"]'
+            await self._ws.send(sub_msg)
+            self._subscribed_assets.add(asset_clean)
+            logger.info(f"Dynamically subscribed to asset: {asset_clean}")
+        return True
 
     async def _handle_message(self, ws: Any, message: str) -> None:
         """Parse incoming Socket.IO frame message."""

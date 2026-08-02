@@ -109,16 +109,30 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
-          <select
-            value={selectedAsset}
-            onChange={(e) => setSelectedAsset(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-cyan-500 font-mono"
-          >
-            <option value="EURUSD_otc">EURUSD_otc</option>
-            <option value="GBPUSD_otc">GBPUSD_otc</option>
-            <option value="USDJPY_otc">USDJPY_otc</option>
-            <option value="AUDCAD_otc">AUDCAD_otc</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="e.g. BTCUSD, AAPL_otc..."
+              value={selectedAsset}
+              onChange={(e) => setSelectedAsset(e.target.value)}
+              className="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-lg px-3 py-1.5 focus:outline-none focus:border-cyan-500 font-mono w-44"
+            />
+            <button
+              onClick={async () => {
+                if (selectedAsset) {
+                  await fetch('/api/v1/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ asset: selectedAsset }),
+                  });
+                  fetchData();
+                }
+              }}
+              className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-semibold px-3 py-1.5 rounded-lg text-xs font-mono transition"
+            >
+              + Subscribe
+            </button>
+          </div>
 
           <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-full text-xs font-mono">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>

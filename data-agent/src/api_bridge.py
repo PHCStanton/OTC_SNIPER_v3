@@ -133,3 +133,13 @@ class DataBridgeAPI:
         won = trade_data.get("won", False)
         logger.info(f"Recorded trade outcome for {asset}: {'WIN' if won else 'LOSS'}")
         return {"status": "ok", "recorded": True, "asset": asset, "outcome": "WIN" if won else "LOSS"}
+
+    def subscribe_asset(self, collector_ref: Any, asset: str) -> Dict[str, Any]:
+        """Dynamically add any ticker symbol to active WebSocket subscription stream."""
+        asset_clean = asset.strip()
+        if not asset_clean:
+            return {"status": "error", "message": "Asset ticker cannot be empty."}
+
+        collector_ref.assets.add(asset_clean)
+        logger.info(f"Asset added to collector target set: {asset_clean}")
+        return {"status": "ok", "subscribed": True, "asset": asset_clean, "all_assets": list(collector_ref.assets)}

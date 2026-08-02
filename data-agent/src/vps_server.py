@@ -52,7 +52,9 @@ logger = logging.getLogger("data_agent.vps_server")
 
 # Global agent instances
 sink = GCPTickSink()
-collector = SSIDTickCollector(ssid=os.getenv("PO_SSID", "demo_ssid_placeholder"))
+raw_assets = os.getenv("TARGET_ASSETS")
+assets_list = [a.strip() for a in raw_assets.split(",") if a.strip()] if raw_assets else None
+collector = SSIDTickCollector(ssid=os.getenv("PO_SSID", "demo_ssid_placeholder"), assets=assets_list)
 updater = BayesianPriorUpdater()
 tools = HermesMarketTools(priors_updater=updater)
 wa_bridge = OpenWABridge()
@@ -121,14 +123,21 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(404, {"error": f"Endpoint not found: {self.path}"})
 
     def do_POST(self) -> None:
+        content_length = int(self.headers.get("Content-Length", 0))
+        post_data = self.rfile.read(content_length)
+        payload = json.loads(post_data.decode("utf-8")) if post_data else {}
+
         if self.path == "/api/v1/trades/record":
-            content_length = int(self.headers.get("Content-Length", 0))
-            post_data = self.rfile.read(content_length)
             try:
-                payload = json.loads(post_data.decode("utf-8")) if post_data else {}
                 self._send_json(200, bridge_api.record_trade_outcome(payload))
             except Exception as err:
                 self._send_json(400, {"error": f"Invalid JSON payload: {err}"})
+        elif self.path == "/api/v1/subscribe":
+            try:
+                asset_to_sub = payload.get("asset", "")
+                self._send_json(200, bridge_api.subscribe_asset(collector, asset_to_sub))
+            except Exception as err:
+                self._send_json(400, {"error": f"Failed subscribing asset: {err}"})
         else:
             self._send_json(404, {"error": "Endpoint not found"})
 
