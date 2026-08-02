@@ -61,8 +61,19 @@ wa_bridge = OpenWABridge()
 collector.register_callback(sink.push_tick)
 
 
+# Initialize Data Bridge API router
+try:
+    from data_agent.src.api_bridge import DataBridgeAPI
+except ImportError:
+    try:
+        from src.api_bridge import DataBridgeAPI
+    except ImportError:
+        from api_bridge import DataBridgeAPI
+
+bridge_api = DataBridgeAPI()
+
 class TelemetryHTTPHandler(BaseHTTPRequestHandler):
-    """Simple HTTP telemetry handler for OTC_SNIPER frontend."""
+    """Simple HTTP telemetry & DaaS API handler for Data Agent."""
 
     def log_message(self, format, *args):
         pass  # Suppress standard HTTP access logs to keep console clean
@@ -71,19 +82,53 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
         self.wfile.write(json.dumps(payload).encode("utf-8"))
 
+    def do_OPTIONS(self) -> None:
+        self._send_json(200, {"status": "ok"})
+
     def do_GET(self) -> None:
-        if self.path == "/api/status":
+        from urllib.parse import urlparse, parse_qs
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path.rstrip("/")
+        query = parse_qs(parsed_url.query)
+
+        if path == "/api/status":
             self._send_json(200, {
                 "status": "online",
                 "collector": collector.metrics,
                 "sink": sink.metrics,
                 "bayesian": tools.get_bayesian_summary(),
             })
-        elif self.path == "/api/priors":
-            self._send_json(200, updater.load_current_priors())
+        elif path in ("/api/priors", "/api/v1/priors"):
+            self._send_json(200, bridge_api.get_bayesian_priors())
+        elif path.startswith("/api/v1/ticks/raw"):
+            asset = query.get("asset", [None])[0]
+            limit = int(query.get("limit", [100])[0])
+            self._send_json(200, bridge_api.get_raw_ticks(asset=asset, limit=limit))
+        elif path.startswith("/api/v1/ticks/filtered"):
+            asset = query.get("asset", [None])[0]
+            limit = int(query.get("limit", [100])[0])
+            gates = query.get("gates", ["bayesian,volatility,liquidity"])[0]
+            self._send_json(200, bridge_api.get_filtered_ticks(asset=asset, limit=limit, gates_str=gates))
+        elif path.startswith("/api/v1/context"):
+            asset = query.get("asset", ["EURUSD_otc"])[0]
+            self._send_json(200, bridge_api.get_market_context(asset=asset))
+        else:
+            self._send_json(404, {"error": f"Endpoint not found: {self.path}"})
+
+    def do_POST(self) -> None:
+        if self.path == "/api/v1/trades/record":
+            content_length = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                payload = json.loads(post_data.decode("utf-8")) if post_data else {}
+                self._send_json(200, bridge_api.record_trade_outcome(payload))
+            except Exception as err:
+                self._send_json(400, {"error": f"Invalid JSON payload: {err}"})
         else:
             self._send_json(404, {"error": "Endpoint not found"})
 

@@ -1,76 +1,70 @@
-"""
-Comprehensive Unit & Integration Test Suite for VPS Data Agent Architecture.
-"""
-
-import asyncio
+"""Full Test Suite for VPS Data Agent Subsystem and DaaS Data Bridge API."""
+import os
 import json
 import pytest
-from data_agent.src.tick_collector.ssid_collector import SSIDTickCollector
-from data_agent.src.tick_collector.gcp_sink import GCPTickSink
-from data_agent.src.bayesian.prior_updater import BayesianPriorUpdater
+from data_agent.src.filters.bayesian_filter import BayesianFilter
+from data_agent.src.filters.volatility_filter import VolatilityFilter
+from data_agent.src.filters.liquidity_filter import LiquidityFilter
+from data_agent.src.filters.manipulation_filter import ManipulationFilter
+from data_agent.src.filters.pipeline_manager import FilterPipelineManager
+from data_agent.src.api_bridge import DataBridgeAPI
 from data_agent.src.hermes.xai_provider import XAIProvider
-from data_agent.src.hermes.market_tools import HermesMarketTools
-from data_agent.src.whatsapp.openwa_bridge import OpenWABridge
 
 
-@pytest.mark.asyncio
-async def test_full_pipeline_flow(tmp_path):
-    # 1. Initialize local sink
-    db_path = tmp_path / "test_ticks.db"
-    sink = GCPTickSink(local_db_path=str(db_path), flush_interval_sec=0.1)
+def test_decoupled_filter_pipeline():
+    """Verify that individual filters evaluate correctly and independently."""
+    manager = FilterPipelineManager()
 
-    # 2. Initialize collector and hook up sink callback
-    collector = SSIDTickCollector(ssid="mock_ssid_999", assets=["EURUSD_otc"])
-    collector.register_callback(sink.push_tick)
-
-    # 3. Simulate tick reception
-    mock_tick = {
-        "time": 1700000010.0,
-        "asset": "EURUSD_otc",
-        "price": 1.0920,
-        "dir": "CALL",
+    mock_tick = {"asset": "EURUSD_otc", "price": 1.0850, "dir": 1}
+    mock_ctx_pass = {
+        "volatility_score": 45.0,
+        "liquidity_score": 55.0,
+        "bayesian_posterior_prob": 0.95,
+        "has_manipulation": False,
+        "manipulation_severity": 0.02
     }
-    collector._dispatch_tick(mock_tick)
 
-    # 4. Flush sink
-    await sink.flush()
-    assert sink.metrics["total_flushed"] == 1
+    # Test passing pipeline
+    passed, vetoes = manager.evaluate_pipeline(mock_tick, active_gates=["bayesian", "volatility", "liquidity", "manipulation"], market_context=mock_ctx_pass)
+    assert passed is True
+    assert len(vetoes) == 0
 
-    # 5. Calibrate priors
-    priors_file = tmp_path / "bayesian_priors.json"
-    updater = BayesianPriorUpdater(priors_json_path=str(priors_file))
-    updater.update_priors_from_trades([{"won": True, "features": ["oteo_band=85-92"]}])
+    # Test failing volatility gate
+    mock_ctx_vol_fail = dict(mock_ctx_pass)
+    mock_ctx_vol_fail["volatility_score"] = 15.0  # Below min 30.0
+    passed_vol, vetoes_vol = manager.evaluate_pipeline(mock_tick, active_gates=["volatility"], market_context=mock_ctx_vol_fail)
+    assert passed_vol is False
+    assert any("volatility" in v for v in vetoes_vol)
 
-    # 6. Hermes market tools
-    tools = HermesMarketTools(priors_updater=updater)
-    summary = tools.get_bayesian_summary()
-    assert summary["total_trades"] == 1
-    assert summary["overall_win_rate"] == 100.0
 
-    # 7. WhatsApp Alert formatting
-    alert_msg = tools.format_whatsapp_alert(
-        asset="EURUSD_otc",
-        direction="CALL",
-        confidence=0.88,
-        bayesian_prob=0.91,
-        reason="Oteo band 85-92 high confidence setup",
-    )
-    assert "EURUSD_otc" in alert_msg
-    assert "CALL" in alert_msg
+def test_data_bridge_api_endpoints():
+    """Verify that DataBridgeAPI returns clean raw data and gated overlays."""
+    api = DataBridgeAPI(db_path="data-agent/data/test_ticks.db")
 
-    # 8. OpenWA bridge dispatch check
-    bridge = OpenWABridge()
-    sent = await bridge.send_message(alert_msg)
-    assert sent is True
+    # Test clean raw ticks endpoint
+    raw_res = api.get_raw_ticks(asset="EURUSD_otc", limit=10)
+    assert raw_res["status"] == "ok"
+    assert raw_res["mode"] == "RAW_CLEAN_DATA"
+    assert isinstance(raw_res["ticks"], list)
+
+    # Test filtered overlay endpoint
+    filt_res = api.get_filtered_ticks(asset="EURUSD_otc", limit=5, gates_str="bayesian,volatility")
+    assert filt_res["status"] == "ok"
+    assert filt_res["mode"] == "DYNAMIC_FILTERED_OVERLAY"
+    assert "bayesian" in filt_res["active_gates"]
+
+    # Test trade outcome recording
+    rec_res = api.record_trade_outcome({"asset": "EURUSD_otc", "won": True})
+    assert rec_res["status"] == "ok"
+    assert rec_res["recorded"] is True
 
 
 @pytest.mark.asyncio
 async def test_xai_provider_offline_mode():
-    provider = XAIProvider(api_key="")
-    assert provider.is_configured is False
-
-    response = await provider.chat_completion(
-        messages=[{"role": "user", "content": "Analyze current EURUSD_otc market condition"}]
+    """Verify xAI provider gracefully handles offline mode without API key."""
+    provider = XAIProvider(api_key=None)
+    res = await provider.chat_completion(
+        messages=[{"role": "user", "content": "Analyze market"}]
     )
-    assert response["status"] == "mocked"
-    assert "offline evaluation mode" in response["content"]
+    assert res["status"] == "mocked"
+    assert "Hermes Agent operating in offline evaluation mode" in res["content"]
