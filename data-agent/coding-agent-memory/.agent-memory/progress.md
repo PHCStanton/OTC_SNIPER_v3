@@ -1,40 +1,35 @@
 # Development Progress — VPS Data Agent
 
 ## Completed Features
+- **Standalone DaaS Architecture & Data Isolation**:
+  - 100% clean raw tick preservation in BigQuery (`raw_ticks`) and SQLite (`ticks_fallback.db`).
+  - Decoupled, modular filter pipeline (`data-agent/src/filters/`) with Bayesian, Volatility, Liquidity, and Manipulation gate plugins.
+- **Unified DaaS REST API Bridge (`api_bridge.py`)**:
+  - `GET /api/v1/ticks/raw`: Clean raw baseline tick data.
+  - `GET /api/v1/ticks/filtered`: Dynamic filter evaluation overlays.
+  - `GET /api/v1/context`: Historical volatility, liquidity, manipulation, and regime indicators.
+  - `GET /api/v1/priors`: Dynamic Bayesian prior win-rate matrix.
+  - `POST /api/v1/trades/record`: Centralized trade outcome recorder for multi-app collective intelligence.
+  - `POST /api/v1/subscribe`: Dynamic runtime asset subscription endpoint.
+- **Dynamic Asset Subscription**:
+  - Environment variable `TARGET_ASSETS` support in `data-agent/.env`.
+  - `SSIDTickCollector.add_asset` for live Socket.IO subscription frame dispatch (`42["sub", "TICKER"]`).
+- **Standalone React UI (`data-agent/ui/`)**:
+  - Vite + React + `@tailwindcss/vite` (Tailwind v4) + `recharts`.
+  - **OTC-SNIPER Style Left Asset Sidebar**: Search bar, payout filter tabs (`ALL`, `92%+`, `90%+`), live streaming badges, tick velocity indicators, and custom ticker subscription drawer.
+  - `bklit-ui` styled Area Charts (tick stream density & volatility) and Bar Charts (Bayesian prior matrix).
+  - Raw Baseline vs. Gated Overlay tabbed inspection tables.
 - **GCP Infrastructure & Provisioning**:
-  - Dedicated GCP project `otc-sniper-prod` created and set as active CLI/ADC quota project.
-  - BigQuery dataset `otc_sniper_analytics` and table `raw_ticks` (partitioned daily) created via `data-agent/scripts/setup_gcp_resources.py`.
-  - Service Account `otc-sniper-data-agent@otc-sniper-prod.iam.gserviceaccount.com` provisioned with `BigQuery Admin` and `Storage Admin` roles; JSON key linked in `data-agent/.env` and secured in `.gitignore`.
-- **SSID WebSocket Tick Collector**:
-  - Regional endpoint auto-routing (`wss://api-us-north.po.market/socket.io/?EIO=4&transport=websocket`).
-  - Handshake header injection (`Origin: https://po.market`, `User-Agent`).
-  - Pre-formatted `42` auth frame detection and double-escape prevention.
-  - Live multi-asset quote streaming (`EURUSD_otc`, `GBPUSD_otc`, `USDJPY_otc`).
-- **GCP BigQuery & GCS Sink**:
-  - 5-second micro-batching into `otc_sniper_analytics.raw_ticks`.
-  - SQLite local fallback database (`data-agent/data/ticks_fallback.db`).
-- **Bayesian Prior Calibration**:
-  - Feature prior frequency estimation (`oteo_band`, `z_band`, `confidence`, `direction`, `has_manip`, `regime`).
-  - Atomic JSON file update (`app/data/ghost_trades/stats/bayesian_priors.json`).
-- **Hermes Agent & xAI Provider**:
-  - xAI API provider adapter (`https://api.x.ai/v1`, `grok-2`, `grok-beta`).
-  - Hermes market tools (`get_bayesian_summary`, `format_whatsapp_alert`).
-- **OpenWA WhatsApp Gateway Bridge**:
-  - Async REST message dispatch and health check query handling.
-- **VPS Telemetry & Control Server**:
-  - Multi-threaded HTTP API on port 8090 (`/api/status`, `/api/priors`).
-  - Automatic `.env` key loading and conditional collector startup.
-- **React Control Widget & Tunneling**:
-  - `DataAgentWidget.jsx` created for frontend telemetry monitoring.
-  - `allowedHosts: true` set in `app/frontend/vite.config.js` for localtunnel (`*.loca.lt`) support.
-  - `code-tunnel.exe` installed for IDE port forwarding.
+  - Dedicated GCP project `otc-sniper-prod`, BigQuery dataset `otc_sniper_analytics`, and daily partitioned table `raw_ticks`.
+  - Service Account `otc-sniper-data-agent@otc-sniper-prod.iam.gserviceaccount.com` linked via `GOOGLE_APPLICATION_CREDENTIALS`.
+- **Tunneling & CLI Integration**:
+  - Installed VS Code CLI `code-tunnel.exe` (`v1.131.0`).
+  - Configured `server.allowedHosts = true` in Vite for localtunnel support (`*.loca.lt`).
 - **Test Suite**:
-  - Full suite passing 100% cleanly in `QuFLX-v2` (`tests/test_vps_data_agent_full_suite.py`).
-- **Git Branch**:
-  - Pushed to remote branch `data-agent` on GitHub (`https://github.com/PHCStanton/OTC_SNIPER_v3/pull/new/data-agent`).
+  - `tests/test_vps_data_agent_full_suite.py` passing 100% (3/3 passed).
 
 ## In Progress
-- Remote VPS host deployment and live WhatsApp session QR scanning.
+- Remote VPS host deployment (`docker-compose.vps.yml`).
 
 ## Planned Features
 - Multi-SSID session rotation for higher tick throughput.
