@@ -151,16 +151,31 @@ class SSIDTickCollector:
             logger.info(f"Subscribed to asset: {asset}")
 
     async def add_asset(self, asset: str) -> bool:
-        """Dynamically subscribe to any new asset ticker symbol at runtime."""
-        asset_clean = asset.strip()
+        """
+        Dynamically subscribe to any new asset ticker symbol at runtime.
+
+        Idempotent: repeated calls for an already-tracked (and, when connected,
+        already wire-subscribed) asset succeed without re-sending frames.
+        Must be awaited on the collector's owner event loop.
+        """
+        asset_clean = (asset or "").strip()
         if not asset_clean:
             return False
+
+        already_tracked = asset_clean in self.assets
         self.assets.add(asset_clean)
+
         if self._ws and self._running:
+            if asset_clean in self._subscribed_assets:
+                logger.debug("Asset already wire-subscribed (idempotent): %s", asset_clean)
+                return True
             sub_msg = f'42["sub", "{asset_clean}"]'
             await self._ws.send(sub_msg)
             self._subscribed_assets.add(asset_clean)
-            logger.info(f"Dynamically subscribed to asset: {asset_clean}")
+            logger.info("Dynamically subscribed to asset: %s", asset_clean)
+        elif already_tracked:
+            logger.debug("Asset already queued for subscription: %s", asset_clean)
+
         return True
 
     async def _handle_message(self, ws: Any, message: str) -> None:

@@ -37,9 +37,17 @@ def test_decoupled_filter_pipeline():
     assert any("volatility" in v for v in vetoes_vol)
 
 
-def test_data_bridge_api_endpoints():
+def test_data_bridge_api_endpoints(tmp_path):
     """Verify that DataBridgeAPI returns clean raw data and gated overlays."""
-    api = DataBridgeAPI(db_path="data-agent/data/test_ticks.db")
+    from data_agent.src.bayesian.prior_updater import BayesianPriorUpdater
+
+    priors = tmp_path / "bayesian_priors.json"
+    updater = BayesianPriorUpdater(priors_json_path=str(priors))
+    api = DataBridgeAPI(
+        db_path="data-agent/data/test_ticks.db",
+        prior_updater=updater,
+        priors_path=str(priors),
+    )
 
     # Test clean raw ticks endpoint
     raw_res = api.get_raw_ticks(asset="EURUSD_otc", limit=10)
@@ -47,16 +55,24 @@ def test_data_bridge_api_endpoints():
     assert raw_res["mode"] == "RAW_CLEAN_DATA"
     assert isinstance(raw_res["ticks"], list)
 
-    # Test filtered overlay endpoint
+    # Filtered overlay without fabricated context — fail-closed provenance fields present
     filt_res = api.get_filtered_ticks(asset="EURUSD_otc", limit=5, gates_str="bayesian,volatility")
     assert filt_res["status"] == "ok"
     assert filt_res["mode"] == "DYNAMIC_FILTERED_OVERLAY"
     assert "bayesian" in filt_res["active_gates"]
+    for tick in filt_res.get("ticks", []):
+        fe = tick["filter_evaluation"]
+        assert "context_available" in fe
+        assert "context_source" in fe
+        if not fe["context_available"]:
+            assert fe["passed"] is False
+            assert any("unavailable" in r for r in fe["veto_reasons"])
 
-    # Test trade outcome recording
+    # Trade outcome recording commits through the updater
     rec_res = api.record_trade_outcome({"asset": "EURUSD_otc", "won": True})
     assert rec_res["status"] == "ok"
     assert rec_res["recorded"] is True
+    assert rec_res["total_wins"] == 1
 
 
 @pytest.mark.asyncio

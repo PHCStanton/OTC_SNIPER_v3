@@ -26,18 +26,41 @@ Layer 4: WhatsApp Communication Gateway
 ```
 
 ## Key Design Patterns
-1. **Producer-Consumer Buffer Pattern**:
-   - `SSIDTickCollector` produces raw ticks to a thread-safe callback queue.
-   - `GCPTickSink` consumes ticks in micro-batches every 5 seconds, minimizing HTTP overhead.
+1. **Composition Root (`vps_server.py`)**:
+   - Module import defines types/functions only.
+   - `load_env_file()` → `AgentSettings.from_env()` → event loop → `build_services()` → HTTP + tasks.
+   - Shared `BayesianPriorUpdater` instance injected into Hermes and `DataBridgeAPI`.
 
-2. **Resilient Local Fallback Pattern**:
-   - If GCP connectivity or credentials are missing/offline, `GCPTickSink` automatically flushes ticks to local SQLite (`ticks_fallback.db`) with zero data loss.
+2. **Thread-safe subscription gateway**:
+   - HTTP runs on a worker thread; collector `add_asset` is async on the owner loop.
+   - Use `asyncio.run_coroutine_threadsafe(...).result(timeout=...)` — never mutate `collector.assets` from HTTP alone for live wire subscribe.
 
-3. **Atomic File Update Pattern**:
-   - `BayesianPriorUpdater` writes JSON output to a temporary file in the target directory and renames it atomically to prevent corruption during concurrent reads by `bayesian_signal_filter.py`.
+3. **Producer-Consumer Buffer Pattern (Phase 2)**:
+   - Sync `push_tick` → `BufferedTick` (ingestion_id + raw copy) under `threading.Lock`.
+   - Flush takes atomic snapshot swap; restore failed batch ahead of newer ticks.
+   - Async `_flush_mutex` serializes flushes; does not protect ingress.
+   - SQLite write via `asyncio.to_thread`; `INSERT OR IGNORE` on unique `ingestion_id`.
+   - `total_flushed` advances only after local commit; BQ is best-effort after that.
 
-4. **Provider Adapter Pattern**:
-   - `XAIProvider` encapsulates xAI API communications (`https://api.x.ai/v1`), supporting graceful fallback to offline evaluation mode when no API key is provided.
+4. **Resilient Local Fallback Pattern**:
+   - SQLite is the local durability boundary; BQ failure leaves rows for later sync.
 
-5. **Bridge Adapter Pattern**:
-   - `OpenWABridge` provides a clean interface over the OpenWA NestJS REST API, supporting mock logging when no recipient phone number is set.
+5. **Cross-process Prior Store (Phase 4)**:
+   - Shared module: `shared/bayesian_prior_store.py` (monorepo root; no app↔data-agent service coupling).
+   - Sidecar lock `bayesian_priors.json.lock` (msvcrt on Windows, fcntl elsewhere).
+   - Transaction: lock → read → validate → mutate → temp + fsync → atomic replace (with Windows share-violation retry).
+   - Writers: `BayesianPriorUpdater` and `BayesianSignalFilter.on_trade_outcome` delegate fully; memory refreshed only from committed result.
+   - Corrupt on-disk data raises; never silently overwritten with empty priors.
+
+6. **Provider / Bridge Adapters**:
+   - `XAIProvider` offline fallback; `OpenWABridge` optional messaging via `OPENWA_API_URL`.
+
+## Boundary Decisions (remediation)
+- SQLite is the local durability boundary.
+- Market context is a dependency, not a fabricated dict (Phase 3):
+  - `TickFieldContextProvider` uses only valid tick fields; no hardcoded scores.
+  - Requested gates fail closed on missing/invalid context (`*_context_unavailable`).
+  - Unknown gate names → client error (`unknown_gates`).
+  - Manipulation severity is authoritative; `has_manipulation` is metadata only.
+  - `POST /trades/record` validates `asset` + strict JSON boolean `won`; `recorded:true` only after updater commit.
+- OpenWA is optional; data-agent health does not depend on OpenWA (Phase 5).

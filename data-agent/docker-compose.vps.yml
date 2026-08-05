@@ -10,6 +10,8 @@ services:
       - PORT=8080
       - API_KEY=${OPENWA_API_KEY:-secret_wa_key}
     restart: unless-stopped
+    # Intentionally no service_healthy condition: third-party image health
+    # contract is not verified. OpenWA is an optional recoverable adapter.
 
   vps-data-agent:
     build:
@@ -24,9 +26,23 @@ services:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-otc-sniper-prod}
       - OPENWA_API_URL=http://openwa-gateway:8080
       - OPENWA_RECIPIENT_PHONE=${OPENWA_RECIPIENT_PHONE}
+      - TELEMETRY_PORT=8090
     depends_on:
       - openwa-gateway
     restart: unless-stopped
+    # Health uses data-agent liveness only; does not require OpenWA readiness.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/health/live', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
     volumes:
       - ./data:/app/data-agent/data
       - ../app/data/ghost_trades/stats:/app/app/data/ghost_trades/stats

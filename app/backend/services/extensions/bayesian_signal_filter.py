@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
 import math
 import logging
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, Tuple
@@ -14,6 +14,22 @@ logger = logging.getLogger(__name__)
 
 # Resolve priors file path relative to this module — portable across machines.
 _DEFAULT_PRIORS_FILE = Path(__file__).resolve().parents[3] / "data" / "ghost_trades" / "stats" / "bayesian_priors.json"
+
+# Shared transactional store (monorepo root on sys.path).
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+try:
+    from shared.bayesian_prior_store import (
+        BayesianPriorStore,
+        PriorStoreCorruptError,
+        PriorStoreError,
+    )
+except ImportError:  # pragma: no cover
+    BayesianPriorStore = None  # type: ignore[misc, assignment]
+    PriorStoreCorruptError = Exception  # type: ignore[misc, assignment]
+    PriorStoreError = Exception  # type: ignore[misc, assignment]
 
 
 class BayesianSignalFilter(BaseExtension):
@@ -35,14 +51,21 @@ class BayesianSignalFilter(BaseExtension):
         self.min_win_probability = float(self.settings.get("min_win_probability", 0.55))
         self.alpha = 1.0  # Laplace smoothing
         # R3: relative path — portable across machines and deployments.
-        self.priors_file: Path = settings.get("priors_file", _DEFAULT_PRIORS_FILE)
+        self.priors_file: Path = Path(settings.get("priors_file", _DEFAULT_PRIORS_FILE))
 
-        # R4: lock guards all online-update mutations (on_trade_outcome).
+        # In-process lock serializes memory refresh; file lock is process-wide (store).
         self._lock = threading.Lock()
 
         self.total_wins = 0
         self.total_losses = 0
         self.feature_counts: defaultdict = defaultdict(lambda: {"win": 0, "loss": 0})
+
+        if BayesianPriorStore is None:
+            raise RuntimeError(
+                "shared.bayesian_prior_store is not importable; "
+                "ensure monorepo root is on PYTHONPATH"
+            )
+        self._prior_store = BayesianPriorStore(self.priors_file)
         self._load_priors()
 
         # R1: warn explicitly when operating without any prior observations.
@@ -53,44 +76,42 @@ class BayesianSignalFilter(BaseExtension):
             )
 
     # ------------------------------------------------------------------
-    # Persistence
+    # Persistence (delegated to shared BayesianPriorStore)
     # ------------------------------------------------------------------
 
+    def _apply_committed_state(self, data: Dict[str, Any]) -> None:
+        """Refresh in-memory counters from a committed store snapshot."""
+        self.total_wins = int(data.get("total_wins", 0))
+        self.total_losses = int(data.get("total_losses", 0))
+        raw_fc = data.get("feature_counts", {}) or {}
+        self.feature_counts.clear()
+        for k, v in raw_fc.items():
+            self.feature_counts[k] = {
+                "win": int(v.get("win", 0)),
+                "loss": int(v.get("loss", 0)),
+            }
+
     def _load_priors(self) -> None:
-        """Load pre-seeded or persistent Bayesian priors from JSON file."""
-        if self.priors_file.exists():
-            try:
-                with open(self.priors_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    self.total_wins = int(data.get("total_wins", 0))
-                    self.total_losses = int(data.get("total_losses", 0))
-                    raw_fc = data.get("feature_counts", {})
-                    self.feature_counts.clear()
-                    for k, v in raw_fc.items():
-                        self.feature_counts[k] = {"win": int(v.get("win", 0)), "loss": int(v.get("loss", 0))}
+        """Load pre-seeded or persistent Bayesian priors via shared store."""
+        try:
+            data = self._prior_store.read()
+            self._apply_committed_state(data)
+            if self.priors_file.exists():
                 logger.info(
                     "BayesianSignalFilter initialized with priors: %d Wins, %d Losses across %d pattern keys",
                     self.total_wins,
                     self.total_losses,
                     len(self.feature_counts),
                 )
-            except Exception as exc:
-                logger.error("Failed to load Bayesian priors file: %s", exc)
-
-    def _save_priors(self) -> None:
-        """Persist updated priors back to file."""
-        try:
-            self.priors_file.parent.mkdir(parents=True, exist_ok=True)
-            priors_data = {
-                "total_wins": self.total_wins,
-                "total_losses": self.total_losses,
-                "total_trades": self.total_wins + self.total_losses,
-                "feature_counts": dict(self.feature_counts),
-            }
-            with open(self.priors_file, "w", encoding="utf-8") as f:
-                json.dump(priors_data, f, indent=2)
-        except Exception as exc:
-            logger.error("Failed to save Bayesian priors: %s", exc)
+        except PriorStoreCorruptError as exc:
+            # Do not silently replace corrupt on-disk data with empty priors.
+            logger.error(
+                "Corrupt Bayesian priors file — in-memory state left empty; "
+                "refusing to overwrite: %s",
+                exc,
+            )
+        except PriorStoreError as exc:
+            logger.error("Failed to load Bayesian priors file: %s", exc)
 
     # ------------------------------------------------------------------
     # Core Bayesian Logic
@@ -246,22 +267,24 @@ class BayesianSignalFilter(BaseExtension):
     def on_trade_outcome(self, trade_data: Dict[str, Any]) -> None:
         """Online updating: increment feature counts as live ghost trades resolve.
 
-        R4: all mutations are protected by a threading.Lock to prevent race
-        conditions when multiple assets resolve simultaneously.
+        Does not mutate stale in-memory counters before the cross-process store
+        transaction commits. Memory is refreshed only from the committed result.
         """
         outcome = trade_data.get("outcome")
         if outcome not in ("win", "loss"):
             return
 
         feats = self._extract_features(trade_data)
+        feature_keys = [f"{k}={v}" for k, v in feats.items()]
+        won = outcome == "win"
+
+        try:
+            committed = self._prior_store.update_from_trades(
+                [{"won": won, "features": feature_keys}]
+            )
+        except PriorStoreError as exc:
+            logger.error("Failed to persist Bayesian trade outcome: %s", exc)
+            raise
 
         with self._lock:
-            if outcome == "win":
-                self.total_wins += 1
-            else:
-                self.total_losses += 1
-
-            for k, v in feats.items():
-                self.feature_counts[f"{k}={v}"][outcome] += 1
-
-        self._save_priors()
+            self._apply_committed_state(committed)

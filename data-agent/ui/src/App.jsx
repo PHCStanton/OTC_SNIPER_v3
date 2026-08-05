@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Database,
   Activity,
@@ -12,9 +12,6 @@ import {
   Search,
   Plus,
   Radio,
-  TrendingUp,
-  Sliders,
-  DollarSign
 } from 'lucide-react';
 import {
   AreaChart,
@@ -27,6 +24,13 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
+import {
+  buildCustomCatalogEntry,
+  canSubmitCustomAsset,
+  formatPayoutLabel,
+  matchesPayoutFilter,
+  resolveSelectedAsset,
+} from './assetUtils';
 
 export default function App() {
   const [telemetry, setTelemetry] = useState(null);
@@ -34,6 +38,9 @@ export default function App() {
   const [filteredTicks, setFilteredTicks] = useState([]);
   const [selectedAsset, setSelectedAsset] = useState('EURUSD_otc');
   const [customAssetInput, setCustomAssetInput] = useState('');
+  const [subscribeError, setSubscribeError] = useState(null);
+  const [subscribeStatus, setSubscribeStatus] = useState(null);
+  const [subscribeBusy, setSubscribeBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [payoutFilter, setPayoutFilter] = useState('ALL'); // 'ALL', '92%+', '90%+'
   const [activeTab, setActiveTab] = useState('raw'); // 'raw', 'filtered', 'bayesian'
@@ -109,26 +116,58 @@ export default function App() {
   };
 
   const handleSubscribeCustomAsset = async () => {
-    if (!customAssetInput.strip()) return;
+    setSubscribeError(null);
+    setSubscribeStatus(null);
+
+    // Blank / whitespace-only: ignore without runtime error or console noise.
+    if (!canSubmitCustomAsset(customAssetInput)) {
+      return;
+    }
+
     const ticker = customAssetInput.trim();
+    setSubscribeBusy(true);
     try {
-      await fetch('/api/v1/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset: ticker }),
-      });
-      // Add to catalog if missing
+      let response;
+      try {
+        response = await fetch('/api/v1/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asset: ticker }),
+        });
+      } catch {
+        setSubscribeError('Unable to reach the data agent. Check that the telemetry server is online.');
+        return;
+      }
+
+      let payload = {};
+      try {
+        payload = await response.json();
+      } catch {
+        payload = {};
+      }
+
+      if (!response.ok || payload.status !== 'ok' || payload.subscribed !== true) {
+        const message =
+          payload.message ||
+          (response.status === 504
+            ? 'Subscription timed out. Try again in a moment.'
+            : response.status === 400
+              ? 'Invalid asset symbol. Check the ticker and try again.'
+              : 'Subscription failed. Selection and catalog were left unchanged.');
+        setSubscribeError(message);
+        return;
+      }
+
+      // Catalog mutation only after confirmed subscription.
       if (!assetCatalog.some((a) => a.symbol === ticker)) {
-        setAssetCatalog((prev) => [
-          { symbol: ticker, name: ticker, payout: 90, category: 'Custom', live: true, velocity: 100 },
-          ...prev,
-        ]);
+        setAssetCatalog((prev) => [buildCustomCatalogEntry(ticker), ...prev]);
       }
       setSelectedAsset(ticker);
       setCustomAssetInput('');
+      setSubscribeStatus(`Subscribed to ${ticker}`);
       fetchData();
-    } catch (err) {
-      console.error('Failed to subscribe asset:', err);
+    } finally {
+      setSubscribeBusy(false);
     }
   };
 
@@ -136,14 +175,18 @@ export default function App() {
     setActiveGates((prev) => ({ ...prev, [gateKey]: !prev[gateKey] }));
   };
 
+  const selectedCatalogItem = useMemo(
+    () => resolveSelectedAsset(assetCatalog, selectedAsset),
+    [assetCatalog, selectedAsset]
+  );
+  const selectedPayoutLabel = formatPayoutLabel(selectedCatalogItem?.payout);
+
   // Filter asset catalog by search query & payout tab
   const filteredCatalog = assetCatalog.filter((item) => {
     const matchesSearch =
       item.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (payoutFilter === '92%+') return matchesSearch && item.payout >= 92;
-    if (payoutFilter === '90%+') return matchesSearch && item.payout >= 90;
-    return matchesSearch;
+    return matchesSearch && matchesPayoutFilter(item, payoutFilter);
   });
 
   return (
@@ -249,9 +292,11 @@ export default function App() {
 
                   <div className="text-right space-y-1">
                     <span className="inline-block bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded">
-                      {item.payout}%
+                      {formatPayoutLabel(item.payout)}
                     </span>
-                    <p className="text-[10px] text-slate-400">{item.velocity} t/m</p>
+                    <p className="text-[10px] text-slate-400">
+                      {item.velocity != null ? `${item.velocity} t/m` : '— t/m'}
+                    </p>
                   </div>
                 </div>
               );
@@ -266,17 +311,43 @@ export default function App() {
                 type="text"
                 placeholder="e.g. BTCUSD..."
                 value={customAssetInput}
-                onChange={(e) => setCustomAssetInput(e.target.value)}
-                className="flex-1 bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                onChange={(e) => {
+                  setCustomAssetInput(e.target.value);
+                  if (subscribeError) setSubscribeError(null);
+                  if (subscribeStatus) setSubscribeStatus(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSubscribeCustomAsset();
+                  }
+                }}
+                aria-label="Custom asset ticker"
+                aria-invalid={Boolean(subscribeError)}
+                aria-describedby={subscribeError ? 'subscribe-error' : subscribeStatus ? 'subscribe-status' : undefined}
+                disabled={subscribeBusy}
+                className="flex-1 bg-slate-900 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 disabled:opacity-60"
               />
               <button
+                type="button"
                 onClick={handleSubscribeCustomAsset}
-                className="bg-cyan-600 hover:bg-cyan-500 text-slate-950 px-3 py-1.5 rounded font-bold text-xs transition flex items-center gap-1"
+                disabled={subscribeBusy || !canSubmitCustomAsset(customAssetInput)}
+                className="bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed text-slate-950 px-3 py-1.5 rounded font-bold text-xs transition flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Add
               </button>
             </div>
+            {subscribeError && (
+              <p id="subscribe-error" role="alert" className="text-[10px] text-rose-400">
+                {subscribeError}
+              </p>
+            )}
+            {subscribeStatus && !subscribeError && (
+              <p id="subscribe-status" role="status" className="text-[10px] text-emerald-400">
+                {subscribeStatus}
+              </p>
+            )}
           </div>
         </aside>
 
@@ -287,8 +358,11 @@ export default function App() {
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-2xl font-bold text-slate-100 font-mono">{selectedAsset}</h2>
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full font-mono">
-                  92% Payout
+                <span
+                  className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full font-mono"
+                  data-testid="selected-payout-badge"
+                >
+                  {selectedPayoutLabel} Payout
                 </span>
                 <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full font-mono">
                   Active Subscription

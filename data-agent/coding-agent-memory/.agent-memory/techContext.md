@@ -6,35 +6,51 @@
 - **WebSocket Streaming**: `websockets` (targeting `wss://api-us-north.po.market`)
 - **HTTP Client**: `httpx`
 - **Data Processing**: `pandas`, `pyarrow`
-- **GCP Analytics & Data Warehouse**: `google-cloud-bigquery`, `google-cloud-storage` (GCP Project: `otc-sniper-prod`)
-- **GCP Auth**: Service Account JSON Key (`otc-sniper-data-agent@otc-sniper-prod.iam.gserviceaccount.com`)
-- **AI Reasoning**: xAI API (Grok models: `grok-2`, `grok-beta`) via OpenAI-compatible endpoints (`https://api.x.ai/v1`)
-- **Messaging Gateway**: OpenWA Node/NestJS WhatsApp Gateway (`data-agent/OpenWA`)
-- **Local Fallback Storage**: SQLite 3 (`data-agent/data/ticks_fallback.db`)
-- **Containerization**: Docker, Docker Compose (`docker-compose.vps.yml`)
-- **Testing**: Pytest, Pytest-Asyncio (`tests/test_vps_data_agent_full_suite.py`)
+- **GCP Analytics**: `google-cloud-bigquery`, `google-cloud-storage` (project `otc-sniper-prod`)
+- **Local Fallback Storage**: SQLite (`data-agent/data/ticks_fallback.db`)
+- **Messaging Gateway**: OpenWA (`data-agent/OpenWA`), bridge reads **`OPENWA_API_URL`**
+- **Containerization**: Docker Compose (`docker-compose.vps.yml`)
+- **Testing**: Pytest at monorepo root `C:\v3\OTC_SNIPER\tests\`
 
 ## Development & Execution Commands
-- Conda Environment Activation: `conda activate QuFLX-v2`
-- Run full test suite: `pytest -o pythonpath=. tests/test_vps_data_agent_full_suite.py -v`
-- Start VPS server locally: `python data-agent/src/vps_server.py`
-- Run Standalone Data Agent UI: `cd data-agent/ui; npm run dev` (Port 3001)
-- Expose dev server for external testing: `npx localtunnel --port 3001`
+```powershell
+conda activate QuFLX-v2
+cd C:\v3\OTC_SNIPER
 
-## Environment Configuration (`data-agent/.env`)
-```env
-GCP_PROJECT_ID=otc-sniper-prod
-GOOGLE_APPLICATION_CREDENTIALS=data-agent/configs/otc-sniper-prod-e0f838b011f8.json
-PO_SSID=42["auth",{"session":"...","isDemo":0}]
-TARGET_ASSETS=EURUSD_otc,GBPUSD_otc,USDJPY_otc,AUDCAD_otc,USDCHF_otc,ZARUSD_otc,NGNUSD_otc,USDARS_otc
-XAI_API_KEY=your_xai_grok_api_key_here
-TELEMETRY_PORT=8090
-OPENWA_SERVER_URL=http://localhost:3000
-OPENWA_RECIPIENT_PHONE=+1234567890
+# Phase 0 / remediation baseline
+$env:PYTHONDONTWRITEBYTECODE='1'
+conda run -n QuFLX-v2 python -m pytest -p no:cacheprovider -o pythonpath=. `
+  tests/test_vps_data_agent_full_suite.py `
+  tests/test_vps_tick_collector.py `
+  tests/test_bayesian_prior_updater.py `
+  tests/test_bayesian_signal_filter.py -q
+
+# Start data agent (from monorepo root)
+python data-agent/src/vps_server.py
+
+# UI
+cd data-agent/ui; npm run dev
 ```
 
-## Technical Constraints & Guidelines
-- Clean Data Policy: Always preserve raw, unmutated tick data in storage; filters operate as an on-demand dynamic pipeline.
-- PowerShell compatibility: Always set `pythonpath=.` via `-o pythonpath=.` flag in `pytest` commands.
-- Defensive imports: Soft import `google.cloud.bigquery` and `google.cloud.storage` so local fallback mode operates seamlessly.
-- Secrets protection: Never commit `.env` or `data-agent/configs/*.json` files to Git (`.gitignore` enforced).
+## Environment Configuration (`data-agent/.env` — untracked)
+Canonical keys (see `.env.example`):
+
+| Variable | Role |
+|---|---|
+| `TARGET_ASSETS` | Comma-separated initial subscriptions; unset → collector defaults |
+| `OPENWA_API_URL` | OpenWA bridge base URL (default `http://localhost:8080`) |
+| `OPENWA_SERVER_URL` | **Legacy alias only** if `OPENWA_API_URL` unset |
+| `PO_SSID` | Pocket Option session; placeholder keeps collector standby |
+| `TELEMETRY_PORT` | HTTP DaaS port (default 8090) |
+| `SUBSCRIBE_TIMEOUT_SECONDS` | HTTP→asyncio subscribe gateway timeout |
+| `GCP_PROJECT_ID` | BigQuery project |
+| `XAI_API_KEY` | Hermes / xAI |
+
+**Never** commit active `.env` or print `PO_SSID` / API keys into reports.
+
+## Technical Constraints
+- Clean Data Policy: raw ticks unmutated at API boundary.
+- PowerShell: use `-o pythonpath=.`; avoid `&&` chains.
+- Soft-import GCP libs for local fallback.
+- Composition root: importing `vps_server` must not construct DB/clients/threads/services.
+- HTTP thread must not mutate collector state directly; use subscription command gateway.

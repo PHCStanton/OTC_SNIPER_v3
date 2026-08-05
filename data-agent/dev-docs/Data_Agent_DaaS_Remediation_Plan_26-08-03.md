@@ -1,10 +1,14 @@
 # Data Agent DaaS Remediation Plan — 2026-08-03
 
-**Status:** Phase 0 complete; implementation awaiting explicit approval  
+**Status:** CLOSED — Phases 0–5 implemented; final multi-agent review complete (⚠️ non-blocking residuals)  
+**Closed:** 2026-08-04  
+**Branch:** `data-agent` (not merged to main at close)  
 **Source diagnostic:** `data-agent/reports/Diagnostic_report_2026.08..03.md`  
 **Supersedes for execution:** `data-agent/dev-docs/PHASED_PLAN.md`  
 **Scope:** `data-agent/` and the shared Bayesian-prior integration in `app/`  
-**Constraint:** Preserve the existing 4-layer architecture and public REST response shapes where practical.
+**Constraint:** Preserve the existing 4-layer architecture and public REST response shapes where practical.  
+**Final regression:** 97 passed (Phases 1–5 + baseline) in `QuFLX-v2`  
+**Final multi-agent verdict:** @Reviewer ⚠️ · @Debugger ⚠️ · @Optimizer ⚠️ · @Code_Simplifier ⚠️ — F1–F13 addressed; residuals are optional follow-ups (auth exposure, UI mock KPIs, subscribe timeout cancel, buffer high-water).
 
 ---
 
@@ -146,7 +150,7 @@ Expected baseline: `38 passed`.
 
 ---
 
-## Phase 1 — Runtime Composition, Configuration, and Command Boundary [ ]
+## Phase 1 — Runtime Composition, Configuration, and Command Boundary [x]
 
 **Findings:** F4, F5, F9, plus the discovered live-subscription boundary defect.  
 **Primary specialist:** @Coder  
@@ -237,7 +241,7 @@ After implementation and tests:
 
 ---
 
-## Phase 2 — Lossless Tick Buffering and Non-Blocking Persistence [ ]
+## Phase 2 — Lossless Tick Buffering and Non-Blocking Persistence [x]
 
 **Findings:** F1, F12, plus the discovered clear-before-persist loss path.  
 **Primary specialist:** @Coder  
@@ -312,7 +316,7 @@ Stop after the @Reviewer report and wait for explicit user approval.
 
 ---
 
-## Phase 3 — Honest Filter Context and Validated Trade Feedback [ ]
+## Phase 3 — Honest Filter Context and Validated Trade Feedback [x]
 
 **Findings:** F2, F3, F7, F8.  
 **Primary specialist:** @Coder  
@@ -392,7 +396,7 @@ Stop after the @Reviewer report and wait for explicit user approval.
 
 ---
 
-## Phase 4 — Cross-Process Bayesian Prior Transactions [ ]
+## Phase 4 — Cross-Process Bayesian Prior Transactions [x]
 
 **Finding:** F6.  
 **Primary specialist:** @Coder  
@@ -453,7 +457,7 @@ Stop after the @Reviewer report and wait for explicit user approval.
 
 ---
 
-## Phase 5 — UI Integrity and Operational Health [ ]
+## Phase 5 — UI Integrity and Operational Health [x]
 
 **Findings:** F10, F11, F13.  
 **Primary specialist:** @Coder  
@@ -630,4 +634,6 @@ The @Team-Leader compiles the four verdicts and awaits final user approval befor
 
 ## Approval Gate
 
-Phase 0 and this corrected plan are complete. **No production implementation begins until the user explicitly approves Phase 1.**
+**CLOSED 2026-08-04.** User approved implementation through Phase 5 and final multi-agent review; plan closed with explicit command `Approved – close remediation`.
+
+No further phase gates remain under this plan. Optional residuals (auth on public exposure, UI live metrics, subscribe-timeout cancel, `batch_size` high-water) are post-plan follow-ups, not open remediation phases.
