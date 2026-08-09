@@ -12,6 +12,8 @@ import {
   Search,
   Plus,
   Radio,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -30,7 +32,9 @@ import {
   formatPayoutLabel,
   matchesPayoutFilter,
   resolveSelectedAsset,
+  DEFAULT_FULL_ASSET_CATALOG,
 } from './assetUtils';
+import ConnectSSIDModal from './components/ConnectSSIDModal';
 
 export default function App() {
   const [telemetry, setTelemetry] = useState(null);
@@ -44,6 +48,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [payoutFilter, setPayoutFilter] = useState('ALL'); // 'ALL', '92%+', '90%+'
   const [activeTab, setActiveTab] = useState('raw'); // 'raw', 'filtered', 'bayesian'
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [activeGates, setActiveGates] = useState({
     bayesian: true,
     volatility: true,
@@ -52,38 +57,48 @@ export default function App() {
   });
 
   // Master asset list with payout metadata & live streaming status
-  const [assetCatalog, setAssetCatalog] = useState([
-    { symbol: 'EURUSD_otc', name: 'EUR/USD OTC', payout: 92, category: 'Currencies', live: true, velocity: 132 },
-    { symbol: 'GBPUSD_otc', name: 'GBP/USD OTC', payout: 92, category: 'Currencies', live: true, velocity: 128 },
-    { symbol: 'USDJPY_otc', name: 'USD/JPY OTC', payout: 90, category: 'Currencies', live: true, velocity: 124 },
-    { symbol: 'AUDCAD_otc', name: 'AUD/CAD OTC', payout: 92, category: 'Currencies', live: true, velocity: 130 },
-    { symbol: 'USDCHF_otc', name: 'USD/CHF OTC', payout: 90, category: 'Currencies', live: true, velocity: 124 },
-    { symbol: 'ZARUSD_otc', name: 'ZAR/USD OTC', payout: 92, category: 'Emerging', live: true, velocity: 122 },
-    { symbol: 'NGNUSD_otc', name: 'NGN/USD OTC', payout: 92, category: 'Emerging', live: true, velocity: 125 },
-    { symbol: 'USDARS_otc', name: 'USD/ARS OTC', payout: 92, category: 'Emerging', live: true, velocity: 124 },
-    { symbol: 'BTCUSD', name: 'Bitcoin / USD', payout: 85, category: 'Crypto', live: false, velocity: 95 },
-    { symbol: 'ETHUSD', name: 'Ethereum / USD', payout: 85, category: 'Crypto', live: false, velocity: 88 },
-    { symbol: 'GOLD_otc', name: 'Gold OTC', payout: 90, category: 'Commodities', live: false, velocity: 110 },
-  ]);
+  const [assetCatalog, setAssetCatalog] = useState(DEFAULT_FULL_ASSET_CATALOG);
+  const [velocityData, setVelocityData] = useState([]);
+  const [bayesianMatrix, setBayesianMatrix] = useState([]);
+  const [subscribingAsset, setSubscribingAsset] = useState(null);
+  const [alertTesting, setAlertTesting] = useState(false);
+  const [alertToast, setAlertToast] = useState(null);
 
-  const mockVelocityData = [
-    { time: '12:00:00', ticks_per_min: 118, vol: 48 },
-    { time: '12:00:05', ticks_per_min: 124, vol: 52 },
-    { time: '12:00:10', ticks_per_min: 132, vol: 55 },
-    { time: '12:00:15', ticks_per_min: 128, vol: 51 },
-    { time: '12:00:20', ticks_per_min: 140, vol: 62 },
-    { time: '12:00:25', ticks_per_min: 135, vol: 58 },
-    { time: '12:00:30', ticks_per_min: 129, vol: 54 },
-  ];
+  // 1. Zero-Latency Real-Time Server-Sent Events (SSE) Stream
+  useEffect(() => {
+    let eventSource = null;
+    try {
+      eventSource = new EventSource(`/api/v1/stream?asset=${selectedAsset}`);
 
-  const mockBayesianMatrix = [
-    { category: 'Z-Band: 1.5-2.0', win_rate: 64.2, sample: 128 },
-    { category: 'Z-Band: 2.0-2.5', win_rate: 68.5, sample: 84 },
-    { category: 'Regime: RANGE', win_rate: 61.4, sample: 310 },
-    { category: 'Regime: PULLBACK', win_rate: 58.7, sample: 145 },
-    { category: 'OTEO: Band 3', win_rate: 65.1, sample: 92 },
-  ];
+      eventSource.addEventListener('tick', (e) => {
+        try {
+          const tickData = JSON.parse(e.data);
+          if (tickData && tickData.asset === selectedAsset) {
+            setRawTicks((prev) => [tickData, ...prev.slice(0, 14)]);
+          }
+        } catch (parseErr) {
+          console.debug('SSE parse error:', parseErr);
+        }
+      });
 
+      eventSource.onerror = (err) => {
+        console.debug('SSE stream standby or reconnecting:', err);
+        if (eventSource) {
+          eventSource.close();
+        }
+      };
+    } catch (sseErr) {
+      console.debug('EventSource not initialized:', sseErr);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
+  }, [selectedAsset]);
+
+  // 2. Periodic Telemetry & Metric Polling (Fallback & Sync)
   useEffect(() => {
     fetchData();
     const timer = setInterval(fetchData, 4000);
@@ -92,26 +107,141 @@ export default function App() {
 
   const fetchData = async () => {
     try {
+      // 1. Telemetry Status
       const resStatus = await fetch('/api/status');
       if (resStatus.ok) {
         const dataStatus = await resStatus.json();
         setTelemetry(dataStatus);
       }
 
+      // 2. Dynamic Asset Catalog & Live Payouts
+      try {
+        const resAssets = await fetch('/api/v1/assets');
+        if (resAssets.ok) {
+          const dataAssets = await resAssets.json();
+          if (Array.isArray(dataAssets.assets) && dataAssets.assets.length > 0) {
+            setAssetCatalog((prev) => {
+              const serverMap = new Map(dataAssets.assets.map((a) => [a.symbol, a]));
+              const merged = dataAssets.assets.slice();
+              for (const item of prev) {
+                if (!serverMap.has(item.symbol)) {
+                  merged.unshift(item);
+                }
+              }
+              return merged;
+            });
+          }
+        }
+      } catch (assetErr) {
+        console.debug('Assets endpoint standby:', assetErr);
+      }
+
+      // 3. Live Raw Ticks
       const resRaw = await fetch(`/api/v1/ticks/raw?asset=${selectedAsset}&limit=15`);
       if (resRaw.ok) {
         const dataRaw = await resRaw.json();
         setRawTicks(dataRaw.ticks || []);
       }
 
+      // 4. Live Dynamic Velocity & Volatility Timeseries
+      try {
+        const resVel = await fetch(`/api/v1/ticks/velocity?asset=${selectedAsset}&limit=12`);
+        if (resVel.ok) {
+          const dataVel = await resVel.json();
+          if (Array.isArray(dataVel.points)) {
+            setVelocityData(dataVel.points);
+          }
+        }
+      } catch (velErr) {
+        console.debug('Velocity endpoint standby:', velErr);
+      }
+
+      // 5. Dynamic Filtered Ticks
       const activeGateList = Object.keys(activeGates).filter((k) => activeGates[k]).join(',');
       const resFilt = await fetch(`/api/v1/ticks/filtered?asset=${selectedAsset}&limit=15&gates=${activeGateList}`);
       if (resFilt.ok) {
         const dataFilt = await resFilt.json();
         setFilteredTicks(dataFilt.ticks || []);
       }
+
+      // 6. Live Bayesian Feature Priors Matrix
+      try {
+        const resPriors = await fetch('/api/v1/priors');
+        if (resPriors.ok) {
+          const dataPriors = await resPriors.json();
+          const priorsObj = dataPriors.priors || dataPriors;
+          if (priorsObj && typeof priorsObj === 'object') {
+            const matrix = [];
+            for (const [key, val] of Object.entries(priorsObj)) {
+              if (val && typeof val === 'object') {
+                const total = Number(val.total || 0);
+                const wins = Number(val.wins || 0);
+                const rate = total > 0 ? (wins / total) * 100 : Number(val.win_rate || val.probability || 50);
+                matrix.push({
+                  category: key.replace(/_/g, ' ').toUpperCase(),
+                  win_rate: Number(rate.toFixed(1)),
+                  sample: total,
+                });
+              }
+            }
+            if (matrix.length > 0) {
+              setBayesianMatrix(matrix.slice(0, 8));
+            }
+          }
+        }
+      } catch (priorErr) {
+        console.debug('Priors endpoint standby:', priorErr);
+      }
     } catch (e) {
       console.warn('Telemetry server offline or proxy loading...', e);
+    }
+  };
+
+  const handleTestAlert = async () => {
+    setAlertTesting(true);
+    setAlertToast(null);
+    try {
+      const res = await fetch('/api/v1/alerts/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `🔔 [OTC SNIPER] Live Telemetry Alert: ${selectedAsset} stream active. Buffer size: ${telemetry?.sink?.buffer_size || 0} ticks.`
+        }),
+      });
+      const data = await res.json();
+      setAlertToast({
+        success: data.delivered,
+        message: data.message || 'Alert dispatched.',
+      });
+    } catch (err) {
+      setAlertToast({
+        success: false,
+        message: 'Could not reach alert dispatch bridge.',
+      });
+    } finally {
+      setAlertTesting(false);
+      setTimeout(() => setAlertToast(null), 5000);
+    }
+  };
+
+  const handleSelectAsset = async (symbol) => {
+    setSelectedAsset(symbol);
+    setSubscribingAsset(symbol);
+    try {
+      await fetch('/api/v1/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asset: symbol }),
+      });
+      // Optimistically flag asset as live
+      setAssetCatalog((prev) =>
+        prev.map((item) => (item.symbol === symbol ? { ...item, live: true } : item))
+      );
+      fetchData();
+    } catch (err) {
+      console.warn('Auto-subscribe asset error:', err);
+    } finally {
+      setTimeout(() => setSubscribingAsset(null), 1200);
     }
   };
 
@@ -191,6 +321,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <ConnectSSIDModal
+        isOpen={isConnectModalOpen}
+        onClose={() => setIsConnectModalOpen(false)}
+        telemetry={telemetry}
+        onSessionUpdated={fetchData}
+      />
+
       {/* Top Header */}
       <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md px-6 py-3.5 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -198,14 +335,57 @@ export default function App() {
             <Database className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-400 bg-clip-text text-transparent">
-              VPS Data Agent Hub
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-400 bg-clip-text text-transparent">
+                VPS Data Agent Hub
+              </h1>
+              <span
+                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                  telemetry?.collector?.is_demo === false
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                }`}
+              >
+                {telemetry?.collector?.is_demo === false ? '● REAL ACCOUNT' : '● DEMO ACCOUNT'}
+              </span>
+            </div>
             <p className="text-xs text-slate-400 font-mono">Standalone DaaS Microservice & Historical Memory Vault</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Test WhatsApp Alert Button */}
+          <button
+            onClick={handleTestAlert}
+            disabled={alertTesting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition disabled:opacity-50"
+            title="Dispatch a test telemetry alert to configured OpenWA phone"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>{alertTesting ? 'Sending Alert...' : 'Test WhatsApp'}</span>
+          </button>
+
+          {/* Connect PO SSID Button */}
+          <button
+            onClick={() => setIsConnectModalOpen(true)}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono border transition ${
+              telemetry?.collector?.connected
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                : telemetry?.collector?.ssid_configured
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+            }`}
+          >
+            {telemetry?.collector?.connected ? <Wifi size={14} /> : <WifiOff size={14} />}
+            <span className="font-semibold">
+              {telemetry?.collector?.connected
+                ? 'PO Session Streaming'
+                : telemetry?.collector?.ssid_configured
+                  ? 'PO Reconnecting...'
+                  : 'Connect PO SSID'}
+            </span>
+          </button>
+
           <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-full text-xs font-mono">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span className="text-emerald-400 font-semibold">GCP BigQuery Connected</span>
@@ -214,11 +394,29 @@ export default function App() {
           <button
             onClick={fetchData}
             className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition"
+            title="Refresh Telemetry"
           >
             <RefreshCcw className="w-4 h-4" />
           </button>
         </div>
       </header>
+
+      {/* Alert Toast Popover */}
+      {alertToast && (
+        <div className="fixed top-16 right-6 z-50 max-w-sm bg-slate-900 border border-slate-700 shadow-2xl rounded-xl p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
+          {alertToast.success ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+          ) : (
+            <XCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+          )}
+          <div className="space-y-1 text-xs">
+            <p className="font-semibold text-slate-200">
+              {alertToast.success ? 'WhatsApp Alert Dispatched' : 'Alert Dispatch Warning'}
+            </p>
+            <p className="text-slate-400 font-mono">{alertToast.message}</p>
+          </div>
+        </div>
+      )}
 
       {/* Main Body: Left Sidebar + Workspace Dashboard */}
       <div className="flex-1 flex overflow-hidden">
@@ -268,10 +466,11 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
             {filteredCatalog.map((item) => {
               const isSelected = selectedAsset === item.symbol;
+              const isSubscribing = subscribingAsset === item.symbol;
               return (
                 <div
                   key={item.symbol}
-                  onClick={() => setSelectedAsset(item.symbol)}
+                  onClick={() => handleSelectAsset(item.symbol)}
                   className={`p-3 rounded-lg border transition cursor-pointer flex items-center justify-between ${
                     isSelected
                       ? 'bg-cyan-500/10 border-cyan-500/60 shadow-md shadow-cyan-500/10'
@@ -283,9 +482,11 @@ export default function App() {
                       <span className={`text-xs font-bold ${isSelected ? 'text-cyan-300' : 'text-slate-200'}`}>
                         {item.symbol}
                       </span>
-                      {item.live && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                      )}
+                      {isSubscribing ? (
+                        <span className="text-[10px] text-cyan-400 font-mono animate-pulse">syncing...</span>
+                      ) : item.live ? (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Active Wire Subscription"></span>
+                      ) : null}
                     </div>
                     <p className="text-[10px] text-slate-500">{item.name}</p>
                   </div>
@@ -379,8 +580,10 @@ export default function App() {
                 <Zap className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase font-semibold">Tick Velocity</p>
-                <p className="text-2xl font-bold text-slate-100 font-mono">132 <span className="text-xs font-normal text-slate-400">ticks/min</span></p>
+                <p className="text-xs text-slate-400 uppercase font-semibold">Total Ingested Ticks</p>
+                <p className="text-2xl font-bold text-slate-100 font-mono">
+                  {telemetry?.collector?.total_ticks ?? 0} <span className="text-xs font-normal text-slate-400">ticks</span>
+                </p>
               </div>
             </div>
 
@@ -389,8 +592,10 @@ export default function App() {
                 <Activity className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase font-semibold">BigQuery Ingestion</p>
-                <p className="text-2xl font-bold text-emerald-400 font-mono">100% <span className="text-xs font-normal text-slate-400">Synced</span></p>
+                <p className="text-xs text-slate-400 uppercase font-semibold">Local Flushed Ticks</p>
+                <p className="text-2xl font-bold text-emerald-400 font-mono">
+                  {telemetry?.sink?.total_flushed ?? 0} <span className="text-xs font-normal text-slate-400">SQLite</span>
+                </p>
               </div>
             </div>
 
@@ -399,21 +604,29 @@ export default function App() {
                 <BarChart3 className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase font-semibold">Bayesian Win-Rate</p>
-                <p className="text-2xl font-bold text-slate-100 font-mono">64.2% <span className="text-xs font-normal text-slate-400">Prior Avg</span></p>
+                <p className="text-xs text-slate-400 uppercase font-semibold">Buffer Queue</p>
+                <p className="text-2xl font-bold text-slate-100 font-mono">
+                  {telemetry?.sink?.buffer_size ?? 0} <span className="text-xs font-normal text-slate-400">in-flight</span>
+                </p>
               </div>
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex items-center gap-4 shadow-sm">
-              <div className="p-3 bg-amber-500/10 text-amber-400 rounded-lg">
-                <ShieldCheck className="w-6 h-6" />
+              <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-lg">
+                <Database className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-xs text-slate-400 uppercase font-semibold">Raw Data Policy</p>
-                <p className="text-sm font-bold text-cyan-400 font-mono">Pristine Unmutated</p>
+                <p className="text-xs text-slate-400 uppercase font-semibold">GCP Sink Health</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <p className="text-sm font-bold text-slate-100 font-mono">
+                    {telemetry?.sink?.gcp_project_id || 'otc-sniper-prod'}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
+
 
           {/* Bklit Style Area Chart: Tick Stream & Volatility */}
           <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
@@ -426,26 +639,33 @@ export default function App() {
             </div>
 
             <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={mockVelocityData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorTicks" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0} />
-                    </linearGradient>
-                    <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 12 }} />
-                  <YAxis stroke="#64748b" tick={{ fontSize: 12 }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }} />
-                  <Area type="monotone" dataKey="ticks_per_min" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorTicks)" name="Tick Density (per min)" />
-                  <Area type="monotone" dataKey="vol" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorVol)" name="Volatility Score" />
-                </AreaChart>
-              </ResponsiveContainer>
+              {velocityData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={velocityData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorTicks" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 12 }} />
+                    <YAxis stroke="#64748b" tick={{ fontSize: 12 }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }} />
+                    <Area type="monotone" dataKey="ticks_per_min" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#colorTicks)" name="Tick Density (per min)" />
+                    <Area type="monotone" dataKey="vol" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorVol)" name="Volatility Score" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 font-mono text-xs gap-2">
+                  <Activity className="w-6 h-6 text-slate-600 animate-pulse" />
+                  <span>Harvesting live ticks for <code className="text-cyan-400">{selectedAsset}</code>... Points populate as batches are received.</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -611,15 +831,22 @@ export default function App() {
             {activeTab === 'bayesian' && (
               <div className="space-y-4">
                 <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mockBayesianMatrix} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                      <XAxis dataKey="category" stroke="#64748b" tick={{ fontSize: 12 }} />
-                      <YAxis domain={[40, 80]} stroke="#64748b" tick={{ fontSize: 12 }} />
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }} />
-                      <Bar dataKey="win_rate" fill="#06b6d4" radius={[6, 6, 0, 0]} name="Win Rate %" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {bayesianMatrix.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={bayesianMatrix} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="category" stroke="#64748b" tick={{ fontSize: 12 }} />
+                        <YAxis domain={[30, 90]} stroke="#64748b" tick={{ fontSize: 12 }} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }} />
+                        <Bar dataKey="win_rate" fill="#06b6d4" radius={[6, 6, 0, 0]} name="Win Rate %" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-500 font-mono text-xs gap-2">
+                      <Database className="w-6 h-6 text-slate-600 animate-pulse" />
+                      <span>Awaiting recorded trade outcomes to compute empirical Bayesian feature win-rate priors.</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -122,7 +122,7 @@ class AgentSettings:
         if not openwa_api_url:
             raise ConfigurationError("OPENWA_API_URL cannot be empty")
 
-        po_ssid = (source.get("PO_SSID") or "demo_ssid_placeholder").strip()
+        po_ssid = (source.get("PO_SSID") or "demo_ssid_placeholder").strip().strip("'\"")
         gcp_project_id = (source.get("GCP_PROJECT_ID") or "otc-sniper-prod").strip()
         if not gcp_project_id:
             raise ConfigurationError("GCP_PROJECT_ID cannot be empty")
@@ -234,10 +234,65 @@ class AgentServices:
             "all_assets": sorted(self.collector.assets),
         }
 
+    def update_session_sync(self, ssid: str, is_demo: Optional[bool] = None) -> Dict[str, Any]:
+        """Thread-safe session update: update collector SSID credentials on owner loop and start stream if standby."""
+        ssid_clean = (ssid or "").strip()
+        if not ssid_clean:
+            return {
+                "status": "error",
+                "code": "invalid_ssid",
+                "message": "SSID token string cannot be empty.",
+            }
+
+        if self.loop.is_closed():
+            return {
+                "status": "error",
+                "code": "loop_closed",
+                "message": "Event loop is closed; cannot update session.",
+            }
+
+        try:
+            future = asyncio.run_coroutine_threadsafe(
+                self.collector.update_session(ssid_clean, is_demo),
+                self.loop,
+            )
+            future.result(timeout=self.settings.subscribe_timeout_sec)
+
+            # Ensure collector loop task is active if it was previously in standby
+            if not self.collector._running:
+                asyncio.run_coroutine_threadsafe(
+                    self._ensure_collector_running(),
+                    self.loop,
+                )
+
+            return {
+                "status": "ok",
+                "message": "Session updated successfully.",
+                "metrics": self.collector.metrics,
+            }
+        except Exception as err:
+            logger.error("Failed updating session: %s", err, exc_info=False)
+            return {
+                "status": "error",
+                "code": "update_failed",
+                "message": str(err),
+            }
+
+    async def _ensure_collector_running(self) -> None:
+        """Start collector task if not running."""
+        if not self.collector._running:
+            self.loop.create_task(self.collector.start())
+            logger.info("Launched SSIDTickCollector task following dynamic connect.")
+
 
 def build_services(settings: AgentSettings, loop: asyncio.AbstractEventLoop) -> AgentServices:
     """Construct all runtime services. Call only after load_env_file() + validation."""
-    sink = GCPTickSink(gcp_project_id=settings.gcp_project_id)
+    # Resolve the SQLite path absolutely so sink and bridge_api always share the same
+    # file regardless of the process CWD (fixes silent empty-results when run from a
+    # subdirectory).  _DATA_AGENT_DIR is computed from __file__ and is always absolute.
+    db_path = str(_DATA_AGENT_DIR / "data" / "ticks_fallback.db")
+
+    sink = GCPTickSink(gcp_project_id=settings.gcp_project_id, local_db_path=db_path)
     collector = SSIDTickCollector(
         ssid=settings.po_ssid,
         assets=settings.target_assets,
@@ -249,9 +304,10 @@ def build_services(settings: AgentSettings, loop: asyncio.AbstractEventLoop) -> 
         api_key=settings.openwa_api_key or None,
         default_recipient=settings.openwa_recipient or None,
     )
-    bridge_api = DataBridgeAPI(prior_updater=updater)
+    bridge_api = DataBridgeAPI(prior_updater=updater, db_path=db_path)
 
     collector.register_callback(sink.push_tick)
+    collector.register_callback(lambda tick: _broadcast_sse_event("tick", tick))
 
     return AgentServices(
         settings=settings,
@@ -263,6 +319,21 @@ def build_services(settings: AgentSettings, loop: asyncio.AbstractEventLoop) -> 
         wa_bridge=wa_bridge,
         bridge_api=bridge_api,
     )
+
+
+# Thread-safe SSE client subscribers
+_sse_subscribers: Set[Any] = set()
+_sse_lock = Thread()
+
+
+def _broadcast_sse_event(event_type: str, data: Any) -> None:
+    """Broadcast an SSE event payload to all active client queues."""
+    import queue
+    for q in list(_sse_subscribers):
+        try:
+            q.put_nowait({"event": event_type, "data": data})
+        except Exception:
+            pass
 
 
 class TelemetryHTTPHandler(BaseHTTPRequestHandler):
@@ -292,6 +363,7 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"status": "ok"})
 
     def do_GET(self) -> None:
+        import queue
         from urllib.parse import urlparse, parse_qs
 
         parsed_url = urlparse(self.path)
@@ -311,6 +383,46 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(*_readiness_response(self.services))
             return
 
+        # Server-Sent Events (SSE) Live Stream Endpoint
+        if path in ("/api/stream", "/api/v1/stream"):
+            target_asset = query.get("asset", [None])[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+
+            client_q: queue.Queue = queue.Queue(maxsize=128)
+            _sse_subscribers.add(client_q)
+            logger.info("SSE client connected for live stream (asset=%s).", target_asset)
+            try:
+                # Send initial connection confirmation
+                init_msg = f"event: connected\ndata: {json.dumps({'status': 'stream_active', 'asset': target_asset})}\n\n"
+                self.wfile.write(init_msg.encode("utf-8"))
+                self.wfile.flush()
+
+                while True:
+                    try:
+                        item = client_q.get(timeout=10.0)
+                        evt = item.get("event", "tick")
+                        tick_data = item.get("data", {})
+                        if target_asset and tick_data.get("asset") != target_asset:
+                            continue
+                        chunk = f"event: {evt}\ndata: {json.dumps(tick_data)}\n\n"
+                        self.wfile.write(chunk.encode("utf-8"))
+                        self.wfile.flush()
+                    except queue.Empty:
+                        # Send keepalive heartbeat comment
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+            except (ConnectionError, BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                _sse_subscribers.discard(client_q)
+                logger.info("SSE client disconnected.")
+            return
+
         services = self._require_services()
 
         if path == "/api/status":
@@ -322,6 +434,14 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
             })
         elif path in ("/api/priors", "/api/v1/priors"):
             result = services.bridge_api.get_bayesian_priors()
+            self._send_json(_api_http_status(result, default=200), result)
+        elif path in ("/api/assets", "/api/v1/assets"):
+            result = services.bridge_api.get_available_assets(services.collector)
+            self._send_json(200, result)
+        elif path.startswith("/api/v1/ticks/velocity"):
+            asset = query.get("asset", [None])[0]
+            limit = int(query.get("limit", [15])[0])
+            result = services.bridge_api.get_tick_velocity(asset=asset, limit=limit)
             self._send_json(_api_http_status(result, default=200), result)
         elif path.startswith("/api/v1/ticks/raw"):
             asset = query.get("asset", [None])[0]
@@ -362,6 +482,29 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
             result = services.subscribe_asset_sync(asset_to_sub)
             http_status = _subscribe_http_status(result)
             self._send_json(http_status, result)
+        elif self.path == "/api/v1/alerts/test":
+            test_msg = payload.get("message", "🔔 [OTC SNIPER] Test alert dispatch from VPS Data Agent Hub.")
+            success = False
+            err_msg = ""
+            try:
+                success = services.wa_bridge.send_alert(test_msg)
+            except Exception as ex:
+                err_msg = str(ex)
+            self._send_json(200, {
+                "status": "ok" if success else "warning",
+                "delivered": success,
+                "message": "Test alert dispatched to WhatsApp." if success else f"OpenWA dispatch offline: {err_msg}",
+            })
+        elif self.path == "/api/v1/auth/connect":
+            ssid_val = payload.get("ssid", "")
+            is_demo_raw = payload.get("is_demo")
+            is_demo_val = bool(is_demo_raw) if is_demo_raw is not None else None
+            result = services.update_session_sync(ssid_val, is_demo_val)
+            http_status = 200 if result.get("status") == "ok" else 400
+            self._send_json(http_status, result)
+        elif self.path == "/api/v1/auth/disconnect":
+            result = services.update_session_sync("demo_ssid_placeholder", True)
+            self._send_json(200, {"status": "ok", "message": "Disconnected session."})
         else:
             self._send_json(404, {"error": "Endpoint not found"})
 

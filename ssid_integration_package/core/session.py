@@ -144,6 +144,15 @@ class PocketOptionSession:
         if self._connected and self._api and self._api.check_connect():
             return True, f"Already connected to {self.account_type}"
 
+        # Ensure current thread has an active event loop for pocketoptionapi initialization
+        try:
+            import asyncio
+            asyncio.get_event_loop()
+        except RuntimeError:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
         try:
             self.logger.info(f"Connecting to {self.account_type} account...")
             

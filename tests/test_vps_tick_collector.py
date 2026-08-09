@@ -46,3 +46,19 @@ def test_ssid_collector_instantiation():
     metrics = collector.metrics
     assert metrics["running"] is False
     assert "EURUSD_otc" in collector.assets
+
+
+def test_ssid_collector_auto_detect_demo_and_real():
+    # 1. Real account SSID frame (isDemo: 0)
+    real_frame = '42["auth",{"session":"real_session_token_xyz","isDemo":0,"uid":99999,"platform":2}]'
+    collector_real = SSIDTickCollector(ssid=real_frame, assets=["EURUSD_otc"])
+    assert collector_real.is_demo == 0
+    assert collector_real.ssid == "real_session_token_xyz"
+    assert "api-us-north.po.market" in collector_real.target_ws_url
+
+    # 2. Demo account SSID frame (isDemo: 1)
+    demo_frame = '42["auth",{"session":"demo_session_token_abc","isDemo":1,"uid":88888,"platform":2}]'
+    collector_demo = SSIDTickCollector(ssid=demo_frame, assets=["EURUSD_otc"])
+    assert collector_demo.is_demo == 1
+    assert collector_demo.ssid == "demo_session_token_abc"
+    assert "demo-api-eu.po.market" in collector_demo.target_ws_url

@@ -222,3 +222,58 @@ def test_filtered_ticks_include_context_provenance(tmp_path):
     res = api.get_filtered_ticks(gates_str="bayesian")
     assert res["status"] == "ok"
     assert res["count"] == 0
+
+
+def test_get_available_assets_returns_catalog_and_reflects_collector():
+    api = DataBridgeAPI()
+    # 1. Standby collector
+    res = api.get_available_assets(collector=None)
+    assert res["status"] == "ok"
+    assert res["count"] >= 25
+    symbols = {a["symbol"] for a in res["assets"]}
+    assert "EURUSD_otc" in symbols
+    assert "ZARUSD_otc" in symbols
+
+    # 2. Collector with active and custom assets
+    collector_mock = MagicMock()
+    collector_mock.assets = {"EURUSD_otc", "MY_CUSTOM_OTC"}
+    collector_mock._subscribed_assets = {"EURUSD_otc"}
+    res_mock = api.get_available_assets(collector=collector_mock)
+    assert res_mock["status"] == "ok"
+    eur_item = next(a for a in res_mock["assets"] if a["symbol"] == "EURUSD_otc")
+    assert eur_item["live"] is True
+    custom_item = next(a for a in res_mock["assets"] if a["symbol"] == "MY_CUSTOM_OTC")
+    assert custom_item["live"] is True
+    assert custom_item["category"] == "Custom"
+
+
+def test_get_tick_velocity_aggregates_sqlite_ticks(tmp_path):
+    import sqlite3
+    db_file = str(tmp_path / "ticks.db")
+    conn = sqlite3.connect(db_file)
+    conn.execute(
+        "CREATE TABLE ticks (timestamp REAL, asset TEXT, price REAL, dir TEXT, is_demo INTEGER, received_at REAL)"
+    )
+    # Insert 10 ticks across 2 time buckets
+    base_ts = 1785000000.0
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO ticks VALUES (?, ?, ?, ?, ?, ?)",
+            (base_ts + i, "EURUSD_otc", 1.0850 + (i * 0.0001), "neutral", 0, base_ts + i),
+        )
+    for i in range(5):
+        conn.execute(
+            "INSERT INTO ticks VALUES (?, ?, ?, ?, ?, ?)",
+            (base_ts + 10 + i, "EURUSD_otc", 1.0860 + (i * 0.0001), "neutral", 0, base_ts + 10 + i),
+        )
+    conn.commit()
+    conn.close()
+
+    api = DataBridgeAPI(db_path=db_file)
+    res = api.get_tick_velocity(asset="EURUSD_otc", limit=10, interval_sec=5)
+    assert res["status"] == "ok"
+    assert res["count"] == 2
+    assert res["points"][0]["sample_count"] == 5
+    assert res["points"][0]["ticks_per_min"] == 60
+    assert "time" in res["points"][0]
+    assert "vol" in res["points"][0]

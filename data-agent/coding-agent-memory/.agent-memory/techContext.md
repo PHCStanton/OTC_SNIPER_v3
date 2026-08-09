@@ -3,9 +3,10 @@
 ## Technologies Used
 - **Language**: Python 3.11+ / 3.12+ (Conda Env: `QuFLX-v2`)
 - **Frontend Stack**: React 18, Vite 6, `@tailwindcss/vite` (Tailwind CSS v4), `recharts`, Lucide Icons
-- **WebSocket Streaming**: `websockets` (targeting `wss://api-us-north.po.market`)
-- **HTTP Client**: `httpx`
-- **Data Processing**: `pandas`, `pyarrow`
+- **Broker Engine**: `PocketOptionSession` wrapping `pocketoptionapi` (Engine.IO v4, `gv.set_csv` hook, `change_symbol`)
+- **WebSocket Gateway**: `websockets` & `pocketoptionapi` (dedicated regional endpoints `api-eu.po.market` / `demo-api-eu.po.market`)
+- **HTTP & SSE Server**: Python standard `http.server` with thread-safe Server-Sent Events broadcaster
+- **Data Processing**: `pandas`, `pyarrow`, `numpy`
 - **GCP Analytics**: `google-cloud-bigquery`, `google-cloud-storage` (project `otc-sniper-prod`)
 - **Local Fallback Storage**: SQLite (`data-agent/data/ticks_fallback.db`)
 - **Messaging Gateway**: OpenWA (`data-agent/OpenWA`), bridge reads **`OPENWA_API_URL`**
@@ -17,40 +18,46 @@
 conda activate QuFLX-v2
 cd C:\v3\OTC_SNIPER
 
-# Phase 0 / remediation baseline
-$env:PYTHONDONTWRITEBYTECODE='1'
-conda run -n QuFLX-v2 python -m pytest -p no:cacheprovider -o pythonpath=. `
-  tests/test_vps_data_agent_full_suite.py `
-  tests/test_vps_tick_collector.py `
-  tests/test_bayesian_prior_updater.py `
-  tests/test_bayesian_signal_filter.py -q
+# Full test suite
+conda run -n QuFLX-v2 python -m pytest tests/test_vps_tick_collector.py tests/test_vps_phase1_runtime.py tests/test_vps_phase3_context_trades.py -v
 
 # Start data agent (from monorepo root)
 python data-agent/src/vps_server.py
 
-# UI
+# UI (development)
 cd data-agent/ui; npm run dev
+
+# UI (production build)
+cd data-agent/ui; npm run build
 ```
+
+## DaaS API Endpoints Summary
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/status` | System health, collector, sink, and Bayesian summary |
+| `GET` | `/api/v1/stream?asset={sym}` | Zero-latency Server-Sent Events (SSE) live tick stream |
+| `GET` | `/api/v1/assets` | Dynamic broker catalog and real-time session payouts |
+| `GET` | `/api/v1/ticks/velocity?asset={sym}` | Rolling 5-second tick density and volatility timeseries |
+| `GET` | `/api/v1/ticks/raw?asset={sym}` | 100% clean, unmutated raw tick baseline |
+| `GET` | `/api/v1/ticks/filtered?asset={sym}` | Raw ticks evaluated against active Bayesian/risk gates |
+| `GET` | `/api/v1/priors` | Empirical Bayesian categorical win-rate distributions |
+| `POST` | `/api/v1/subscribe` | Dynamic ticker subscription (`change_symbol`) |
+| `POST` | `/api/v1/alerts/test` | Test dispatch formatted telemetry alert via OpenWA |
+| `POST` | `/api/v1/trades/record` | Validated trade outcome feedback for prior updating |
+| `POST` | `/api/v1/auth/connect` | Hot-swap SSID credentials at runtime |
+| `POST` | `/api/v1/auth/disconnect` | Standby disconnect |
 
 ## Environment Configuration (`data-agent/.env` — untracked)
 Canonical keys (see `.env.example`):
 
 | Variable | Role |
 |---|---|
-| `TARGET_ASSETS` | Comma-separated initial subscriptions; unset → collector defaults |
-| `OPENWA_API_URL` | OpenWA bridge base URL (default `http://localhost:8080`) |
-| `OPENWA_SERVER_URL` | **Legacy alias only** if `OPENWA_API_URL` unset |
-| `PO_SSID` | Pocket Option session; placeholder keeps collector standby |
+| `TARGET_ASSETS` | Comma-separated initial subscriptions (e.g. `EURUSD_otc,GBPUSD_otc`) |
+| `OPENWA_API_URL` | OpenWA bridge base URL (default `http://localhost:3000`) |
+| `PO_SSID` | Pocket Option session token (`42["auth", {...}]` or raw token) |
 | `TELEMETRY_PORT` | HTTP DaaS port (default 8090) |
-| `SUBSCRIBE_TIMEOUT_SECONDS` | HTTP→asyncio subscribe gateway timeout |
-| `GCP_PROJECT_ID` | BigQuery project |
+| `GCP_PROJECT_ID` | BigQuery project (`otc-sniper-prod`) |
 | `XAI_API_KEY` | Hermes / xAI |
 
-**Never** commit active `.env` or print `PO_SSID` / API keys into reports.
-
-## Technical Constraints
-- Clean Data Policy: raw ticks unmutated at API boundary.
-- PowerShell: use `-o pythonpath=.`; avoid `&&` chains.
-- Soft-import GCP libs for local fallback.
-- Composition root: importing `vps_server` must not construct DB/clients/threads/services.
-- HTTP thread must not mutate collector state directly; use subscription command gateway.
+**Never** commit active `.env` or print `PO_SSID` / API keys into git.

@@ -1,26 +1,32 @@
 # SSID Integration Package - OTC Trading
 
-**For Coding Agents: Complete SSID connection and OTC trade execution integration guide.**
+**For Coding Agents & Developers: Complete SSID connection and OTC trade execution integration guide.**
 
-This package extracts and simplifies the **proven working patterns** from OTC SNIPER project, fixing all the critical issues that prevented real trades.
+This package provides the **proven working patterns** from the OTC SNIPER project, centralizing authentication, WebSocket lifecycle, and trade execution.
 
 ---
 
 ## ⚡ Quick Start (3 minutes)
 
+### Primary API: `PocketOptionSession` (Recommended)
+
 ```python
+from ssid_integration_package.core.session import PocketOptionSession
 from ssid_integration_package.core.ssid_connector import SSIDConnector
 from ssid_integration_package.core.otc_executor import OTCExecutor
 
 # 1. Get your SSID (from Pocket Option browser developer tools)
+# isDemo: 0 = REAL account, isDemo: 1 = DEMO account
 ssid = '42["auth",{"session":"your_real_ssid_here","isDemo":0,"uid":12345,"platform":2}]'
 
-# 2. Connect (critical validation included)
-connector = SSIDConnector(ssid, demo=False)  # Use demo=False for real trades
-success, message = connector.connect()
-print(f"Connection: {message}")
+# 2. Connect (validates SSID format and detects DEMO/REAL automatically)
+session = PocketOptionSession(ssid)
+success, message = session.connect()
+print(f"Connection: {message} ({session.account_type})")
 
-# 3. Execute trade (works exactly like proven CLI)
+# 3. Execute trade with validated OTC executor
+connector = SSIDConnector(ssid)
+connector.connect()
 executor = OTCExecutor(connector)
 result = executor.execute_trade(
     asset="EURUSD_otc",
@@ -35,24 +41,31 @@ print(result['message'])
 
 ## 🔑 Critical Success Points
 
-### 1. **Connection Sequence (DO NOT SKIP)**
+### 1. **Single Source of Truth: `isDemo` is in the SSID**
+
+> [!IMPORTANT]
+> **Account mode (DEMO vs REAL) is determined ONLY by the `isDemo` field inside the SSID frame.**
+> - `isDemo: 0` → REAL account
+> - `isDemo: 1` → DEMO account
+> External function parameters (like `demo=False`) are ignored or secondary; always ensure your SSID JSON contains the intended `isDemo` value.
+
+### 2. **Connection Sequence (DO NOT SKIP)**
 
 **✅ CORRECT PATTERN:**
 ```python
-connector = SSIDConnector(ssid, demo=False)
-success, msg = connector.connect()  # Blocking call with polling
+session = PocketOptionSession(ssid)
+success, msg = session.connect()  # Blocking call with polling & balance verification
 if not success:
     raise Exception(f"Connection failed: {msg}")
 ```
 
-**❌ BROKEN PATTERN (what caused TUI failure):**
+**❌ BROKEN PATTERN:**
 ```python
-api = PocketOption(ssid, demo=False)
-api.connect()  # Missing validation!
-# No wait for connection/balance
+api = PocketOption(ssid)
+api.connect()  # Missing validation & balance wait!
 ```
 
-### 2. **Trade Execution (EXACT CLI COPY)**
+### 3. **Trade Execution**
 
 **✅ WORKS:**
 ```python
@@ -68,9 +81,9 @@ result = connector.api.buy(
 )
 ```
 
-### 3. **Asset Validation (CRITICAL FIX)**
+### 4. **Asset Validation**
 
-**✅ WORKING ASSETS (hardcoded list):**
+**✅ VERIFIED OTC ASSETS:**
 ```python
 verified_assets = [
     "EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "AUDUSD_otc",
@@ -87,31 +100,18 @@ if asset not in verified_assets:
 
 ## 🚨 Issues Fixed (Agent Must Know)
 
-### **Issue 1: Demo Trapping**
+### **Issue 1: Demo Trapping & Parameter Confusion**
 
-**Broken Code:**
-```python
-if not connected or session.demo:  # Always demo!
-    return demo_response
-```
-
-**Fixed Code:**
-```python
-if not connector.check_connection():  # Real connection check only
-    return error_response
-
-result = connector.api.buy(...)  # Always real API call
-```
+- **Old Bug:** Code checked `session.demo` or relied on external arguments that contradicted the SSID payload.
+- **Fixed:** `isDemo` inside the SSID frame is parsed once and controls all routing and WebSocket server selection.
 
 ### **Issue 2: Asset Validation Missing**
 
-**Broken:** Dynamic asset lists that failed
-**Fixed:** Hardcoded working asset list from proven CLI
+- **Fixed:** Hardcoded working OTC asset catalog (`OTCExecutor.OTC_ASSETS`) for guaranteed execution.
 
-### **Issue 3: Connection Check Missing**
+### **Issue 3: Missing Balance / Handshake Validation**
 
-**Broken:** Expected connection without validation
-**Fixed:** `check_connection()` before every trade
+- **Fixed:** `connect()` waits for both WebSocket handshake and balance retrieval to guarantee authenticated readiness.
 
 ---
 
@@ -120,16 +120,15 @@ result = connector.api.buy(...)  # Always real API call
 ```
 ssid_integration_package/
 ├── core/
-│   ├── ssid_connector.py     # SSID connection (fixed validation)
-│   └── otc_executor.py       # Trade execution (CLI pattern)
+│   ├── session.py            # PocketOptionSession (Primary API)
+│   ├── ssid_connector.py     # Backward-compatible wrapper
+│   └── otc_executor.py       # Trade execution with validation
 ├── examples/
-│   ├── basic_connection.py   # Just connect and disconnect
-│   ├── simple_trade.py       # Execute single trade
-│   └── bot_example.py        # Automated trading example
+│   ├── basic_connection.py   # Connect and disconnect
+│   └── simple_trade.py       # Execute trade
 ├── integration_guides/
-│   ├── QUICK_START.md        # 5-minute setup guide
-│   ├── TROUBLESHOOTING.md    # Common error fixes
-│   └── MIGRATION_NOTES.md    # How we fixed TUI issues
+│   ├── INTEGRATION_GUIDE.md  # Complete 12-section master guide
+│   └── dev_docs/             # Multi-agent review reports & plans
 └── config/
     └── config_template.json  # SSID storage template
 ```
@@ -138,64 +137,26 @@ ssid_integration_package/
 
 ## 🔧 Integration Steps
 
-### **Step 1: Add Package to Your Project**
+### **Step 1: Imports**
 
 ```python
-# Copy ssid_integration_package/ to your project root
-# Update imports in your code:
+from ssid_integration_package.core.session import PocketOptionSession
 from ssid_integration_package.core.ssid_connector import SSIDConnector
 from ssid_integration_package.core.otc_executor import OTCExecutor
 ```
 
-### **Step 2: Configure SSID Storage**
-
-```json
-// config/pocket_option_config.json
-{
-  "ssid": "42[\"auth\",{\"session\":\"your_ssid_here\",\"isDemo\":0,\"uid\":12345,\"platform\":2}]",
-  "demo": false
-}
-```
-
-### **Step 3: Basic Integration**
+### **Step 2: Context Manager Usage (Cleanest)**
 
 ```python
-import json
-from ssid_integration_package.core.ssid_connector import SSIDConnector
-from ssid_integration_package.core.otc_executor import OTCExecutor
+from ssid_integration_package.core.session import PocketOptionSession
 
-def trade_example():
-    # Load SSID
-    with open('config/pocket_option_config.json') as f:
-        config = json.load(f)
+ssid = '42["auth",{"session":"...","isDemo":0,"uid":12345,"platform":2}]'
 
-    # Connect
-    connector = SSIDConnector(config['ssid'], demo=config['demo'])
-    success, msg = connector.connect()
-
-    if not success:
-        print(f"Connection failed: {msg}")
-        return
-
-    print(f"✅ Connected: {msg}")
-
-    # Execute trade
-    executor = OTCExecutor(connector)
-    result = executor.execute_trade(
-        asset="EURUSD_otc",
-        direction="call",
-        amount=10.0,
-        expiration=300
-    )
-
-    if result['success']:
-        print(f"✅ Trade: {result['message']}")
-        # Optionally check result after expiration
-        time.sleep(300)  # 5 minutes
-        check_result = executor.check_trade_result(result['order_id'])
-        print(f"Result: {check_result['message']}")
-
-    connector.disconnect()
+with PocketOptionSession(ssid) as session:
+    print(f"Connected to {session.account_type}. Balance: ${session.get_balance():,.2f}")
+    result, order_id = session.buy(10.0, "EURUSD_otc", "call", 300)
+    print(f"Order: {order_id}")
+# Automatically disconnects and calls reset_all() on exit
 ```
 
 ---
@@ -204,105 +165,18 @@ def trade_example():
 
 ### **Test 1: Connection Test**
 ```bash
-cd ssid_integration_package
 python -c "
-from core.ssid_connector import SSIDConnector
-connector = SSIDConnector('your_ssid_here', demo=False)
-success, msg = connector.connect()
+from ssid_integration_package.core.session import PocketOptionSession
+session = PocketOptionSession('your_ssid_here')
+success, msg = session.connect()
 print(f'Result: {success} - {msg}')
-connector.disconnect()
+session.disconnect()
 "
 ```
 
-### **Test 2: Trade Test** (⚠️ Uses real money)
-```bash
-python -c "
-# Insert your SSID and run test trade
-# Be ready to lose $10 if it works
-"
-```
-
-### **Expected Test Results:**
-- ✅ `"Connection: ✅ Connected! Balance: $XXX.XX"`
-- ✅ `"Trade executed. Order ID: XXX"`
-- ❌ `"Asset EURUSD_otc not in verified list"` (if asset wrong)
-- ❌ `"Connection lost before trade"` (if connection drops)
-
 ---
 
-## 🔄 Migration from Broken TUI
+## 📖 Detailed Reference
 
-### **What Was Wrong:**
-
-The OTC SNIPER TUI had these issues:
-1. **Demo fallback condition** trapped all trades in fake mode
-2. **Missing asset validation** caused unreliable trades
-3. **Connection check missing** led to failed trades
-4. **Wrong config source** for expiration settings
-
-### **How We Fixed:**
-
-1. **Removed demo fallback** - always attempt real trade if connected
-2. **Added hardcoded OTC assets** - only proven working ones
-3. **Added connection validation** - `check_connection()` before trades
-4. **Fixed config loading** - use correct config sources
-
-### **Integration Code Differences:**
-
-**❌ BROKEN (from original TUI):**
-```python
-# In data_manager.py execute_trade
-if not self.session.is_connected or self.session.demo:  # Demo trap!
-    return self._demo_trade_response(asset, direction, amount)
-
-result = self.session.api.buy(amount=amount, active=asset, action=direction.value, expirations=expiration)
-```
-
-**✅ FIXED (this package):**
-```python
-# In otc_executor.py execute_trade
-if not self.connector.check_connection():  # No demo condition!
-    return self._error_response("Connection lost before trade")
-
-result = self.connector.api.buy(amount=amount, active=asset, action=direction.lower(), expirations=expiration)
-```
-
----
-
-## 🎯 For Coding Agents: Key Takeaways
-
-### **1. Connection is Everything**
-- Use `SSIDConnector` - it has all the validation fixes
-- Always use `demo=False` for real trades
-- Check `connect()` result before proceeding
-
-### **2. Trade Execution Pattern (Thread-Safe)**
-- Create `OTCExecutor` after successful connection
-- **Thread Safety:** `OTCExecutor` is now thread-safe with internal locks. Supports parallel execution.
-- Always call `check_connection()` before trades
-- Use hardcoded asset list - no dynamic validation
-- `direction` as lowercase string ("call"/"put")
-
-### **3. Error Handling**
-- Check `result['success']` from all operations
-- Handle connection drops gracefully
-- Validate SSID format before starting
-
-### **4. Real Money Trading**
-- This executes **REAL TRADES** costing actual USD
-- Test with small amounts ($1-5) first
-- Monitor balance changes (use `connector.update_balance()` if needed)
-- Check trade results after expiration
-
----
-
-## 📞 Support
-
-Issues? Check:
-1. `integration_guides/TROUBLESHOOTING.md`
-2. SSID format validation
-3. Connection test results
-4. Asset in verified list
-
-**✅ Works exactly like proven OTC SNIPER CLI**
-**🔥 Fixes all TUI trade execution issues**
+For complete architectural details, API signatures, migration instructions, and troubleshooting tables, refer to:
+👉 [integration_guides/INTEGRATION_GUIDE.md](file:///c:/v3/OTC_SNIPER/ssid_integration_package/integration_guides/INTEGRATION_GUIDE.md)

@@ -6,6 +6,8 @@ ssid_integration_package/**/.env
 
 # DATA
 app/data/
+*.db
+data-agent/data/*.db
 
 # Backtester 
 app/backtesting/results/

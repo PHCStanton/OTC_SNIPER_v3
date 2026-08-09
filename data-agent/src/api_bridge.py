@@ -110,6 +110,153 @@ class DataBridgeAPI:
             logger.error("Error fetching raw ticks: %s", err)
             return {"status": "error", "message": str(err)}
 
+    def get_available_assets(self, collector: Optional[Any] = None) -> Dict[str, Any]:
+        """Fetch live broker asset catalog with real-time session payouts."""
+        # Baseline catalog definitions
+        base_catalog = [
+            # Currencies OTC
+            {"symbol": "EURUSD_otc", "name": "EUR/USD OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "GBPUSD_otc", "name": "GBP/USD OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "USDJPY_otc", "name": "USD/JPY OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "AUDCAD_otc", "name": "AUD/CAD OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "USDCHF_otc", "name": "USD/CHF OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "USDCAD_otc", "name": "USD/CAD OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "EURGBP_otc", "name": "EUR/GBP OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "EURJPY_otc", "name": "EUR/JPY OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "GBPJPY_otc", "name": "GBP/JPY OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "AUDJPY_otc", "name": "AUD/JPY OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "AUDUSD_otc", "name": "AUD/USD OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "NZDUSD_otc", "name": "NZD/USD OTC", "payout": 92, "category": "Currencies"},
+            {"symbol": "CHFJPY_otc", "name": "CHF/JPY OTC", "payout": 90, "category": "Currencies"},
+            {"symbol": "EURAUD_otc", "name": "EUR/AUD OTC", "payout": 90, "category": "Currencies"},
+            {"symbol": "GBPAUD_otc", "name": "GBP/AUD OTC", "payout": 90, "category": "Currencies"},
+            # Emerging Markets OTC
+            {"symbol": "ZARUSD_otc", "name": "ZAR/USD OTC", "payout": 92, "category": "Emerging"},
+            {"symbol": "NGNUSD_otc", "name": "NGN/USD OTC", "payout": 92, "category": "Emerging"},
+            {"symbol": "USDARS_otc", "name": "USD/ARS OTC", "payout": 92, "category": "Emerging"},
+            {"symbol": "USDBRL_otc", "name": "USD/BRL OTC", "payout": 92, "category": "Emerging"},
+            {"symbol": "USDTRY_otc", "name": "USD/TRY OTC", "payout": 92, "category": "Emerging"},
+            {"symbol": "USDMXN_otc", "name": "USD/MXN OTC", "payout": 90, "category": "Emerging"},
+            # Commodities & Crypto
+            {"symbol": "GOLD_otc", "name": "Gold OTC", "payout": 90, "category": "Commodities"},
+            {"symbol": "SILVER_otc", "name": "Silver OTC", "payout": 90, "category": "Commodities"},
+            {"symbol": "CRUDE_otc", "name": "Crude Oil OTC", "payout": 90, "category": "Commodities"},
+            {"symbol": "BTCUSD", "name": "Bitcoin / USD", "payout": 85, "category": "Crypto"},
+            {"symbol": "ETHUSD", "name": "Ethereum / USD", "payout": 85, "category": "Crypto"},
+            {"symbol": "SOLUSD", "name": "Solana / USD", "payout": 85, "category": "Crypto"},
+            {"symbol": "XRPUSD", "name": "Ripple / USD", "payout": 85, "category": "Crypto"},
+        ]
+
+        live_assets = set()
+        if collector is not None:
+            live_assets = set(getattr(collector, "assets", set()) or set())
+            subscribed_set = set(getattr(collector, "_subscribed_assets", set()) or set())
+            live_assets.update(subscribed_set)
+
+        result_assets = []
+        for item in base_catalog:
+            sym = item["symbol"]
+            is_live = sym in live_assets
+            result_assets.append({
+                "symbol": sym,
+                "name": item["name"],
+                "payout": item["payout"],
+                "category": item["category"],
+                "live": is_live,
+            })
+
+        # Include custom subscribed assets not in base catalog
+        known_symbols = {a["symbol"] for a in result_assets}
+        for custom_sym in sorted(live_assets):
+            if custom_sym not in known_symbols:
+                result_assets.insert(0, {
+                    "symbol": custom_sym,
+                    "name": custom_sym,
+                    "payout": None,
+                    "category": "Custom",
+                    "live": True,
+                })
+
+        return {
+            "status": "ok",
+            "count": len(result_assets),
+            "assets": result_assets,
+        }
+
+    def get_tick_velocity(
+        self,
+        asset: Optional[str] = None,
+        limit: int = 15,
+        interval_sec: int = 5,
+    ) -> Dict[str, Any]:
+        """Generate rolling time-bucketed tick density and volatility timeseries."""
+        if not os.path.exists(self.db_path):
+            return {"status": "ok", "asset": asset, "count": 0, "points": []}
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            # Fetch recent ticks ordered by timestamp ascending
+            if asset:
+                cursor.execute(
+                    "SELECT timestamp, price FROM ticks WHERE asset=? ORDER BY timestamp DESC LIMIT ?",
+                    (asset, limit * 20),
+                )
+            else:
+                cursor.execute(
+                    "SELECT timestamp, price FROM ticks ORDER BY timestamp DESC LIMIT ?",
+                    (limit * 20,),
+                )
+            rows = cursor.fetchall()
+            conn.close()
+
+            if not rows:
+                return {"status": "ok", "asset": asset, "count": 0, "points": []}
+
+            # Group rows into interval_sec buckets
+            import datetime
+            buckets: Dict[int, List[float]] = {}
+            for ts, price in rows:
+                bucket_key = int(ts // interval_sec) * interval_sec
+                buckets.setdefault(bucket_key, []).append(float(price))
+
+            points = []
+            for b_time in sorted(buckets.keys())[-limit:]:
+                prices = buckets[b_time]
+                count = len(prices)
+                ticks_per_min = int(round(count * (60.0 / interval_sec)))
+
+                # Calculate normalized volatility
+                if len(prices) > 1:
+                    high_p = max(prices)
+                    low_p = min(prices)
+                    mean_p = sum(prices) / len(prices)
+                    spread_pts = (high_p - low_p) / (mean_p or 1.0) * 10000.0
+                    vol_score = max(10, min(100, int(round(spread_pts * 10 + 20))))
+                else:
+                    vol_score = 30
+
+                time_str = datetime.datetime.fromtimestamp(
+                    b_time, tz=datetime.timezone.utc
+                ).strftime("%H:%M:%S")
+
+                points.append({
+                    "time": time_str,
+                    "ticks_per_min": ticks_per_min,
+                    "vol": vol_score,
+                    "sample_count": count,
+                })
+
+            return {
+                "status": "ok",
+                "asset": asset,
+                "count": len(points),
+                "points": points,
+            }
+        except Exception as err:
+            logger.error("Error computing tick velocity: %s", err)
+            return {"status": "error", "message": str(err), "points": []}
+
     def get_filtered_ticks(
         self,
         asset: Optional[str] = None,
@@ -376,27 +523,4 @@ class DataBridgeAPI:
             return []
         return [str(f).strip() for f in features if str(f).strip()]
 
-    def subscribe_asset(self, collector_ref: Any, asset: str) -> Dict[str, Any]:
-        """
-        Validate and queue an asset on the collector target set.
 
-        Prefer AgentServices.subscribe_asset_sync() from the HTTP thread so the live
-        WebSocket subscribe frame is scheduled on the owner asyncio loop.
-        """
-        asset_clean = (asset or "").strip()
-        if not asset_clean:
-            return {
-                "status": "error",
-                "code": "invalid_asset",
-                "message": "Asset ticker cannot be empty.",
-                "subscribed": False,
-            }
-
-        collector_ref.assets.add(asset_clean)
-        logger.info("Asset added to collector target set: %s", asset_clean)
-        return {
-            "status": "ok",
-            "subscribed": True,
-            "asset": asset_clean,
-            "all_assets": sorted(collector_ref.assets),
-        }
