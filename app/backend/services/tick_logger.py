@@ -46,9 +46,14 @@ class TickLogger:
         if self._flush_task:
             self._flush_task.cancel()
             self._flush_task = None
-        # Drain remaining ticks
-        asyncio.create_task(self.flush_all())
-        logger.info("TickLogger buffered flusher stopped and final flush scheduled.")
+        # Drain remaining ticks — guard against no-running-loop during shutdown
+        try:
+            asyncio.create_task(self.flush_all())
+            logger.info("TickLogger buffered flusher stopped and final flush scheduled.")
+        except RuntimeError as exc:
+            logger.error(
+                "TickLogger final flush could not be scheduled (loop closing): %s", exc
+            )
 
     async def write_tick(self, asset: str, tick_data: Dict[str, Any]) -> None:
         """
@@ -103,8 +108,19 @@ class TickLogger:
                 await f.write(content)
         except Exception as e:
             logger.error("Failed to flush ticks for %s: %s", asset, e)
-            # Re-queue on failure so we don't lose ticks
-            self._buffers[asset] = lines + self._buffers[asset]
+            # Re-queue on failure so we don't lose ticks — but cap to prevent unbounded growth
+            MAX_REQUEUE_LINES = 500
+            retained = lines + self._buffers[asset]
+            if len(retained) > MAX_REQUEUE_LINES:
+                dropped = len(retained) - MAX_REQUEUE_LINES
+                logger.error(
+                    "TickLogger buffer for %s exceeded %d lines; dropping %d oldest ticks to bound memory.",
+                    asset,
+                    MAX_REQUEUE_LINES,
+                    dropped,
+                )
+                retained = retained[-MAX_REQUEUE_LINES:]
+            self._buffers[asset] = retained
 
     def load_recent(self, asset: str, max_ticks: int = 300) -> list:
         """

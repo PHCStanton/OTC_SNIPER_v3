@@ -130,10 +130,11 @@ async def test_http_thread_subscription_uses_owner_loop():
             self.assets = set()
             self.metrics = {"running": False}
 
-        async def add_asset(self, asset: str) -> bool:
+        async def add_asset(self, asset: str, *, force: bool = False) -> bool:
             call_threads.append(threading.get_ident())
             self.assets.add(asset)
             return True
+
 
     settings = vs.AgentSettings.from_env({
         "TELEMETRY_PORT": "8090",
@@ -221,3 +222,40 @@ def test_subscribe_empty_asset_returns_structured_error():
         assert result["subscribed"] is False
     finally:
         loop.close()
+
+
+def test_sse_lock_is_threading_lock():
+    """Verify _sse_lock is a threading.Lock instance (not a Thread)."""
+    vs = _import_vps_server()
+    import threading
+    assert isinstance(vs._sse_lock, type(threading.Lock()))
+
+
+def test_broadcast_sse_evicts_full_queue():
+    """Verify _broadcast_sse_event discards dead/full subscriber queues safely."""
+    import queue
+    vs = _import_vps_server()
+    full_q = queue.Queue(maxsize=1)
+    full_q.put_nowait("filler")
+    with vs._sse_lock:
+        vs._sse_subscribers.add(full_q)
+    vs._broadcast_sse_event("tick", {"asset": "TEST", "price": 1.0})
+    with vs._sse_lock:
+        assert full_q not in vs._sse_subscribers, "Dead queue should be evicted"
+        vs._sse_subscribers.clear()
+
+
+def test_openwa_bridge_has_sync_send_alert():
+    """Verify OpenWABridge exposes a synchronous send_alert() method."""
+    from data_agent.src.whatsapp.openwa_bridge import OpenWABridge
+    bridge = OpenWABridge(api_url="http://localhost:9999")
+    assert hasattr(bridge, "send_alert"), "send_alert() method must exist"
+    import inspect
+    assert not inspect.iscoroutinefunction(bridge.send_alert), "send_alert must be synchronous"
+
+
+def test_query_limit_cap_constant_exists():
+    """Verify MAX_QUERY_LIMIT constant is defined and bounded."""
+    vs = _import_vps_server()
+    assert hasattr(vs, "MAX_QUERY_LIMIT")
+    assert vs.MAX_QUERY_LIMIT == 1000

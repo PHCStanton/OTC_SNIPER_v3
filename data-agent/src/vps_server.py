@@ -16,10 +16,11 @@ import os
 import sys
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
 from typing import Any, Dict, List, Optional
+
 
 # Dynamically resolve sys.path to allow execution from root, subdirectories, or standalone scripts
 _SRC_DIR = Path(__file__).resolve().parent
@@ -59,6 +60,7 @@ logger = logging.getLogger("data_agent.vps_server")
 SUBSCRIBE_TIMEOUT_SECONDS = 10.0
 DEFAULT_TELEMETRY_PORT = 8090
 DEFAULT_OPENWA_API_URL = "http://localhost:8080"
+MAX_QUERY_LIMIT = 1000
 
 
 class ConfigurationError(ValueError):
@@ -194,9 +196,11 @@ class AgentServices:
             }
 
         try:
+            # force=True: UI asset switches must re-issue change_symbol even if already tracked
             future = asyncio.run_coroutine_threadsafe(
-                self.collector.add_asset(asset_clean),
+                self.collector.add_asset(asset_clean, force=True),
                 self.loop,
+
             )
             subscribed = future.result(timeout=self.settings.subscribe_timeout_sec)
         except FuturesTimeoutError:
@@ -322,18 +326,30 @@ def build_services(settings: AgentSettings, loop: asyncio.AbstractEventLoop) -> 
 
 
 # Thread-safe SSE client subscribers
-_sse_subscribers: Set[Any] = set()
-_sse_lock = Thread()
+import threading as _threading
+_sse_subscribers: set[Any] = set()
+_sse_lock = _threading.Lock()
 
 
 def _broadcast_sse_event(event_type: str, data: Any) -> None:
     """Broadcast an SSE event payload to all active client queues."""
     import queue
-    for q in list(_sse_subscribers):
+    dead: list[Any] = []
+    with _sse_lock:
+        snapshot = list(_sse_subscribers)
+    for q in snapshot:
         try:
             q.put_nowait({"event": event_type, "data": data})
-        except Exception:
-            pass
+        except queue.Full:
+            dead.append(q)
+            logger.warning("SSE subscriber queue full — evicting dead client.")
+        except Exception as err:
+            dead.append(q)
+            logger.debug("SSE broadcast error (evicting client): %s", err)
+    if dead:
+        with _sse_lock:
+            for q in dead:
+                _sse_subscribers.discard(q)
 
 
 class TelemetryHTTPHandler(BaseHTTPRequestHandler):
@@ -388,13 +404,16 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
             target_asset = query.get("asset", [None])[0]
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Cache-Control", "no-cache, no-transform")
             self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
 
+
             client_q: queue.Queue = queue.Queue(maxsize=128)
-            _sse_subscribers.add(client_q)
+            with _sse_lock:
+                _sse_subscribers.add(client_q)
             logger.info("SSE client connected for live stream (asset=%s).", target_asset)
             try:
                 # Send initial connection confirmation
@@ -416,10 +435,11 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
                         # Send keepalive heartbeat comment
                         self.wfile.write(b": keepalive\n\n")
                         self.wfile.flush()
-            except (ConnectionError, BrokenPipeError, ConnectionResetError):
+            except OSError:
                 pass
             finally:
-                _sse_subscribers.discard(client_q)
+                with _sse_lock:
+                    _sse_subscribers.discard(client_q)
                 logger.info("SSE client disconnected.")
             return
 
@@ -440,17 +460,17 @@ class TelemetryHTTPHandler(BaseHTTPRequestHandler):
             self._send_json(200, result)
         elif path.startswith("/api/v1/ticks/velocity"):
             asset = query.get("asset", [None])[0]
-            limit = int(query.get("limit", [15])[0])
+            limit = min(int(query.get("limit", [15])[0]), MAX_QUERY_LIMIT)
             result = services.bridge_api.get_tick_velocity(asset=asset, limit=limit)
             self._send_json(_api_http_status(result, default=200), result)
         elif path.startswith("/api/v1/ticks/raw"):
             asset = query.get("asset", [None])[0]
-            limit = int(query.get("limit", [100])[0])
+            limit = min(int(query.get("limit", [100])[0]), MAX_QUERY_LIMIT)
             result = services.bridge_api.get_raw_ticks(asset=asset, limit=limit)
             self._send_json(_api_http_status(result, default=200), result)
         elif path.startswith("/api/v1/ticks/filtered"):
             asset = query.get("asset", [None])[0]
-            limit = int(query.get("limit", [100])[0])
+            limit = min(int(query.get("limit", [100])[0]), MAX_QUERY_LIMIT)
             gates = query.get("gates", ["bayesian,volatility,liquidity"])[0]
             result = services.bridge_api.get_filtered_ticks(
                 asset=asset, limit=limit, gates_str=gates
@@ -584,11 +604,20 @@ def _subscribe_http_status(result: Dict[str, Any]) -> int:
     return 500
 
 
-def run_http_server(port: int = DEFAULT_TELEMETRY_PORT) -> HTTPServer:
-    server = HTTPServer(("0.0.0.0", port), TelemetryHTTPHandler)
-    logger.info("VPS Telemetry API Server listening on port %s", port)
+def run_http_server(port: int = DEFAULT_TELEMETRY_PORT) -> ThreadingHTTPServer:
+    """
+    Threaded HTTP server is required because SSE (/api/v1/stream) holds the
+    request handler open indefinitely. A single-threaded HTTPServer would block
+    all other endpoints (including /api/v1/auth/connect) while any SSE client
+    is connected — which is exactly the Data Agent Hub UI default state.
+    """
+    server = ThreadingHTTPServer(("0.0.0.0", port), TelemetryHTTPHandler)
+    # Prevent slow/dead SSE clients from holding sockets forever
+    server.daemon_threads = True
+    logger.info("VPS Telemetry API Server (threaded) listening on port %s", port)
     server.serve_forever()
     return server
+
 
 
 def load_env_file() -> Optional[Path]:

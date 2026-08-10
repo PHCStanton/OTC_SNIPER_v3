@@ -37,6 +37,25 @@ except ImportError:
 
 logger = logging.getLogger("data_agent.tick_collector")
 
+# Lazy-loaded module reference to pocketoptionapi.global_value (PERF 1)
+# Imported once on first use instead of re-importing on every get_live_broker_assets() call.
+_GV_MODULE = None
+_GV_IMPORT_ATTEMPTED = False
+
+
+def _get_global_value_module():
+    """Return the pocketoptionapi.global_value module, importing it only once."""
+    global _GV_MODULE, _GV_IMPORT_ATTEMPTED
+    if _GV_IMPORT_ATTEMPTED:
+        return _GV_MODULE
+    _GV_IMPORT_ATTEMPTED = True
+    try:
+        import pocketoptionapi.global_value as gv
+        _GV_MODULE = gv
+    except ImportError:
+        _GV_MODULE = None
+    return _GV_MODULE
+
 
 def parse_ssid_payload(ssid: str, default_is_demo: bool = True) -> tuple[str, bool, int, int]:
     """Parse raw SSID string or 42["auth", {...}] payload.
@@ -154,6 +173,71 @@ class SSIDTickCollector:
             return "wss://demo-api-eu.po.market/socket.io/?EIO=4&transport=websocket"
         return self.ws_url
 
+    def get_live_broker_assets(self) -> List[Dict[str, Any]]:
+        """Fetch live asset catalog and real-time payouts from broker session if available."""
+        # 1. Check if PocketOptionSession has live assets via pocketoptionapi global_value / asset_manager
+        try:
+            gv = _get_global_value_module()
+            if gv is None:
+                return []
+            # A. Check asset_manager
+            asset_mgr = getattr(gv, "asset_manager", None)
+            if asset_mgr and hasattr(asset_mgr, "assets") and asset_mgr.assets:
+                results = []
+                seen_syms: Set[str] = set()
+                for a in asset_mgr.assets:
+                    sym = str(getattr(a, "symbol", "")).strip()
+                    if not sym or sym in seen_syms:
+                        continue
+                    seen_syms.add(sym)
+                    profit = float(getattr(a, "profit_percent", 0.0))
+                    name = str(getattr(a, "name", sym))
+                    cat = str(getattr(a, "category", "currencies")).capitalize()
+                    results.append({
+                        "symbol": sym,
+                        "name": name,
+                        "payout": int(round(profit)) if profit > 0 else 92,
+                        "category": cat,
+                        "live": sym in self._subscribed_assets or sym in self.assets,
+                    })
+                if results:
+                    return results
+
+            # B. Check PayoutData
+            payout_raw = getattr(gv, "PayoutData", None)
+            if payout_raw:
+                if isinstance(payout_raw, bytes):
+                    payout_raw = payout_raw.decode("utf-8")
+                payload = json.loads(payout_raw) if isinstance(payout_raw, str) else payout_raw
+                if isinstance(payload, list) and payload:
+                    results = []
+                    seen_syms = set()
+                    for entry in payload:
+                        if isinstance(entry, list) and len(entry) >= 6:
+                            sym = str(entry[1]).strip()
+                            if not sym or sym in seen_syms:
+                                continue
+                            seen_syms.add(sym)
+                            name = str(entry[2]).strip() if entry[2] else sym
+                            cat = str(entry[3]).strip() if entry[3] else "Currencies"
+                            try:
+                                payout_pct = int(round(float(entry[5])))
+                            except (TypeError, ValueError):
+                                payout_pct = 92
+                            results.append({
+                                "symbol": sym,
+                                "name": name,
+                                "payout": payout_pct,
+                                "category": cat.capitalize(),
+                                "live": sym in self._subscribed_assets or sym in self.assets,
+                            })
+                    if results:
+                        return results
+        except Exception as err:
+            logger.debug("Could not read live broker asset_manager: %s", err)
+
+        return []
+
     def _on_raw_tick(self, asset: str, price: float, ts: float) -> None:
         """Internal callback invoked by PocketOptionSession hooked_set_csv."""
         now = time.time()
@@ -240,13 +324,31 @@ class SSIDTickCollector:
                 if not self._running:
                     break
 
-                # Prepare formatted 42["auth", ...] frame if raw session token was supplied
-                formatted_ssid = self.raw_ssid
-                if not formatted_ssid.startswith("42["):
-                    formatted_ssid = (
-                        f'42["auth",{{"session":"{self.ssid}","isDemo":{1 if self.is_demo else 0},'
-                        f'"uid":{self._uid},"platform":{self._platform}}}]'
+                # Always rebuild the auth frame from the parsed session token + current
+                # is_demo flag. Using raw_ssid as-is can ignore the UI Demo/Real toggle
+                # when the pasted frame embeds a conflicting isDemo value.
+                session_token = (self.ssid or "").strip() or self.raw_ssid
+                if session_token.startswith("42["):
+                    # Re-parse to extract bare session token if raw still holds a full frame
+                    session_token, _, uid, platform = parse_ssid_payload(
+                        session_token,
+                        default_is_demo=bool(self.is_demo),
                     )
+                    if uid:
+                        self._uid = uid
+                    if platform:
+                        self._platform = platform
+
+                if not session_token or session_token == "demo_ssid_placeholder":
+                    await asyncio.sleep(2.0)
+                    continue
+
+                formatted_ssid = (
+                    f'42["auth",{{"session":"{session_token}",'
+                    f'"isDemo":{1 if self.is_demo else 0},'
+                    f'"uid":{self._uid},"platform":{self._platform}}}]'
+                )
+
 
                 if PocketOptionSession is not None:
                     session = PocketOptionSession(formatted_ssid, timeout=15)
@@ -320,11 +422,13 @@ class SSIDTickCollector:
         for asset in list(self.assets):
             await self.add_asset(asset)
 
-    async def add_asset(self, asset: str) -> bool:
+    async def add_asset(self, asset: str, *, force: bool = False) -> bool:
         """
         Dynamically subscribe to any asset ticker symbol at runtime.
 
-        Idempotent: uses change_symbol(asset, 1) on the live PocketOptionSession.
+        Uses change_symbol(asset, 1) on the live PocketOptionSession.
+        When force=True (UI asset focus switch), always re-issues change_symbol
+        so the broker resumes pushing ticks for that pair even if previously tracked.
         """
         asset_clean = (asset or "").strip()
         if not asset_clean:
@@ -334,7 +438,9 @@ class SSIDTickCollector:
         self.assets.add(asset_clean)
 
         if self._is_ws_connected() and self._running:
-            if asset_clean in self._subscribed_assets:
+            already_subscribed = asset_clean in self._subscribed_assets
+            # Skip only when already subscribed AND caller did not request a forced refresh
+            if already_subscribed and not force:
                 logger.debug("Asset already subscribed (idempotent): %s", asset_clean)
                 return True
             try:
@@ -345,7 +451,11 @@ class SSIDTickCollector:
                         loop = asyncio.get_running_loop()
                         await loop.run_in_executor(None, api.change_symbol, asset_clean, 1)
                         self._subscribed_assets.add(asset_clean)
-                        logger.info("Subscribed to asset via change_symbol: %s", asset_clean)
+                        logger.info(
+                            "%s asset via change_symbol: %s",
+                            "Re-subscribed" if already_subscribed else "Subscribed",
+                            asset_clean,
+                        )
                         return True
 
                 # 2. Test mock / websocket fallback
@@ -353,11 +463,16 @@ class SSIDTickCollector:
                     sub_msg = f'42["changeSymbol", {{"asset": "{asset_clean}", "period": 60}}]'
                     await self._ws.send(sub_msg)
                     self._subscribed_assets.add(asset_clean)
-                    logger.info("Subscribed to asset (mock/wire): %s", asset_clean)
+                    logger.info(
+                        "%s asset (mock/wire): %s",
+                        "Re-subscribed" if already_subscribed else "Subscribed",
+                        asset_clean,
+                    )
                     return True
 
             except Exception as err:
                 logger.warning("Failed subscribing to %s: %s", asset_clean, err)
+                return False
         elif already_tracked:
             logger.debug("Asset already queued for subscription: %s", asset_clean)
         else:

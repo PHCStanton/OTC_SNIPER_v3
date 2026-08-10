@@ -55,3 +55,6 @@ dist/
 .idea/
 .DS_Store
 
+# Standalone dataset repository
+pocket-option-otc-dataset/
+

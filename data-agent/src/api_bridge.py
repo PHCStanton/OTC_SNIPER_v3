@@ -17,6 +17,7 @@ try:
         MarketContextProvider,
         TickFieldContextProvider,
     )
+    from data_agent.src.filters.liquidity_math import calculate_sigmoid_liquidity
 except ImportError:
     try:
         from src.filters.pipeline_manager import FilterPipelineManager, UnknownGateError
@@ -25,6 +26,7 @@ except ImportError:
             MarketContextProvider,
             TickFieldContextProvider,
         )
+        from src.filters.liquidity_math import calculate_sigmoid_liquidity
     except ImportError:
         from filters.pipeline_manager import FilterPipelineManager, UnknownGateError
         from filters.context_provider import (
@@ -32,6 +34,7 @@ except ImportError:
             MarketContextProvider,
             TickFieldContextProvider,
         )
+        from filters.liquidity_math import calculate_sigmoid_liquidity
 
 logger = logging.getLogger(__name__)
 
@@ -72,22 +75,21 @@ class DataBridgeAPI:
             }
 
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            if asset:
-                cursor.execute(
-                    "SELECT timestamp, asset, price, dir, is_demo, received_at "
-                    "FROM ticks WHERE asset=? ORDER BY timestamp DESC LIMIT ?",
-                    (asset, limit),
-                )
-            else:
-                cursor.execute(
-                    "SELECT timestamp, asset, price, dir, is_demo, received_at "
-                    "FROM ticks ORDER BY timestamp DESC LIMIT ?",
-                    (limit,),
-                )
-            rows = cursor.fetchall()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                if asset:
+                    cursor.execute(
+                        "SELECT timestamp, asset, price, dir, is_demo, received_at "
+                        "FROM ticks WHERE asset=? ORDER BY timestamp DESC LIMIT ?",
+                        (asset, limit),
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT timestamp, asset, price, dir, is_demo, received_at "
+                        "FROM ticks ORDER BY timestamp DESC LIMIT ?",
+                        (limit,),
+                    )
+                rows = cursor.fetchall()
 
             ticks = [
                 {
@@ -112,9 +114,9 @@ class DataBridgeAPI:
 
     def get_available_assets(self, collector: Optional[Any] = None) -> Dict[str, Any]:
         """Fetch live broker asset catalog with real-time session payouts."""
-        # Baseline catalog definitions
+        # 1. Base comprehensive catalog
         base_catalog = [
-            # Currencies OTC
+            # Currencies OTC (92% Payouts)
             {"symbol": "EURUSD_otc", "name": "EUR/USD OTC", "payout": 92, "category": "Currencies"},
             {"symbol": "GBPUSD_otc", "name": "GBP/USD OTC", "payout": 92, "category": "Currencies"},
             {"symbol": "USDJPY_otc", "name": "USD/JPY OTC", "payout": 92, "category": "Currencies"},
@@ -145,6 +147,12 @@ class DataBridgeAPI:
             {"symbol": "ETHUSD", "name": "Ethereum / USD", "payout": 85, "category": "Crypto"},
             {"symbol": "SOLUSD", "name": "Solana / USD", "payout": 85, "category": "Crypto"},
             {"symbol": "XRPUSD", "name": "Ripple / USD", "payout": 85, "category": "Crypto"},
+            # Stocks & Indices
+            {"symbol": "#AAPL_otc", "name": "Apple Inc OTC", "payout": 90, "category": "Stocks"},
+            {"symbol": "#MSFT_otc", "name": "Microsoft OTC", "payout": 90, "category": "Stocks"},
+            {"symbol": "#TSLA_otc", "name": "Tesla Inc OTC", "payout": 90, "category": "Stocks"},
+            {"symbol": "#SP500_otc", "name": "S&P 500 Index OTC", "payout": 90, "category": "Indices"},
+            {"symbol": "#US100_otc", "name": "NASDAQ 100 Index OTC", "payout": 90, "category": "Indices"},
         ]
 
         live_assets = set()
@@ -153,19 +161,47 @@ class DataBridgeAPI:
             subscribed_set = set(getattr(collector, "_subscribed_assets", set()) or set())
             live_assets.update(subscribed_set)
 
-        result_assets = []
+        # 2. Check for live broker assets via SSID collector
+        broker_assets_map: Dict[str, Dict[str, Any]] = {}
+        if collector is not None and hasattr(collector, "get_live_broker_assets"):
+            try:
+                for b_item in collector.get_live_broker_assets():
+                    sym = b_item.get("symbol")
+                    if sym:
+                        broker_assets_map[sym] = b_item
+            except Exception as b_err:
+                logger.debug("Error fetching live broker assets: %s", b_err)
+
+        catalog_map: Dict[str, Dict[str, Any]] = {}
+        # Populate from base catalog first
         for item in base_catalog:
             sym = item["symbol"]
             is_live = sym in live_assets
-            result_assets.append({
+            # Update payout if broker provides live rate
+            payout = item["payout"]
+            if sym in broker_assets_map and broker_assets_map[sym].get("payout") is not None:
+                payout = broker_assets_map[sym]["payout"]
+            catalog_map[sym] = {
                 "symbol": sym,
                 "name": item["name"],
-                "payout": item["payout"],
+                "payout": payout,
                 "category": item["category"],
                 "live": is_live,
-            })
+            }
 
-        # Include custom subscribed assets not in base catalog
+        # Include additional assets from live broker that aren't in base catalog
+        for sym, b_item in broker_assets_map.items():
+            if sym not in catalog_map:
+                catalog_map[sym] = {
+                    "symbol": sym,
+                    "name": b_item.get("name", sym),
+                    "payout": b_item.get("payout", 92),
+                    "category": b_item.get("category", "Currencies"),
+                    "live": sym in live_assets,
+                }
+
+        # Include custom subscribed assets not in catalog
+        result_assets = list(catalog_map.values())
         known_symbols = {a["symbol"] for a in result_assets}
         for custom_sym in sorted(live_assets):
             if custom_sym not in known_symbols:
@@ -194,21 +230,20 @@ class DataBridgeAPI:
             return {"status": "ok", "asset": asset, "count": 0, "points": []}
 
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            # Fetch recent ticks ordered by timestamp ascending
-            if asset:
-                cursor.execute(
-                    "SELECT timestamp, price FROM ticks WHERE asset=? ORDER BY timestamp DESC LIMIT ?",
-                    (asset, limit * 20),
-                )
-            else:
-                cursor.execute(
-                    "SELECT timestamp, price FROM ticks ORDER BY timestamp DESC LIMIT ?",
-                    (limit * 20,),
-                )
-            rows = cursor.fetchall()
-            conn.close()
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                # Fetch recent ticks ordered by timestamp ascending
+                if asset:
+                    cursor.execute(
+                        "SELECT timestamp, price FROM ticks WHERE asset=? ORDER BY timestamp DESC LIMIT ?",
+                        (asset, limit * 20),
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT timestamp, price FROM ticks ORDER BY timestamp DESC LIMIT ?",
+                        (limit * 20,),
+                    )
+                rows = cursor.fetchall()
 
             if not rows:
                 return {"status": "ok", "asset": asset, "count": 0, "points": []}
@@ -240,9 +275,17 @@ class DataBridgeAPI:
                     b_time, tz=datetime.timezone.utc
                 ).strftime("%H:%M:%S")
 
+                # Calculate Sigmoid liquidity score and classification
+                liq_score, liq_level = calculate_sigmoid_liquidity(
+                    tick_frequency=float(ticks_per_min),
+                    buffer_len=len(rows),
+                )
+
                 points.append({
                     "time": time_str,
                     "ticks_per_min": ticks_per_min,
+                    "liquidity_score": liq_score,
+                    "liquidity_level": liq_level,
                     "vol": vol_score,
                     "sample_count": count,
                 })

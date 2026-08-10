@@ -37,27 +37,60 @@ export default function ConnectSSIDModal({ isOpen, onClose, telemetry, onSession
 
     setIsConnecting(true);
     try {
-      const res = await fetch('/api/v1/auth/connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ssid: token, is_demo: isDemo }),
-      });
-      const data = await res.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      let res;
+      try {
+        res = await fetch('/api/v1/auth/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ssid: token, is_demo: isDemo }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+
       if (res.ok && data.status === 'ok') {
-        setSuccessMsg('Session connected successfully! WebSocket reconnecting...');
+        setSuccessMsg(
+          isDemo
+            ? 'Demo SSID saved. Connecting to demo-api-eu.po.market...'
+            : 'Real SSID saved. Connecting to live PO servers...'
+        );
         setSsidInput('');
         if (onSessionUpdated) onSessionUpdated();
+        // Poll status briefly so the badge can flip to Connected before close
+        setTimeout(() => {
+          if (onSessionUpdated) onSessionUpdated();
+        }, 2500);
         setTimeout(() => {
           onClose();
-        }, 1200);
+        }, 1800);
       } else {
-        setErrorMsg(data.message || 'Failed to connect SSID session.');
+        const detail = data.message || data.code || `HTTP ${res.status}`;
+        setErrorMsg(
+          `Failed to connect SSID session: ${detail}. ` +
+          'Confirm vps_server is running on port 8090 and the SSID frame is fresh.'
+        );
       }
     } catch (err) {
-      setErrorMsg('Unable to reach telemetry API server: ' + err.message);
+      const aborted = err?.name === 'AbortError';
+      setErrorMsg(
+        aborted
+          ? 'Connect timed out after 15s. The telemetry API may be blocked by a stuck SSE stream — restart vps_server.py and try again.'
+          : `Unable to reach telemetry API on :8090 — ${err.message}. Start with: python data-agent/start.py`
+      );
     } finally {
       setIsConnecting(false);
     }
+
   };
 
   const handleDisconnect = async () => {
@@ -108,13 +141,12 @@ export default function ConnectSSIDModal({ isOpen, onClose, telemetry, onSession
         {/* Modal Body */}
         <div className="p-6 space-y-5">
           {/* Active Connection Banner */}
-          <div className={`p-4 rounded-xl border flex items-center justify-between font-mono text-xs ${
-            isConnected
+          <div className={`p-4 rounded-xl border flex items-center justify-between font-mono text-xs ${isConnected
               ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
               : isConfigured
                 ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
                 : 'bg-slate-800/60 border-slate-700/60 text-slate-400'
-          }`}>
+            }`}>
             <div className="flex items-center gap-2">
               <span className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
               <span className="font-bold">
@@ -133,11 +165,10 @@ export default function ConnectSSIDModal({ isOpen, onClose, telemetry, onSession
               <button
                 type="button"
                 onClick={() => setIsDemo(true)}
-                className={`py-2 px-3 rounded-lg text-xs font-bold font-mono border flex items-center justify-center gap-2 transition ${
-                  isDemo
+                className={`py-2 px-3 rounded-lg text-xs font-bold font-mono border flex items-center justify-center gap-2 transition ${isDemo
                     ? 'bg-amber-500/20 border-amber-500/60 text-amber-300'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <Ghost size={14} />
                 Demo Account
@@ -146,11 +177,10 @@ export default function ConnectSSIDModal({ isOpen, onClose, telemetry, onSession
               <button
                 type="button"
                 onClick={() => setIsDemo(false)}
-                className={`py-2 px-3 rounded-lg text-xs font-bold font-mono border flex items-center justify-center gap-2 transition ${
-                  !isDemo
+                className={`py-2 px-3 rounded-lg text-xs font-bold font-mono border flex items-center justify-center gap-2 transition ${!isDemo
                     ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-300'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+                  }`}
               >
                 <DollarSign size={14} />
                 Real Account

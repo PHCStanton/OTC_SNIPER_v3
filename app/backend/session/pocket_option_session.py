@@ -33,12 +33,26 @@ class PocketOptionSession:
     def clear_tick_callback(cls):
         """Remove the global tick callback."""
         cls._tick_callback = None
+        cls._restore_hooks()
         logging.getLogger("PocketOptionSession").info("Tick callback cleared.")
 
     @classmethod
     def set_main_loop(cls, loop: asyncio.AbstractEventLoop):
         """Set the main asyncio loop for thread-safe tick dispatch."""
         cls._main_loop = loop
+
+    @classmethod
+    def _restore_hooks(cls):
+        """Restore the original gv.set_csv and clear the saved reference."""
+        if cls._original_set_csv is None:
+            return
+        try:
+            import pocketoptionapi.global_value as gv
+            gv.set_csv = cls._original_set_csv
+            cls._original_set_csv = None
+            logging.getLogger("PocketOptionSession").info("Broker tick hooks restored.")
+        except ImportError:
+            cls._original_set_csv = None
 
     @classmethod
     def _apply_hooks(cls):
@@ -178,6 +192,11 @@ class PocketOptionSession:
 
             self._api = PocketOption(self._raw_ssid, self._is_demo)
             if not self._api.connect():
+                try:
+                    self._api.disconnect()
+                except Exception as disc_exc:
+                    self.logger.warning("Cleanup disconnect after start failure: %s", disc_exc)
+                self._api = None
                 self._connected = False
                 return False, "Failed to start WebSocket connection"
 
@@ -189,6 +208,10 @@ class PocketOptionSession:
                 time.sleep(0.25)
 
             if not self._connected:
+                try:
+                    self._api.disconnect()
+                except Exception as disc_exc:
+                    self.logger.warning("Cleanup disconnect after timeout: %s", disc_exc)
                 self._api = None
                 return False, f"Connection timeout after {self.timeout}s"
 
@@ -221,7 +244,7 @@ class PocketOptionSession:
             except ImportError:
                 global_value = None
 
-            if self._api and self._connected:
+            if self._api:
                 try:
                     self._api.disconnect()
                 except Exception as exc:
@@ -240,6 +263,8 @@ class PocketOptionSession:
             self._api = None
             self._connected = False
             self._balance = None
+            # Restore the original gv.set_csv hook so no CPU is wasted on idle ticks
+            self._restore_hooks()
             return True
         except Exception as exc:
             self.logger.error("Disconnect error: %s", exc)

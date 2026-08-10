@@ -1,7 +1,52 @@
 /**
- * Asset catalog helpers for Data Agent UI (Phase 5).
- * Pure functions — easy to unit-test without a browser.
+ * Asset catalog helpers & filter classification for Data Agent UI.
+ * Mirrors patterns from LeftSidebar.jsx.
  */
+
+export const DEFAULT_PAYOUT_THRESHOLD = 92;
+
+export const QUICK_PAYOUT_PRESETS = [
+  { value: 92, label: '92%+' },
+  { value: 90, label: '90%+' },
+  { value: 85, label: '85%+' },
+  { value: 80, label: '80%+' },
+  { value: 75, label: '75%+' },
+  { value: 60, label: '60%+' },
+];
+
+export const ASSET_TYPE_OPTIONS = [
+  { value: 'all', label: 'ALL' },
+  { value: 'currencies', label: 'CURR' },
+  { value: 'crypto', label: 'CRYP' },
+  { value: 'stocks', label: 'STCK' },
+  { value: 'indices', label: 'INDX' },
+  { value: 'commodities', label: 'COMM' },
+];
+
+const CRYPTO_SYMBOL_PREFIXES = ['BTC', 'ETH', 'LTC', 'XRP', 'BCH', 'DOGE', 'DOT', 'ADA', 'SOL', 'AVAX', 'LINK', 'UNI', 'XLM', 'TRX', 'ETC', 'MATIC', 'TON', 'NEAR', 'ATOM'];
+const INDEX_PATTERN = /\b(INDEX|INDICE|S&P|SP500|US500|US100|NASDAQ|DOW|DJI|DJ30|FTSE|UK100|DAX|GER40|CAC|FRA40|NIKKEI|JPN225|AEX|EUSTX50|HANG SENG|HSI|IBEX|AUS200)\b/i;
+const CRYPTO_NAME_PATTERN = /\b(BITCOIN|ETHEREUM|LITECOIN|RIPPLE|DOGECOIN|CARDANO|SOLANA|POLKADOT|CHAINLINK|AVALANCHE|SHIBA|TRON|STELLAR|TONCOIN|NEAR)\b/i;
+const COMMODITY_PATTERN = /\b(GOLD|SILVER|CRUDE|BRENT|OIL|PLATINUM|PALLADIUM|COPPER|NATGAS|GAS)\b/i;
+
+/** Resolve asset class / category for filtering */
+export function resolveAssetClass(item) {
+  if (!item) return 'currencies';
+  const symbol = String(item.symbol || '').trim();
+  const name = String(item.name || symbol).trim();
+  const category = String(item.category || '').trim().toLowerCase();
+  const cleanSym = symbol.replace(/_otc$/i, '').replace(/^#/, '').toUpperCase();
+
+  if (category.includes('crypto')) return 'crypto';
+  if (category.includes('stock')) return 'stocks';
+  if (category.includes('index') || category.includes('indice')) return 'indices';
+  if (category.includes('commodit')) return 'commodities';
+  if (symbol.startsWith('#')) return 'stocks';
+  if (COMMODITY_PATTERN.test(cleanSym) || COMMODITY_PATTERN.test(name)) return 'commodities';
+  if (INDEX_PATTERN.test(`${cleanSym} ${name}`)) return 'indices';
+  if (CRYPTO_SYMBOL_PREFIXES.some((prefix) => cleanSym.startsWith(prefix))) return 'crypto';
+  if (CRYPTO_NAME_PATTERN.test(name.toUpperCase())) return 'crypto';
+  return 'currencies';
+}
 
 /** Format payout for display. Unknown/null → em dash percent. */
 export function formatPayoutLabel(payout) {
@@ -9,6 +54,16 @@ export function formatPayoutLabel(payout) {
     return '—%';
   }
   return `${Number(payout)}%`;
+}
+
+/** Format clean display name for header or rows */
+export function formatDisplayName(symbol) {
+  if (!symbol) return '';
+  const clean = symbol.replace(/_otc$/i, '').replace(/^#/, '');
+  if (clean.length === 6 && !clean.includes('/')) {
+    return `${clean.slice(0, 3)}/${clean.slice(3)}`;
+  }
+  return clean;
 }
 
 /** Resolve selected catalog entry by symbol (exact match). */
@@ -24,7 +79,6 @@ export function canSubmitCustomAsset(input) {
 
 /**
  * Build a custom catalog entry after confirmed subscription.
- * Unknown payout must be null — never invent 90.
  */
 export function buildCustomCatalogEntry(ticker) {
   const symbol = String(ticker || '').trim();
@@ -39,17 +93,49 @@ export function buildCustomCatalogEntry(ticker) {
 }
 
 /**
- * Whether a catalog item matches the payout tab filter.
- * null/unknown payouts only appear under ALL.
+ * Filter catalog by search query, payout threshold, OTC toggle, and asset type.
  */
+export function matchesFilters(item, { searchQuery = '', payoutThreshold = 0, otcOnly = false, assetTypeFilter = 'all' }) {
+  if (!item) return false;
+
+  // Search filter
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase().trim();
+    const matchesSym = item.symbol.toLowerCase().includes(query);
+    const matchesName = (item.name || '').toLowerCase().includes(query);
+    if (!matchesSym && !matchesName) return false;
+  }
+
+  // Payout threshold filter
+  if (payoutThreshold > 0) {
+    if (item.payout == null || Number(item.payout) < payoutThreshold) {
+      return false;
+    }
+  }
+
+  // OTC Only filter
+  if (otcOnly && !item.symbol.toLowerCase().includes('_otc')) {
+    return false;
+  }
+
+  // Asset type filter
+  if (assetTypeFilter !== 'all') {
+    const itemClass = resolveAssetClass(item);
+    if (itemClass !== assetTypeFilter) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/** Backward-compat helper */
 export function matchesPayoutFilter(item, payoutFilter) {
   if (!item) return false;
-  if (payoutFilter === '92%+') {
-    return item.payout != null && item.payout >= 92;
-  }
-  if (payoutFilter === '90%+') {
-    return item.payout != null && item.payout >= 90;
-  }
+  if (payoutFilter === '92%+') return item.payout != null && item.payout >= 92;
+  if (payoutFilter === '90%+') return item.payout != null && item.payout >= 90;
+  if (payoutFilter === '85%+') return item.payout != null && item.payout >= 85;
+  if (payoutFilter === '80%+') return item.payout != null && item.payout >= 80;
   return true;
 }
 
@@ -88,5 +174,11 @@ export const DEFAULT_FULL_ASSET_CATALOG = [
   { symbol: 'ETHUSD', name: 'Ethereum / USD', payout: 85, category: 'Crypto', live: false, velocity: 88 },
   { symbol: 'SOLUSD', name: 'Solana / USD', payout: 85, category: 'Crypto', live: false, velocity: 90 },
   { symbol: 'XRPUSD', name: 'Ripple / USD', payout: 85, category: 'Crypto', live: false, velocity: 86 },
-];
 
+  // Stocks & Indices
+  { symbol: '#AAPL_otc', name: 'Apple Inc OTC', payout: 90, category: 'Stocks', live: false, velocity: 80 },
+  { symbol: '#MSFT_otc', name: 'Microsoft OTC', payout: 90, category: 'Stocks', live: false, velocity: 82 },
+  { symbol: '#TSLA_otc', name: 'Tesla Inc OTC', payout: 90, category: 'Stocks', live: false, velocity: 85 },
+  { symbol: '#SP500_otc', name: 'S&P 500 Index OTC', payout: 90, category: 'Indices', live: false, velocity: 75 },
+  { symbol: '#US100_otc', name: 'NASDAQ 100 Index OTC', payout: 90, category: 'Indices', live: false, velocity: 78 },
+];

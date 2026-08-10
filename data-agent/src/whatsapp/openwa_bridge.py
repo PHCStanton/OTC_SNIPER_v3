@@ -74,3 +74,35 @@ class OpenWABridge:
         except Exception as exc:
             logger.error(f"Error communicating with OpenWA gateway: {exc}")
             return False
+
+    def send_alert(self, message: str, recipient: Optional[str] = None) -> bool:
+        """Synchronous alert dispatch for use from non-async contexts (e.g. HTTP handler thread).
+
+        Creates a one-shot httpx sync client to avoid event loop requirements.
+        For async callers, prefer send_message() instead.
+        """
+        target = recipient or self.default_recipient
+        if not target:
+            logger.warning("No recipient specified for WhatsApp alert. Logging locally.")
+            logger.info("[WhatsApp Alert Mock] To (Default):\n%s", message)
+            return True
+
+        url = f"{self.api_url}/sendText"
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        payload = {"to": target, "content": message}
+
+        try:
+            with httpx.Client(timeout=self.timeout_sec) as client:
+                res = client.post(url, json=payload, headers=headers)
+                if res.status_code in (200, 201):
+                    logger.info("Successfully sent WhatsApp alert to %s", target)
+                    return True
+                else:
+                    logger.error("Failed to send WhatsApp alert: %s - %s", res.status_code, res.text)
+                    return False
+        except Exception as exc:
+            logger.error("Error dispatching WhatsApp alert: %s", exc)
+            return False

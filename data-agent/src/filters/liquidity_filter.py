@@ -3,6 +3,7 @@ from typing import Any, Dict, Tuple
 
 from .base_filter import BaseFilter
 from .context_provider import as_finite_float
+from .liquidity_math import classify_liquidity_level
 
 
 class LiquidityFilter(BaseFilter):
@@ -36,10 +37,11 @@ class LiquidityFilter(BaseFilter):
             return False, "liquidity_context_unavailable"
 
         if liq_score < self.min_liquidity or liq_score > self.max_liquidity:
+            level = classify_liquidity_level(liq_score)
             return (
                 False,
                 f"liquidity_score_out_of_bounds "
-                f"({liq_score:.1f} not in [{self.min_liquidity}, {self.max_liquidity}])",
+                f"({liq_score:.1f} [{level}] not in [{self.min_liquidity}, {self.max_liquidity}])",
             )
 
         return True, None

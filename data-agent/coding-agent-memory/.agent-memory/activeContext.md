@@ -17,6 +17,7 @@
 | **Broker Session Refactor (`PocketOptionSession`)** | Complete | 2026-08-09 |
 | **Phase A: Dynamic Assets, Payouts & Velocity Timeseries** | Complete | 2026-08-09 |
 | **Phase B: Zero-Latency SSE Streaming & Operational UX** | Complete | 2026-08-09 |
+| **Sigmoid Liquidity & Tick Density Normalization** | Complete | 2026-08-09 |
 
 ## Core Milestones (2026-08-09)
 1. **Pocket Option Handshake & Tick Interception**:
@@ -30,11 +31,15 @@
    - Server-Sent Events endpoint `GET /api/v1/stream?asset={symbol}` and frontend `EventSource` push.
    - Live Session Type (`REAL ACCOUNT` vs `DEMO ACCOUNT`) & GCP BigQuery Sink Health KPI cards.
    - Interactive WhatsApp alert test trigger (`POST /api/v1/alerts/test`).
-4. **Data Durability & Fallback**:
+4. **Sigmoid Liquidity & Tick Density Normalization**:
+   - Added `data-agent/src/filters/liquidity_math.py` with 1:1 mathematical alignment to core OTC SNIPER engine (`LIQ_MIDPOINT = 120.0`, `LIQ_STEEPNESS = 4.0`).
+   - Enhanced `DataBridgeAPI.get_tick_velocity()` to emit `liquidity_score` and `liquidity_level` (`LOW`, `MEDIUM`, `HIGH`).
+   - Enhanced `LiquidityFilter` with classified level veto messages and updated React AreaChart with Sigmoid Liquidity % visualization.
+5. **Data Durability & Fallback**:
    - Zero Data Loss verified: 81,000+ ticks preserved in local SQLite vault `data-agent/data/ticks_fallback.db`.
 
 ## Verification
-- **Backend Tests:** 31 / 31 passed (100%) in `QuFLX-v2`.
+- **Backend Tests:** 39 / 39 passed (100%) in `QuFLX-v2`.
 - **Frontend Build:** `npm run build` in `data-agent/ui` completed with 0 errors.
 
 ## Detailed Reports

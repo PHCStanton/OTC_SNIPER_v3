@@ -73,6 +73,10 @@ class StreamingService:
         self._ai_review: AIReviewService | None = None
         self._ai_pulse_task: asyncio.Task | None = None
         self._last_prices: Dict[str, float] = {}
+        # PERF 3: bound concurrent consider_signal tasks to prevent pile-up under burst
+        self._signal_task_sem: asyncio.Semaphore | None = None
+        self._active_signal_tasks: set[asyncio.Task] = set()
+
 
     def _clear_level3_state(self, *, reset_classifiers: bool) -> None:
         """Clear cached Level 3 regime state."""
@@ -236,6 +240,8 @@ class StreamingService:
             self._last_regime.pop(asset, None)
             self._tick_counts.pop(asset, None)
             self._payout_cache.pop(asset, None)
+            self._payout_fail_counts.pop(asset, None)
+            self._last_prices.pop(asset, None)
             if self._ai_review:
                 self._ai_review.clear_asset(asset)
             logger.info("Cleaned up engines for removed asset: %s", asset)
@@ -265,7 +271,12 @@ class StreamingService:
         self.perf_monitor.start()
         self.tick_logger.start()
         self.signal_logger.start()
+        # Bound concurrent Auto-Ghost signal tasks (PERF 3)
+        max_signal_tasks = max(1, int(getattr(self.auto_ghost.config, "max_concurrent_trades", 3)) * 2)
+        self._signal_task_sem = asyncio.Semaphore(max_signal_tasks)
+        self._active_signal_tasks.clear()
         self._consumer_task = asyncio.create_task(self._tick_consumer_loop())
+
         if self.level3_enabled and self._ai_review:
             self._ai_review.start()
         if self.oteo_ai_enabled and self.auto_ghost.config.ai_pulse_enabled:
@@ -287,8 +298,15 @@ class StreamingService:
         if self._ai_pulse_task:
             self._ai_pulse_task.cancel()
             self._ai_pulse_task = None
-        
+
+        # Cancel any in-flight consider_signal tasks (PERF 3 cleanup)
+        for task in list(self._active_signal_tasks):
+            task.cancel()
+        self._active_signal_tasks.clear()
+        self._signal_task_sem = None
+
         # Drain the queue
+
         while not self._tick_queue.empty():
             try:
                 self._tick_queue.get_nowait()
@@ -303,6 +321,8 @@ class StreamingService:
         self._clear_level3_state(reset_classifiers=True)
         self._tick_counts.clear()
         self._payout_cache.clear()
+        self._payout_fail_counts.clear()
+        self._last_prices.clear()
         logger.info("StreamingService stopped — all engines cleared")
 
     def _get_or_create_engines(self, asset: str) -> tuple[OTEO, MarketContextEngine, ManipulationDetector]:
@@ -551,7 +571,7 @@ class StreamingService:
                 logger.error("Socket.IO market_data emission failed for %s: %s", asset, sio_err)
             
             # Emit warmup status
-            self._tick_counts[asset] += 1
+            self._tick_counts[asset] = self._tick_counts.get(asset, 0) + 1
             count = self._tick_counts[asset]
             if count % 10 == 0 or count == 50:
                 try:
@@ -597,20 +617,47 @@ class StreamingService:
                 "broker": source
             })
             payout_pct = await self._resolve_asset_payout_pct(asset)
-            signal_task = asyncio.create_task(
-                self.auto_ghost.consider_signal(
-                    asset=asset,
-                    price=price,
-                    timestamp=timestamp,
-                    oteo_result=oteo_result,
-                    manipulation=manipulation,
-                    payout_pct=payout_pct,
+            # PERF 3: bound concurrent consider_signal tasks; drop when saturated
+            max_signal_tasks = max(
+                1, int(getattr(self.auto_ghost.config, "max_concurrent_trades", 3)) * 2
+            )
+            if self._signal_task_sem is None:
+                self._signal_task_sem = asyncio.Semaphore(max_signal_tasks)
+
+            if len(self._active_signal_tasks) >= max_signal_tasks:
+                logger.warning(
+                    "consider_signal backpressure: dropping signal for %s (%d active tasks at cap %d)",
+                    asset,
+                    len(self._active_signal_tasks),
+                    max_signal_tasks,
                 )
-            )
-            signal_task.add_done_callback(
-                lambda t: logger.error("consider_signal task failed: %s", t.exception())
-                if not t.cancelled() and t.exception() else None
-            )
+            else:
+                sem = self._signal_task_sem
+
+                async def _run_consider_signal():
+                    async with sem:
+                        await self.auto_ghost.consider_signal(
+                            asset=asset,
+                            price=price,
+                            timestamp=timestamp,
+                            oteo_result=oteo_result,
+                            manipulation=manipulation,
+                            payout_pct=payout_pct,
+                        )
+
+                signal_task = asyncio.create_task(_run_consider_signal())
+                self._active_signal_tasks.add(signal_task)
+
+                def _on_signal_done(t: asyncio.Task, _asset=asset) -> None:
+                    self._active_signal_tasks.discard(t)
+                    if not t.cancelled() and t.exception():
+                        logger.error(
+                            "consider_signal task failed for %s: %s", _asset, t.exception()
+                        )
+
+                signal_task.add_done_callback(_on_signal_done)
+
+
 
             # Phase 4: Push snapshot to AI review loop when regime data is available
             if self.level3_enabled and self._ai_review and regime is not None:
@@ -645,8 +692,7 @@ class StreamingService:
     def clear_detector_buffers(self, asset: str) -> None:
         """Clear manipulation detector buffers (used on focus switch)."""
         if asset in self._manip_engines:
-            self._manip_engines[asset].velocities.clear()
-            self._manip_engines[asset].price_history.clear()
+            self._manip_engines[asset].clear()
             logger.debug("Cleared detector buffers for %s", asset)
 
     async def _ai_pulse_loop(self) -> None:

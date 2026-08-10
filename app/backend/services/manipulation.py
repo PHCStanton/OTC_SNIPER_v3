@@ -18,6 +18,17 @@ class ManipulationDetector:
         self._last_timestamp: float = 0.0
         self._push_snap_trigger_time: float = 0.0
         self._push_snap_initial_severity: float = 0.0
+        # Running sum of |velocity| for O(1) MAV instead of O(n) recompute per tick
+        self._abs_vel_sum: float = 0.0
+
+    def clear(self) -> None:
+        """Reset all detection buffers and running state."""
+        self.velocities.clear()
+        self.price_history.clear()
+        self._last_timestamp = 0.0
+        self._push_snap_trigger_time = 0.0
+        self._push_snap_initial_severity = 0.0
+        self._abs_vel_sum = 0.0
 
     def update(self, timestamp: float, price: float) -> Dict[str, float]:
         """
@@ -36,10 +47,17 @@ class ManipulationDetector:
         dt = max(timestamp - self._last_timestamp, 0.001)  # floor to 1ms
         vel = (price - self.price_history[-2]) / dt
         self._last_timestamp = timestamp
+
+        # Maintain running sum of absolute velocities (O(1) MAV)
+        was_full = len(self.velocities) == self.velocities.maxlen
+        if was_full:
+            evicted = self.velocities[0]
+            self._abs_vel_sum -= abs(evicted)
         self.velocities.append(vel)
+        self._abs_vel_sum += abs(vel)
 
         # MAV calculation (average of absolute values) to prevent cancellation
-        mav = np.mean([abs(v) for v in self.velocities]) if self.velocities else 0.0
+        mav = (self._abs_vel_sum / len(self.velocities)) if self.velocities else 0.0
         flags = {}
 
         # 1. Push & Snap: velocity spike vs MAV with exponential decay
