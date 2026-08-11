@@ -24,7 +24,8 @@ import {
   LayoutGrid,
   Play,
   Pause,
-  Crosshair,
+  Menu,
+  X,
 } from 'lucide-react';
 import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
@@ -52,6 +53,7 @@ export default function TopBar() {
   const [showSettingsDropdown, setShowSettingsDropdown] = useState(false);
   const [showTradingDropdown, setShowTradingDropdown] = useState(false);
   const [showGhostDropdown, setShowGhostDropdown] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const { 
     aiDevMode, 
     setAiDevMode, 
@@ -64,6 +66,7 @@ export default function TopBar() {
   const notificationsDropdownRef = useRef(null);
   const tradingDropdownRef = useRef(null);
   const ghostDropdownRef = useRef(null);
+  const mobileMenuRef = useRef(null);
 
   const { notifications, markAllAsRead, clearAll } = useNotificationStore();
   const unreadCount = notifications.filter((n) => n.unread).length;
@@ -153,6 +156,9 @@ export default function TopBar() {
       if (ghostDropdownRef.current && !ghostDropdownRef.current.contains(event.target)) {
         setShowGhostDropdown(false);
       }
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target)) {
+        setShowMobileMenu(false);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -197,20 +203,18 @@ export default function TopBar() {
     }
   }
 
-  // Deprecated notifications placeholder removed in favor of real store connection
-
   return (
     <>
-      <header className="flex h-16 items-center justify-between border-b border-white/5 bg-[#1a1c22] px-6 shadow-xl shrink-0 z-50">
+      <header className="relative flex h-16 items-center justify-between border-b border-white/5 bg-[#1a1c22] px-4 md:px-6 shadow-xl shrink-0 z-50">
         {/* ── Left: Logo + Connections ── */}
-        <div className="flex items-center gap-1">
-          <img src={logoImg} alt="OTC SNIPER" className="h-15 w-auto select-none" draggable={false} />
-          <div className="flex items-center gap-3 ml-4">
+        <div className="flex items-center gap-2 md:gap-3">
+          <img src={logoImg} alt="OTC SNIPER" className="h-10 md:h-12 lg:h-15 w-auto select-none" draggable={false} />
+          <div className="flex items-center gap-2 md:gap-3 ml-1 md:ml-3">
             <button
               onClick={handleChromeToggle}
               disabled={chromeLoading}
               title={chromeRunning ? 'Chrome running — click to stop' : 'Chrome stopped — click to start'}
-              className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-[10px] font-black uppercase tracking-widest select-none transition-all duration-300 ${
+              className={`hidden sm:flex items-center gap-2 rounded-lg border px-3 py-1.5 md:px-3.5 md:py-2 text-[10px] font-black uppercase tracking-widest select-none transition-all duration-300 ${
                 chromeRunning 
                   ? 'border-[#ffb800]/30 bg-[#ffb800]/10 text-[#ffb800] hover:bg-[#ffb800]/20' 
                   : 'border-white/5 bg-[#25282f]/30 text-gray-500 hover:bg-[#25282f]'
@@ -221,10 +225,11 @@ export default function TopBar() {
               <span className={`h-1.5 w-1.5 rounded-full ${chromeRunning ? 'bg-[#ffb800]' : 'bg-gray-600'}`} />
             </button>
  
+            {/* Session Button (ONLY SHOW ONLINE / OFFLINE) */}
             <button
               onClick={() => setShowConnect(true)}
               title={sessionConnected ? 'Session connected — click to manage' : 'No session — click to connect'}
-              className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-[10px] font-black uppercase tracking-widest select-none transition-all duration-300 ${
+              className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 md:px-3.5 md:py-2 text-[10px] font-black uppercase tracking-widest select-none transition-all duration-300 ${
                 sessionConnected 
                   ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20' 
                   : 'border-white/5 bg-[#25282f]/30 text-gray-500 hover:bg-[#25282f]'
@@ -232,26 +237,16 @@ export default function TopBar() {
             >
               {sessionConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
               <span>{sessionConnected ? 'Online' : 'Offline'}</span>
-              {sessionConnected && accountType && (
-                <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[8px] font-black tracking-widest ${
-                  accountType === 'demo' ? 'bg-[#ffb800]/20 text-[#ffb800]' : 'bg-emerald-500/20 text-emerald-400'
-                }`}>
-                  {accountType === 'demo' ? <Ghost size={9} /> : <DollarSign size={9} />}
-                  {accountType.toUpperCase()}
-                </span>
-              )}
-              {sessionConnected && balance != null && (
-                <span className="font-bold text-gray-400">${balance.toFixed(2)}</span>
-              )}
               <ChevronDown size={10} className="text-gray-500" />
             </button>
           </div>
         </div>
  
-        {/* ── Right: Tabs menu + Settings + Profile ── */}
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-2 rounded-lg p-0.5">
-            {/* Ghost Protocol Dropdown (Crosshair) */}
+        {/* ── Right: Tabs menu + Settings + Profile + Hamburger ── */}
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-5">
+          {/* Desktop Navigation Group (Visible on lg+ screens) */}
+          <div className="hidden lg:flex items-center gap-2 rounded-lg p-0.5">
+            {/* Ghost Protocol Dropdown (Ghost Icon) */}
             <div className="relative" ref={ghostDropdownRef}>
               <TopBarIconButton
                 onClick={() => setShowGhostDropdown(!showGhostDropdown)}
@@ -259,7 +254,7 @@ export default function TopBar() {
                 ariaLabel="Open Ghost Protocol menu"
                 active={activeView === 'journal' || (activeView === 'settings' && activeSettingsTab === 'ghost') || showGhostDropdown}
               >
-                <Crosshair size={22} strokeWidth={2} />
+                <Ghost size={22} strokeWidth={2} />
               </TopBarIconButton>
 
               {showGhostDropdown && (
@@ -280,7 +275,7 @@ export default function TopBar() {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <Crosshair size={14} className={autoGhostEnabled ? 'text-[#ffb800]' : 'text-gray-400'} />
+                      <Zap size={14} className={autoGhostEnabled ? 'text-[#ffb800]' : 'text-gray-400'} />
                       <div className="flex flex-col">
                         <span>Ghost Protocol</span>
                         <span className="text-[8px] text-gray-500 font-semibold tracking-normal uppercase">Simulated trade automation</span>
@@ -415,7 +410,7 @@ export default function TopBar() {
             </div>
             
             {/* Settings Dropdown Portal */}
-            <div className="relative ml-2" ref={settingsDropdownRef}>
+            <div className="relative ml-1" ref={settingsDropdownRef}>
               <TopBarIconButton
                 onClick={() => setShowSettingsDropdown(!showSettingsDropdown)}
                 title="Settings"
@@ -530,19 +525,20 @@ export default function TopBar() {
             </div>
           </div>
  
-          <div className="flex items-center gap-2 border-l border-white/5 pl-4">
+          {/* Utility Right Group */}
+          <div className="flex items-center gap-2 sm:gap-3 lg:border-l lg:border-white/5 lg:pl-4">
             {/* AI Assistant Menu */}
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setShowAiDropdown(!showAiDropdown)}
                 title="AI Assistant Menu"
-                className={`flex h-11 w-11 items-center justify-center rounded-lg border transition-all duration-350 ${
+                className={`flex h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-lg border transition-all duration-350 ${
                   isAI || showAiDropdown
                     ? 'border-[#ffb800]/40 bg-[#ffb800]/10 shadow-[0_0_15px_rgba(255,184,0,0.12)] scale-105' 
                     : 'border-transparent bg-transparent hover:bg-white/5 grayscale hover:grayscale-0'
                 }`}
               >
-                <AiChipIcon size={38} />
+                <AiChipIcon size={34} />
               </button>
               {showAiDropdown && (
                 <div className="absolute right-0 mt-2 w-80 rounded-xl border-2 border-[#1a1c22] bg-gradient-to-br from-[#f5df19] to-[#ffb800] p-3 shadow-[0_10px_30px_rgba(245,223,25,0.25)] z-[100] space-y-3 text-left">
@@ -634,25 +630,28 @@ export default function TopBar() {
               )}
             </div>
  
+            {/* Profile Avatar (Desktop/Tablet) */}
             <button
               type="button"
-              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/5 bg-[#25282f]/50 p-0.5 transition hover:border-[#ffb800]/30 hover:bg-[#2d3139]"
+              className="hidden sm:flex h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-full border border-white/5 bg-[#25282f]/50 p-0.5 transition hover:border-[#ffb800]/30 hover:bg-[#2d3139]"
               title="Profile"
             >
               <img
                 src="/Sci-fi_GUY.jpg"
                 alt="Profile"
-                className="h-9 w-9 rounded-full object-cover"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover"
               />
             </button>
  
-            <div className="flex h-11 min-w-[170px] items-center gap-3 rounded-lg border border-white/5 bg-[#25282f]/30 px-4">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#ffb800]/10 text-[#ffb800]">
+            {/* Balance Pill (Desktop/Tablet) */}
+            <div className="hidden sm:flex h-9 sm:h-10 md:h-11 min-w-[130px] md:min-w-[160px] items-center gap-2 md:gap-3 rounded-lg border border-white/5 bg-[#25282f]/30 px-3 md:px-4">
+              <div className="flex h-5 w-5 md:h-6 md:w-6 items-center justify-center rounded-md bg-[#ffb800]/10 text-[#ffb800]">
                 <DollarSign size={12} />
               </div>
-              <span className="text-md font-black tracking-tight text-white">{balanceLabel}</span>
+              <span className="text-xs md:text-md font-black tracking-tight text-white">{balanceLabel}</span>
             </div>
  
+            {/* Notifications Bell */}
             <div className="relative" ref={notificationsDropdownRef}>
               <TopBarIconButton
                 onClick={() => {
@@ -734,6 +733,236 @@ export default function TopBar() {
                       })}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Mobile & Tablet Hamburger Toggle (Visible on < lg) ── */}
+            <div className="relative lg:hidden" ref={mobileMenuRef}>
+              <button
+                type="button"
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                title="Main Navigation Menu"
+                aria-label="Toggle navigation menu"
+                className={`flex h-9 w-9 sm:h-10 sm:w-10 md:h-11 md:w-11 items-center justify-center rounded-lg border transition-all duration-300 ${
+                  showMobileMenu
+                    ? 'border-[#ffb800]/40 bg-[#ffb800]/15 text-[#ffb800] shadow-[0_0_12px_rgba(255,184,0,0.15)]'
+                    : 'border-white/10 bg-[#25282f]/50 text-gray-300 hover:border-[#ffb800]/30 hover:bg-[#2d3139] hover:text-white'
+                }`}
+              >
+                {showMobileMenu ? <X size={20} /> : <Menu size={20} />}
+              </button>
+
+              {/* Responsive Hamburger Drawer Menu */}
+              {showMobileMenu && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 max-h-[calc(100vh-80px)] overflow-y-auto rounded-2xl border border-white/10 bg-[#161920]/95 backdrop-blur-xl p-4 shadow-2xl z-[150] space-y-4 text-left scrollbar-thin animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Balance & Status Banner for mobile */}
+                  <div className="flex items-center justify-between rounded-xl bg-[#1a1c22] border border-white/5 p-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/20">
+                        <DollarSign size={16} />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Current Balance</span>
+                        <span className="text-sm font-black text-white font-mono">{balanceLabel}</span>
+                      </div>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[8px] font-black tracking-widest uppercase border ${
+                      sessionConnected ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' : 'border-white/5 bg-[#25282f] text-gray-500'
+                    }`}>
+                      {sessionConnected ? <Wifi size={10} /> : <WifiOff size={10} />}
+                      {sessionConnected ? (accountType ? accountType.toUpperCase() : 'ONLINE') : 'OFFLINE'}
+                    </span>
+                  </div>
+
+                  {/* Ghost Protocol Navigation */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800] flex items-center gap-1.5">
+                        <Ghost size={12} /> Ghost Protocol
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setAutoGhostEnabled(!autoGhostEnabled);
+                        setShowMobileMenu(false);
+                      }}
+                      className={`flex w-full items-center justify-between rounded-xl p-2.5 text-xs font-bold transition duration-300 ${
+                        autoGhostEnabled
+                          ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/30'
+                          : 'bg-[#1a1c22] text-gray-300 hover:bg-[#25282f] border border-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Zap size={14} className={autoGhostEnabled ? 'text-[#ffb800]' : 'text-gray-400'} />
+                        <div className="flex flex-col text-left">
+                          <span>Auto-Ghost Automation</span>
+                          <span className="text-[8px] text-gray-500 uppercase font-semibold">Simulated execution state</span>
+                        </div>
+                      </div>
+                      <div className={`h-2.5 w-2.5 rounded-full ${autoGhostEnabled ? 'bg-[#ffb800] animate-pulse' : 'bg-gray-600'}`} />
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setActiveSettingsTab('ghost');
+                        setActiveView('settings');
+                        setShowMobileMenu(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl p-2.5 text-xs font-bold transition bg-[#1a1c22] border border-white/5 hover:border-[#ffb800]/30 ${
+                        activeView === 'settings' && activeSettingsTab === 'ghost' ? 'text-[#ffb800] bg-[#ffb800]/10 border-[#ffb800]/30' : 'text-gray-300'
+                      }`}
+                    >
+                      <Ghost size={14} className="text-[#ffb800]" />
+                      <div className="flex flex-col text-left">
+                        <span>Ghost Protocol Settings</span>
+                        <span className="text-[8px] text-gray-500 uppercase font-semibold">Configure gates, blacklist & sizing</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setActiveView('journal');
+                        setShowMobileMenu(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl p-2.5 text-xs font-bold transition bg-[#1a1c22] border border-white/5 hover:border-[#ffb800]/30 ${
+                        activeView === 'journal' ? 'text-[#ffb800] bg-[#ffb800]/10 border-[#ffb800]/30' : 'text-gray-300'
+                      }`}
+                    >
+                      <BookOpen size={14} className="text-amber-400" />
+                      <div className="flex flex-col text-left">
+                        <span>Ghost Journal</span>
+                        <span className="text-[8px] text-gray-500 uppercase font-semibold">Simulated trade history logs</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Trading Portal Navigation */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800] px-1 flex items-center gap-1.5">
+                      <ChartSpline size={12} /> Trading Portal
+                    </span>
+
+                    <button
+                      onClick={() => {
+                        setActiveView('trading');
+                        setDashboardMode('trading');
+                        setShowMobileMenu(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl p-2.5 text-xs font-bold transition bg-[#1a1c22] border border-white/5 hover:border-[#ffb800]/30 ${
+                        isTrading ? 'text-[#ffb800] bg-[#ffb800]/10 border-[#ffb800]/30' : 'text-gray-300'
+                      }`}
+                    >
+                      <LayoutGrid size={14} className="text-sky-400" />
+                      <div className="flex flex-col text-left">
+                        <span>Multi-Chart Grid</span>
+                        <span className="text-[8px] text-gray-500 uppercase font-semibold">Watchlist & live sparklines</span>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setActiveView('risk');
+                        setDashboardMode('risk');
+                        setShowMobileMenu(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-xl p-2.5 text-xs font-bold transition bg-[#1a1c22] border border-white/5 hover:border-[#ffb800]/30 ${
+                        isRisk ? 'text-[#ffb800] bg-[#ffb800]/10 border-[#ffb800]/30' : 'text-gray-300'
+                      }`}
+                    >
+                      <ShieldAlert size={14} className="text-rose-400" />
+                      <div className="flex flex-col text-left">
+                        <span>Risk Dashboard</span>
+                        <span className="text-[8px] text-gray-500 uppercase font-semibold">Sizing, balance & guardrails</span>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Settings Portal Navigation */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800] px-1 flex items-center gap-1.5">
+                      <Settings size={12} /> Settings Portal
+                    </span>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => {
+                          setActiveSettingsTab('account');
+                          setActiveView('settings');
+                          setShowMobileMenu(false);
+                        }}
+                        className={`flex items-center gap-2 rounded-lg p-2 text-xs font-bold transition bg-[#1a1c22] border border-white/5 ${
+                          isSettings && activeSettingsTab === 'account' ? 'text-[#ffb800] border-[#ffb800]/30 bg-[#ffb800]/10' : 'text-gray-300'
+                        }`}
+                      >
+                        <UserRound size={12} className="text-gray-400" /> Account
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveSettingsTab('app');
+                          setActiveView('settings');
+                          setShowMobileMenu(false);
+                        }}
+                        className={`flex items-center gap-2 rounded-lg p-2 text-xs font-bold transition bg-[#1a1c22] border border-white/5 ${
+                          isSettings && activeSettingsTab === 'app' ? 'text-[#ffb800] border-[#ffb800]/30 bg-[#ffb800]/10' : 'text-gray-300'
+                        }`}
+                      >
+                        <LayoutGrid size={12} className="text-gray-400" /> App Prefs
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveSettingsTab('ai');
+                          setActiveView('settings');
+                          setShowMobileMenu(false);
+                        }}
+                        className={`flex items-center gap-2 rounded-lg p-2 text-xs font-bold transition bg-[#1a1c22] border border-white/5 ${
+                          isSettings && activeSettingsTab === 'ai' ? 'text-[#ffb800] border-[#ffb800]/30 bg-[#ffb800]/10' : 'text-gray-300'
+                        }`}
+                      >
+                        <Zap size={12} className="text-gray-400" /> AI Config
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveSettingsTab('risk');
+                          setActiveView('settings');
+                          setShowMobileMenu(false);
+                        }}
+                        className={`flex items-center gap-2 rounded-lg p-2 text-xs font-bold transition bg-[#1a1c22] border border-white/5 ${
+                          isSettings && activeSettingsTab === 'risk' ? 'text-[#ffb800] border-[#ffb800]/30 bg-[#ffb800]/10' : 'text-gray-300'
+                        }`}
+                      >
+                        <ShieldAlert size={12} className="text-gray-400" /> Risk Limits
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* AI Assistant Quick Actions */}
+                  <div className="space-y-1.5 pt-1 border-t border-white/5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#ffb800] px-1 flex items-center gap-1.5">
+                      <Bot size={12} /> AI Advisory
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => {
+                          setActiveView('ai');
+                          setShowMobileMenu(false);
+                        }}
+                        className="flex items-center gap-2 rounded-lg p-2 text-xs font-bold text-gray-300 bg-[#1a1c22] border border-white/5 hover:text-white"
+                      >
+                        <Bot size={12} className="text-[#ffb800]" /> Open Chat
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveView('analysis');
+                          setShowMobileMenu(false);
+                        }}
+                        className="flex items-center gap-2 rounded-lg p-2 text-xs font-bold text-gray-300 bg-[#1a1c22] border border-white/5 hover:text-white"
+                      >
+                        <TrendingUp size={12} className="text-emerald-400" /> Analytics
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

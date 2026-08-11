@@ -56,7 +56,7 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
   }, [allMarkers, showGhostMarkers, showLiveMarkers]);
 
   const priceToY = useMemo(() => {
-    if (series.length === 0) return () => 0;
+    if (series.length === 0) return () => null;
     let min = series[0];
     let max = series[0];
     for (let i = 1; i < series.length; i++) {
@@ -67,7 +67,12 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
     const padding = 28;
     const height = 360;
     const usableHeight = Math.max(1, height - padding * 2);
-    return (price) => padding + usableHeight - ((price - min) / range) * usableHeight;
+    return (price) => {
+      const num = Number(price);
+      if (!Number.isFinite(num) || num <= 0) return null;
+      const y = padding + usableHeight - ((num - min) / range) * usableHeight;
+      return Number.isFinite(y) ? y : null;
+    };
   }, [series]);
 
   /**
@@ -232,7 +237,13 @@ export default function Sparkline({ asset, ticks, signal, warmup = false, classN
             )}
 
             {activeMarkers.map(m => {
-              const y = priceToY(m.entryPrice);
+              const fallbackPrice = series.length > 0 ? series[series.length - 1] : null;
+              const targetPrice = Number.isFinite(Number(m.entryPrice)) && Number(m.entryPrice) > 0
+                ? Number(m.entryPrice)
+                : fallbackPrice;
+              const y = priceToY(targetPrice);
+              if (y === null) return null;
+
               const isWin = m.outcome === 'win';
               const isLoss = m.outcome === 'loss';
               const color = isWin ? '#34d399' : isLoss ? '#f87171' : '#ffb800';

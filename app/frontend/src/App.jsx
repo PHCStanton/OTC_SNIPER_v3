@@ -56,12 +56,23 @@ export default function App() {
     });
 
     socket.on('trade_entry', (data) => {
+      const streamState = useStreamStore.getState();
+      const assetTicks = streamState.ticks[data.asset];
+      const fallbackPrice = streamState.latestPrice[data.asset]
+        ?? streamState.signals[data.asset]?.price
+        ?? (Array.isArray(assetTicks) && assetTicks.length > 0 ? assetTicks[assetTicks.length - 1]?.price : null);
+
+      const parsedEntryPrice = Number(data.entry_price);
+      const resolvedEntryPrice = Number.isFinite(parsedEntryPrice) && parsedEntryPrice > 0
+        ? parsedEntryPrice
+        : fallbackPrice;
+
       useStreamStore.getState().addTradeMarker({
         tradeId: data.trade_id,
         asset: data.asset,
         direction: data.direction,
         kind: data.kind,
-        entryPrice: data.entry_price,
+        entryPrice: resolvedEntryPrice,
         entryTime: data.entry_time,
         expirationSeconds: data.expiration_seconds,
         amount: data.amount,
@@ -74,7 +85,7 @@ export default function App() {
           tradeId: data.trade_id,
           asset: data.asset,
           direction: data.direction,
-          entryPrice: data.entry_price,
+          entryPrice: resolvedEntryPrice,
           entryTime: data.entry_time,
           expirationSeconds: data.expiration_seconds,
           amount: data.amount,

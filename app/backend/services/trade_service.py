@@ -89,26 +89,39 @@ class TradeService:
 
         return unix_time()
 
-    def _resolve_ghost_entry_price(
+    def _resolve_entry_price(
         self,
         request: TradeExecutionRequest,
         latest_tick: Dict[str, Any] | None,
+        adapter_price: float | None = None,
     ) -> float | None:
+        if adapter_price is not None:
+            try:
+                val = float(adapter_price)
+                if val > 0:
+                    return val
+            except (TypeError, ValueError):
+                pass
+
         entry_context = request.entry_context or {}
         context_price = entry_context.get("price")
         if context_price is not None:
             try:
-                return float(context_price)
+                val = float(context_price)
+                if val > 0:
+                    return val
             except (TypeError, ValueError):
                 logger.warning(
-                    "Invalid ghost entry_context price for %s: %r",
+                    "Invalid entry_context price for %s: %r",
                     request.asset_id,
                     context_price,
                 )
 
         if latest_tick and latest_tick.get("p") is not None:
             try:
-                return float(latest_tick["p"])
+                val = float(latest_tick["p"])
+                if val > 0:
+                    return val
             except (TypeError, ValueError):
                 logger.warning(
                     "Invalid latest logged tick price for %s: %r",
@@ -117,6 +130,13 @@ class TradeService:
                 )
 
         return None
+
+    def _resolve_ghost_entry_price(
+        self,
+        request: TradeExecutionRequest,
+        latest_tick: Dict[str, Any] | None,
+    ) -> float | None:
+        return self._resolve_entry_price(request, latest_tick)
 
     def _sanitize_ghost_exit_tick(
         self,
@@ -298,6 +318,9 @@ class TradeService:
                 "trade_mode": trade_kind.value,
             }
 
+        latest_tick = self._latest_logged_tick(request.asset_id)
+        entry_price = self._resolve_entry_price(request, latest_tick, result.entry_price)
+
         trade_record = TradeRecord(
             session_id=request.session_id or session.session_id or 'unknown',
             asset=request.asset_id,
@@ -309,7 +332,7 @@ class TradeService:
             success=True,
             message=result.message,
             trade_id=result.trade_id,
-            entry_price=result.entry_price,
+            entry_price=entry_price,
             entry_time=unix_time(),
             payout_pct=self._resolve_payout_pct(adapter, request.asset_id),
             confidence=request.confidence,
@@ -337,7 +360,7 @@ class TradeService:
             "success": True,
             "message": result.message,
             "trade_id": result.trade_id,
-            "entry_price": result.entry_price,
+            "entry_price": trade_record.entry_price,
             "session_id": session.session_id,
             "connection_status": adapter.get_connection_status(),
             "trade_mode": trade_kind.value,

@@ -12,7 +12,9 @@ from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+
 from ..services.analysis_service import get_analysis_service
+from ..services.journal_stats_service import get_journal_stats_service
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 logger = logging.getLogger("otc_sniper.api.analysis")
@@ -32,6 +34,21 @@ class PatternSaveRequest(BaseModel):
     win_rate: float
     advisory_notes: str
 
+class AIBriefRequest(BaseModel):
+    session_id: str | None = None
+    kind: str = "ghost"
+
+class StageReportRequest(BaseModel):
+    session_id: str | None = None
+    kind: str = "ghost"
+    notes: str = ""
+
+class CommitStagedRequest(BaseModel):
+    staged_id: str
+    selected_pattern_keys: List[str] | None = None
+    commit_bayesian: bool = True
+    commit_kb: bool = True
+
 @router.get("/sessions")
 async def get_sessions():
     """Load session list and daily statistical charts data."""
@@ -40,6 +57,105 @@ async def get_sessions():
         return service.get_all_sessions()
     except Exception as e:
         logger.error("Failed to load sessions: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/journal-stats")
+async def get_journal_stats(
+    session_id: str | None = Query(None, description="Session ID or 'ALL' for aggregate"),
+    kind: str = Query("ghost", description="'ghost' or 'live'"),
+    min_trades: int = Query(0, description="Minimum trades per session filter for aggregate"),
+    date_from: str | None = Query(None, description="ISO date filter start (YYYY-MM-DD), inclusive"),
+    date_to: str | None = Query(None, description="ISO date filter end (YYYY-MM-DD), inclusive"),
+):
+    """
+    Get deep quantitative metrics for the journal:
+    - Volatility & Liquidity distribution gauges & sweet spots
+    - Asset manipulation leaderboard & danger levels
+    - Favoured regimes ranking & classifications
+    - Adaptive expiries performance
+    - Candidate Knowledge Base patterns & Bayesian feature deltas
+    Optionally filter by date range (date_from / date_to in YYYY-MM-DD format).
+    """
+    try:
+        service = get_journal_stats_service()
+        return service.compute_journal_stats(
+            session_id=session_id,
+            kind=kind,
+            min_trades=min_trades,
+            date_from=date_from,
+            date_to=date_to,
+        )
+    except Exception as e:
+        logger.error("Failed to compute journal stats: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-brief-report")
+async def generate_brief_report(request: AIBriefRequest):
+    """Generate executive AI session briefing & strategic advisory."""
+    try:
+        service = get_journal_stats_service()
+        return await service.generate_ai_brief_report(session_id=request.session_id, kind=request.kind)
+    except Exception as e:
+        logger.error("Failed to generate AI brief report: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/staged-reports")
+async def get_staged_reports():
+    """Retrieve list of staged Knowledge Base & Bayesian updates pending review."""
+    try:
+        service = get_journal_stats_service()
+        return service.get_staged_reports()
+    except Exception as e:
+        logger.error("Failed to load staged reports: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/stage-for-review")
+async def stage_for_review(request: StageReportRequest):
+    """Package a session report into the Staging Review area."""
+    try:
+        service = get_journal_stats_service()
+        return service.stage_session_report(
+            session_id=request.session_id,
+            kind=request.kind,
+            notes=request.notes,
+        )
+    except Exception as e:
+        logger.error("Failed to stage report: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/staged-reports/{staged_id}")
+async def delete_staged_report(staged_id: str):
+    """Remove a staged report from the review queue."""
+    try:
+        service = get_journal_stats_service()
+        success = service.delete_staged_report(staged_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Staged report not found.")
+        return {"success": True, "staged_id": staged_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete staged report: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/commit-staged-to-knowledge-base")
+async def commit_staged_to_knowledge_base(request: CommitStagedRequest):
+    """
+    Explicit user commit of staged updates to condition_patterns.json and bayesian_priors.json.
+    Automatically generates timestamped backups before writing changes.
+    """
+    try:
+        service = get_journal_stats_service()
+        return service.commit_staged_to_knowledge_base(
+            staged_id=request.staged_id,
+            selected_pattern_keys=request.selected_pattern_keys,
+            commit_bayesian=request.commit_bayesian,
+            commit_kb=request.commit_kb,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error("Failed to commit staged updates: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/run-ai-refinement")
@@ -92,43 +208,36 @@ async def text_to_speech(text: str = Query(..., description="Text to speak")):
     while the frontend uses Web Speech API for actual high-fidelity speech synthesis.
     """
     try:
-        # Generate a 0.5-second 800Hz sine wave tone at 8kHz sample rate
         sample_rate = 8000
         duration = 0.5
         num_samples = int(sample_rate * duration)
         
-        # Audio format specifications: 8000Hz, 16-bit, mono (2 bytes per sample)
         bytes_per_sample = 2
         data_size = num_samples * bytes_per_sample
         file_size = 36 + data_size
         
-        # WAV header
         header = struct.pack(
             '<4sI4s4sIHHIIHH4sI',
             b'RIFF',
             file_size,
             b'WAVE',
             b'fmt ',
-            16,               # Subchunk1Size (16 for PCM)
-            1,                # AudioFormat (1 for PCM)
-            1,                # NumChannels (1 for mono)
-            sample_rate,      # SampleRate
-            sample_rate * bytes_per_sample,  # ByteRate
-            bytes_per_sample,  # BlockAlign
-            16,               # BitsPerSample (16 bits)
+            16,
+            1,
+            1,
+            sample_rate,
+            sample_rate * bytes_per_sample,
+            bytes_per_sample,
+            16,
             b'data',
             data_size
         )
         
-        # Sine wave data
-        import math
         frequency = 800.0
         audio_data = bytearray(header)
         for i in range(num_samples):
-            # Calculate sample value
             t = float(i) / sample_rate
             value = int(32767.0 * math.sin(2.0 * math.pi * frequency * t))
-            # Pack value as signed 16-bit short
             audio_data.extend(struct.pack('<h', value))
             
         return Response(content=bytes(audio_data), media_type="audio/wav")
@@ -146,7 +255,6 @@ async def upload_sessions(files: List[UploadFile] = File(...)):
         
         for file in files:
             content = await file.read()
-            # Decode content as text to check first line JSON
             text = content.decode("utf-8")
             lines = text.splitlines()
             first_line = lines[0].strip() if lines else ""
@@ -155,7 +263,6 @@ async def upload_sessions(files: List[UploadFile] = File(...)):
             try:
                 if first_line:
                     data = json.loads(first_line)
-                    # Detect kind
                     k = data.get("kind")
                     if k in ("ghost", "live"):
                         kind = k
@@ -164,21 +271,17 @@ async def upload_sessions(files: List[UploadFile] = File(...)):
                     else:
                         kind = "live"
             except Exception:
-                # Fallback to name heuristic
                 if "live" in file.filename.lower():
                     kind = "live"
             
-            # Destination path
             target_dir = settings.data_dir / f"{kind}_trades" / "sessions"
             target_dir.mkdir(parents=True, exist_ok=True)
             
-            # Save file (basename to avoid directory traversal hacks)
             filename = os.path.basename(file.filename)
             filepath = target_dir / filename
             filepath.write_bytes(content)
             uploaded_count += 1
 
-        # Re-fetch sessions lists to auto-trigger daily stats rebuild
         service.get_all_sessions()
         return {"success": True, "count": uploaded_count}
     except Exception as e:
@@ -196,7 +299,6 @@ async def delete_session(session_id: str, kind: str = Query(..., description="'g
         
         if filepath.exists():
             filepath.unlink()
-            # Re-fetch sessions to trigger daily stats update
             service.get_all_sessions()
             return {"success": True, "message": f"Session {session_id} deleted."}
         else:
@@ -206,5 +308,6 @@ async def delete_session(session_id: str, kind: str = Query(..., description="'g
     except Exception as e:
         logger.error("Failed to delete session: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
