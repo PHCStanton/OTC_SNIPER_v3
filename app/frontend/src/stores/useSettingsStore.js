@@ -139,7 +139,8 @@ function toBoolean(value, fallback = false) {
 }
 
 function toNumber(value, fallback, { min = Number.NEGATIVE_INFINITY, max = Number.POSITIVE_INFINITY, integer = false } = {}) {
-  if (value === '' || value === null || value === undefined) return fallback;
+  if (value === '') return '';
+  if (value === null || value === undefined) return fallback;
 
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -490,6 +491,11 @@ export const useSettingsStore = create()(
       name: 'otc-sniper-settings-storage',
       partialize: (state) => {
         const persisted = validateSettings(state);
+        for (const [key, val] of Object.entries(persisted)) {
+          if (val === '' && key in SETTINGS_DEFAULTS) {
+            persisted[key] = SETTINGS_DEFAULTS[key];
+          }
+        }
         delete persisted.ghostBlacklist;
         return persisted;
       },

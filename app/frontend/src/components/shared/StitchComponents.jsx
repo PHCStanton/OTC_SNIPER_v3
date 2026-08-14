@@ -73,8 +73,11 @@ export function NumberInput({ value, onChange, min, suffix, icon: Icon }) {
       <input
         type="number"
         min={min}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value ?? ''}
+        onChange={(e) => {
+          const raw = e.target.value;
+          onChange(raw === '' ? '' : Number(raw));
+        }}
         className="h-full flex-1 px-4 text-xl font-black text-black outline-none"
       />
       {suffix && (

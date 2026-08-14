@@ -426,9 +426,16 @@ export default function AISettings() {
                     <input
                       type="number"
                       className="w-20 h-8 rounded bg-[#25282f] px-2 text-xs border border-white/5"
-                      value={prof.maxTokens || 600}
+                      value={prof.maxTokens ?? ''}
                       onChange={(e) => {
-                        const updated = { ...profiles, [key]: { ...prof, maxTokens: parseInt(e.target.value) || 400 } };
+                        const raw = e.target.value;
+                        const updated = { 
+                          ...profiles, 
+                          [key]: { 
+                            ...prof, 
+                            maxTokens: raw === '' ? '' : (parseInt(raw, 10) || '') 
+                          } 
+                        };
                         saveProfiles(updated);
                       }}
                     />

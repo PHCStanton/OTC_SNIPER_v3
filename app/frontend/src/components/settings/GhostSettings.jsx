@@ -151,8 +151,11 @@ export default function GhostSettings() {
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xl font-black text-[#ffb800]">$</span>
                     <input
                       type="number"
-                      value={ghostAmount}
-                      onChange={(e) => setGhostAmount(Number(e.target.value))}
+                      value={ghostAmount ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setGhostAmount(raw === '' ? '' : Number(raw));
+                      }}
                       className="h-14 w-full rounded-lg bg-white pl-10 pr-4 text-xl font-black text-black outline-none shadow-inner"
                     />
                   </div>
@@ -616,8 +619,11 @@ export default function GhostSettings() {
                       type="number"
                       min={1}
                       max={100}
-                      value={ghostMaxTradesPerTimeframe}
-                      onChange={(e) => setGhostMaxTradesPerTimeframe(Number(e.target.value))}
+                      value={ghostMaxTradesPerTimeframe ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setGhostMaxTradesPerTimeframe(raw === '' ? '' : Number(raw));
+                      }}
                       className="w-full bg-transparent text-right text-lg font-black text-white outline-none"
                     />
                   </div>
@@ -627,8 +633,11 @@ export default function GhostSettings() {
                       type="number"
                       min={5}
                       max={3600}
-                      value={ghostTimeframeSeconds}
-                      onChange={(e) => setGhostTimeframeSeconds(Number(e.target.value))}
+                      value={ghostTimeframeSeconds ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setGhostTimeframeSeconds(raw === '' ? '' : Number(raw));
+                      }}
                       className="w-full bg-transparent text-right text-lg font-black text-white outline-none"
                     />
                   </div>

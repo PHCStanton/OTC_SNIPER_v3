@@ -602,8 +602,11 @@ export default function GhostTradingWidget() {
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-[#ffb800]">$</span>
                     <input
                       type="number"
-                      value={ghostAmount}
-                      onChange={(e) => setGhostAmount(Number(e.target.value))}
+                      value={ghostAmount ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setGhostAmount(raw === '' ? '' : Number(raw));
+                      }}
                       className="h-9 w-full rounded-lg bg-[#25282f] pl-7 pr-2 text-xs font-black text-white outline-none border border-white/5"
                     />
                   </div>
@@ -637,8 +640,11 @@ export default function GhostTradingWidget() {
                       type="number"
                       min={1}
                       max={100}
-                      value={ghostMaxTradesPerTimeframe}
-                      onChange={(e) => setGhostMaxTradesPerTimeframe(Number(e.target.value))}
+                      value={ghostMaxTradesPerTimeframe ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setGhostMaxTradesPerTimeframe(raw === '' ? '' : Number(raw));
+                      }}
                       className="w-full bg-transparent text-right text-xs font-black text-white outline-none"
                     />
                   </div>
@@ -648,8 +654,11 @@ export default function GhostTradingWidget() {
                       type="number"
                       min={5}
                       max={3600}
-                      value={ghostTimeframeSeconds}
-                      onChange={(e) => setGhostTimeframeSeconds(Number(e.target.value))}
+                      value={ghostTimeframeSeconds ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setGhostTimeframeSeconds(raw === '' ? '' : Number(raw));
+                      }}
                       className="w-full bg-transparent text-right text-xs font-black text-white outline-none"
                     />
                   </div>

@@ -3,15 +3,17 @@
  * Redesigned to follow the Stitch Design Reference.
  */
 import { useMemo } from 'react';
-import { ArrowDownRight, ArrowUpRight, AlertTriangle, DollarSign, Loader2, Wallet } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, AlertTriangle, DollarSign, Percent, Loader2, Wallet } from 'lucide-react';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useOpsStore } from '../../stores/useOpsStore.js';
+import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { resolveTradeStake, useTradingStore } from '../../stores/useTradingStore.js';
 import { formatAssetLabel } from './chartUtils.js';
 
 export default function TradePanel() {
   const { selectedAsset } = useAssetStore();
   const { sessionStatus, balance, accountType } = useOpsStore();
+  const { initialBalance } = useSettingsStore();
   const {
     amount,
     amountType,
@@ -28,9 +30,11 @@ export default function TradePanel() {
   const sessionConnected = sessionStatus === 'connected';
   const broker = 'pocket_option';
 
+  const effectiveBalance = Number(balance) > 0 ? Number(balance) : (Number(initialBalance) || 1000);
+
   const calculatedStake = useMemo(() => {
-    return resolveTradeStake({ amount, amountType, balance });
-  }, [amount, amountType, balance]);
+    return resolveTradeStake({ amount, amountType, balance: effectiveBalance });
+  }, [amount, amountType, effectiveBalance]);
 
   const parsedDuration = useMemo(() => {
     const value = Number(duration);
@@ -67,38 +71,65 @@ export default function TradePanel() {
           {/* Trade Amount */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Trade Amount</label>
-              <div className="flex bg-[#25282f]/50 border border-white/5 rounded-md p-0.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Trade Amount</label>
+              <div className="flex items-center rounded-lg bg-[#25282f] p-1 border border-white/10 shadow-inner">
                 <button
-                  className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${amountType === '$' ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/25' : 'text-gray-500 hover:text-gray-300'}`}
+                  type="button"
+                  className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded-md transition-all duration-200 ${
+                    amountType === '$'
+                      ? 'bg-[#ffb800] text-black shadow-[0_0_12px_rgba(255,184,0,0.35)] scale-[1.02]'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
                   onClick={() => setAmountType('$')}
                 >
-                  $
+                  <DollarSign size={11} className="stroke-[3]" />
+                  <span>USD</span>
                 </button>
                 <button
-                  className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${amountType === '%' ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/25' : 'text-gray-500 hover:text-gray-300'}`}
+                  type="button"
+                  className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded-md transition-all duration-200 ${
+                    amountType === '%'
+                      ? 'bg-[#ffb800] text-black shadow-[0_0_12px_rgba(255,184,0,0.35)] scale-[1.02]'
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
                   onClick={() => setAmountType('%')}
                 >
-                  %
+                  <Percent size={11} className="stroke-[3]" />
+                  <span>PCT</span>
                 </button>
               </div>
             </div>
             
             <div className="flex h-14 w-full items-center overflow-hidden rounded-lg bg-white shadow-inner">
-              <div className="flex h-full w-12 items-center justify-center bg-gray-50 text-gray-400 border-r border-gray-100">
-                <DollarSign size={18} />
+              <div className={`flex h-full w-12 items-center justify-center border-r transition-colors ${
+                amountType === '%'
+                  ? 'border-amber-200 bg-amber-50 text-[#ffb800]'
+                  : 'border-gray-100 bg-gray-50 text-gray-500'
+              }`}>
+                {amountType === '%' ? (
+                  <Percent size={20} className="stroke-[3]" />
+                ) : (
+                  <DollarSign size={20} className="stroke-[2.5]" />
+                )}
               </div>
               <input
                 type="number"
                 min="0.1"
                 step="0.1"
-                value={amount}
-                onChange={(event) => setAmount(Number(event.target.value))}
+                value={amount ?? ''}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  setAmount(raw === '' ? '' : Number(raw));
+                }}
+                placeholder={amountType === '%' ? '5' : '20'}
                 className="h-full flex-1 px-4 text-xl font-black text-black outline-none"
               />
               {amountType === '%' ? (
-                <div className="flex h-full items-center bg-gray-100 px-4 text-[10px] font-black uppercase tracking-widest text-gray-500 border-l border-gray-200">
-                  = ${calculatedStake.toFixed(2)}
+                <div className="flex h-full items-center bg-gradient-to-r from-amber-50 to-amber-100/90 px-4 text-xs font-black uppercase tracking-wider border-l border-amber-200 gap-1.5 shadow-sm">
+                  <span className="text-[11px] font-extrabold text-amber-700/80">=</span>
+                  <span className="text-base font-black text-black tracking-tight">
+                    ${calculatedStake.toFixed(2)}
+                  </span>
                 </div>
               ) : (
                 <div className="flex h-full items-center bg-gray-50 text-gray-400 border-l border-gray-100 px-4">
@@ -119,8 +150,11 @@ export default function TradePanel() {
                 type="number"
                 min="5"
                 step="1"
-                value={duration}
-                onChange={(event) => setDuration(Number(event.target.value))}
+                value={duration ?? ''}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  setDuration(raw === '' ? '' : Number(raw));
+                }}
                 className="h-full flex-1 px-4 text-xl font-black text-black outline-none"
               />
               <div className="flex h-full items-center bg-gray-100 px-4 text-[10px] font-black uppercase tracking-widest text-gray-500 border-l border-gray-200">
