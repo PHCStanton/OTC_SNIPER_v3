@@ -129,6 +129,7 @@ class StreamingService:
         ai_trade_interval: int | None = None,
         ai_pulse_enabled: bool | None = None,
         ai_pulse_interval_seconds: int | None = None,
+        auto_ghost_auto_execute_ai_pulse: bool | None = None,
         min_adaptive_expiry: int | None = None,
         adaptive_expiry_enabled: bool | None = None,
         auto_ghost_blacklist_assets: list[str] | None = None,
@@ -192,6 +193,7 @@ class StreamingService:
             ai_trade_interval=ai_trade_interval,
             ai_pulse_enabled=ai_pulse_enabled,
             ai_pulse_interval_seconds=ai_pulse_interval_seconds,
+            auto_execute_ai_pulse=auto_ghost_auto_execute_ai_pulse,
             adaptive_expiry_enabled=adaptive_expiry_enabled,
             min_adaptive_expiry=min_adaptive_expiry,
             blacklist_assets=auto_ghost_blacklist_assets,
@@ -869,3 +871,16 @@ class StreamingService:
                 "timestamp": time.time(),
                 "suggestions": suggestions or None,
             })
+
+        # Auto-execute AI Pulse signal if enabled
+        if self.auto_ghost.config.auto_execute_ai_pulse and suggestions:
+            sig = suggestions.get("signal")
+            if isinstance(sig, dict) and sig.get("asset") and sig.get("direction"):
+                asyncio.create_task(
+                    self.auto_ghost.execute_ai_pulse_signal(
+                        asset=str(sig["asset"]),
+                        direction=str(sig["direction"]),
+                        target_expiration=sig.get("target_expiry_seconds") or sig.get("expiration_seconds"),
+                        confidence=sig.get("confidence"),
+                    )
+                )

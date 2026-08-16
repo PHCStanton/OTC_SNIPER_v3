@@ -405,6 +405,7 @@ class KnowledgeBaseLoader:
         regime_label: str | None = None,
         direction: str | None = None,
         top_n: int = 5,
+        min_sample_size: int = 5,
     ) -> list[dict[str, Any]]:
         if not self.loaded:
             self.lazy_load()
@@ -419,6 +420,8 @@ class KnowledgeBaseLoader:
 
         scored_patterns = []
         for p in self.patterns:
+            if int(p.get("sample_size", 0)) < min_sample_size:
+                continue
             similarity = 0
             p_asset = p.get("asset", "").strip().lower().replace("_otc", "")
             p_level = p.get("strategy_level", "").strip().lower()
@@ -463,10 +466,8 @@ class KnowledgeBaseLoader:
 
 
 def get_score_band(score: float) -> str:
-    if score < 50:
-        return "<50"
-    elif score < 65:
-        return "50-64"
+    if score < 65:
+        return "<65"
     elif score < 75:
         return "65-74"
     elif score < 85:

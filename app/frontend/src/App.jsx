@@ -288,6 +288,7 @@ export default function App() {
           ai_trade_interval: state.aiTradeInterval,
           ai_pulse_enabled: state.aiPulseEnabled,
           ai_pulse_interval_seconds: state.aiPulseIntervalSeconds,
+          auto_ghost_auto_execute_ai_pulse: state.autoGhostAutoExecuteAiPulse,
         });
       } catch (err) {
         console.warn('[App] Failed to sync runtime strategy config:', err.message);

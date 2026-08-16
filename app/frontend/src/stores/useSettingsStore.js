@@ -62,6 +62,7 @@ export const SETTINGS_DEFAULTS = {
   autoGhostCciGateEnabled: false,
   autoGhostBayesianFilterEnabled: false,
   autoGhostBayesianMinProbability: 55,
+  autoGhostAutoExecuteAiPulse: false,
 
 
   // Trade Markers
@@ -218,6 +219,7 @@ export function validateSettings(input = {}) {
     autoGhostCciGateEnabled: toBoolean(input.autoGhostCciGateEnabled, SETTINGS_DEFAULTS.autoGhostCciGateEnabled),
     autoGhostBayesianFilterEnabled: toBoolean(input.autoGhostBayesianFilterEnabled, SETTINGS_DEFAULTS.autoGhostBayesianFilterEnabled),
     autoGhostBayesianMinProbability: toNumber(input.autoGhostBayesianMinProbability, SETTINGS_DEFAULTS.autoGhostBayesianMinProbability, { min: 50, max: 90, integer: true }),
+    autoGhostAutoExecuteAiPulse: toBoolean(input.autoGhostAutoExecuteAiPulse, SETTINGS_DEFAULTS.autoGhostAutoExecuteAiPulse),
 
 
 
@@ -403,8 +405,9 @@ export const useSettingsStore = create()(
       setAutoGhostLiquidityGateEnabled: (val) => commitSettingsPatch(set, { autoGhostLiquidityGateEnabled: val }),
       setMinLiquidityScore: (val) => commitSettingsPatch(set, { minLiquidityScore: val }),
       setMaxLiquidityScore: (val) => commitSettingsPatch(set, { maxLiquidityScore: val }),
-      setAutoGhostAdxGateEnabled: (val) => commitSettingsPatch(set, { autoGhostAdxGateEnabled: val }),
-      setAutoGhostCciGateEnabled: (val) => commitSettingsPatch(set, { autoGhostCciGateEnabled: val }),
+      setAutoGhostBayesianFilterEnabled: (val) => commitSettingsPatch(set, { autoGhostBayesianFilterEnabled: val }),
+      setAutoGhostBayesianMinProbability: (val) => commitSettingsPatch(set, { autoGhostBayesianMinProbability: val }),
+      setAutoGhostAutoExecuteAiPulse: (val) => commitSettingsPatch(set, { autoGhostAutoExecuteAiPulse: val }),
 
       loadGhostProtocol: (key) => {
         set((state) => {

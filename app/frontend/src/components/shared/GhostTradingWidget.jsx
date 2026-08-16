@@ -120,8 +120,10 @@ export default function GhostTradingWidget() {
     setAutoGhostRsiCciEnabled,
     autoGhostBayesianFilterEnabled,
     autoGhostBayesianMinProbability,
+    autoGhostAutoExecuteAiPulse,
     setAutoGhostBayesianFilterEnabled,
     setAutoGhostBayesianMinProbability,
+    setAutoGhostAutoExecuteAiPulse,
   } = useSettingsStore();
 
   const currentPresetIndex = PULSE_PRESETS.reduce((closestIdx, currVal, idx) => {
@@ -518,7 +520,14 @@ export default function GhostTradingWidget() {
                           title={autoGhostCopyMode === 'execute' ? `Click to Copy & Execute on Live (${expiryText})` : `Click to Pre-set Asset & Expiry (${expiryText})`}
                         >
                           <div className="flex flex-col w-[105px] shrink-0">
-                            <span className="text-[10px] font-black uppercase text-white tracking-wide">{assetLabel}</span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-black uppercase text-white tracking-wide">{assetLabel}</span>
+                              {(trade.trigger_mode === 'ai_pulse' || trade.entry_context?.trigger_mode === 'ai_pulse') && (
+                                <span className="text-[7px] font-black uppercase text-cyan-300 bg-cyan-500/20 border border-cyan-400/40 rounded px-1 py-0.2 animate-pulse" title="Triggered via AI Pulse Forecast">
+                                  ⚡ Pulse
+                                </span>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className={`text-[8.5px] font-black uppercase ${directionColor}`}>
                                 {directionLabel}
@@ -856,7 +865,7 @@ export default function GhostTradingWidget() {
                   <div>
                     <div className="text-[8px] font-black uppercase tracking-wider text-gray-500 mb-1">Allowed Regimes (click to toggle)</div>
                     <div className="flex flex-wrap gap-1.5">
-                      {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'CHOPPY'].map(r => {
+                      {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'BREAKOUT', 'CHOPPY'].map(r => {
                         const active = (ghostAllowedRegimes || []).includes(r);
                         return (
                           <button
@@ -1039,6 +1048,25 @@ export default function GhostTradingWidget() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Auto-Execute AI Pulse Signals Toggle */}
+              <div className="p-2.5 rounded-lg bg-cyan-500/5 border border-cyan-500/20">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Zap size={13} className="text-cyan-400" />
+                    <div>
+                      <div className="text-[8.5px] font-black uppercase tracking-wider text-cyan-300">Auto-Execute AI Pulse</div>
+                      <div className="text-[7.5px] text-gray-500">Auto-trigger Ghost trades from pulse setups</div>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={autoGhostAutoExecuteAiPulse}
+                    onChange={(e) => setAutoGhostAutoExecuteAiPulse(e.target.checked)}
+                    className="accent-cyan-400 rounded h-3.5 w-3.5"
+                  />
+                </label>
               </div>
 
               {/* Trade Interval Suggestions */}

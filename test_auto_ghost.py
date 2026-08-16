@@ -492,6 +492,29 @@ async def test_auto_ghost():
     assert "override_expiration_seconds" not in oteo_res_disabled, "Should NOT set override_expiration_seconds when extension disabled"
     print("Test 14 passed: Adaptive Expiry toggle (enabled vs disabled) verified.")
 
+    # Test 15: AI Pulse Auto-Execution Dispatch
+    print("Starting Test 15 (AI Pulse Auto-Execution)...")
+    service.update_config(enabled=True, auto_execute_ai_pulse=True)
+    service._active_assets.clear()
+    
+    pulse_trade = await service.execute_ai_pulse_signal(
+        asset="GBPUSD",
+        direction="PUT",
+        target_expiration=300,
+        confidence=85.0,
+    )
+    assert pulse_trade is not None, "AI pulse trade should be dispatched"
+    assert "GBPUSD" in service._active_assets, "Asset should be marked active"
+    service._active_assets.clear()
+    print("Test 15 passed: AI Pulse auto-execution verified.")
+
+    # Test 16: KB Query Minimum Sample Size Filter (No N=1 Noise)
+    print("Starting Test 16 (KB Query Minimum Sample Size Filter)...")
+    patterns = kb_loader.query_top_patterns("EURUSD", min_sample_size=5)
+    for p in patterns:
+        assert int(p.get("sample_size", 0)) >= 5, "Query must strictly filter patterns with sample_size < 5"
+    print("Test 16 passed: KB query minimum sample size filter verified.")
+
     print("All tests passed successfully!")
 
 if __name__ == "__main__":

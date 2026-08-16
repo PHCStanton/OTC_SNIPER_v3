@@ -586,7 +586,7 @@ export default function GhostSettings() {
                   </div>
                   {ghostRegimeGateEnabled && (
                     <div className="flex flex-wrap gap-1.5 pt-2 border-t border-white/5">
-                      {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'CHOPPY'].map((r) => {
+                      {['RANGE_BOUND', 'TREND_REVERSAL', 'TREND_PULLBACK', 'STRONG_MOMENTUM', 'BREAKOUT', 'CHOPPY'].map((r) => {
                         const active = (ghostAllowedRegimes || []).includes(r);
                         return (
                           <button

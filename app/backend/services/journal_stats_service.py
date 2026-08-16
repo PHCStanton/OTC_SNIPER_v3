@@ -1107,6 +1107,7 @@ Keep the language direct, authoritative, and concise (under 250 words total).
         selected_pattern_keys: Optional[List[str]] = None,
         commit_bayesian: bool = True,
         commit_kb: bool = True,
+        min_sample_size: int = 1,
     ) -> Dict[str, Any]:
         """
         User-approved transactional commit of staged patterns and Bayesian prior updates.
@@ -1173,6 +1174,9 @@ Keep the language direct, authoritative, and concise (under 250 words total).
             if selected_pattern_keys:
                 allowed_keys = set(selected_pattern_keys)
                 candidates = [c for c in candidates if c.get("pattern_key") in allowed_keys]
+
+            if min_sample_size > 1:
+                candidates = [c for c in candidates if int(c.get("sample_size", 0)) >= min_sample_size]
 
             if candidates:
                 kb_data = {"metadata": {"total_patterns": 0, "generated_utc": ""}, "patterns": []}

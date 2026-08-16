@@ -60,6 +60,7 @@ class RuntimeStrategyConfigRequest(BaseModel):
 
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
+    auto_ghost_auto_execute_ai_pulse: bool = Field(default=False)
 
 
 @router.get("/runtime-config")
@@ -113,6 +114,7 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             ai_trade_interval=body.ai_trade_interval,
             ai_pulse_enabled=body.ai_pulse_enabled,
             ai_pulse_interval_seconds=body.ai_pulse_interval_seconds,
+            auto_ghost_auto_execute_ai_pulse=body.auto_ghost_auto_execute_ai_pulse,
             adaptive_expiry_enabled=body.auto_ghost_adaptive_expiry_enabled,
             min_adaptive_expiry=body.auto_ghost_min_adaptive_expiry,
             auto_ghost_blacklist_assets=body.auto_ghost_blacklist_assets,

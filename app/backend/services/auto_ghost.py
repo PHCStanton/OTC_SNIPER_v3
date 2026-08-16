@@ -48,6 +48,7 @@ class AutoGhostConfig:
     ai_trade_interval: int = 10
     ai_pulse_enabled: bool = False
     ai_pulse_interval_seconds: int = 120
+    auto_execute_ai_pulse: bool = False
     min_zscore_enabled: bool = False
     min_zscore: float | None = None
     max_zscore_enabled: bool = False
@@ -135,6 +136,7 @@ class AutoGhostService:
         ai_trade_interval: int | None = None,
         ai_pulse_enabled: bool | None = None,
         ai_pulse_interval_seconds: int | None = None,
+        auto_execute_ai_pulse: bool | None = None,
         min_zscore_enabled: bool | None = None,
         min_zscore: float | None = None,
         max_zscore_enabled: bool | None = None,
@@ -212,6 +214,8 @@ class AutoGhostService:
             updates["ai_pulse_enabled"] = bool(ai_pulse_enabled)
         if ai_pulse_interval_seconds is not None:
             updates["ai_pulse_interval_seconds"] = max(10, int(ai_pulse_interval_seconds))
+        if auto_execute_ai_pulse is not None:
+            updates["auto_execute_ai_pulse"] = bool(auto_execute_ai_pulse)
         if min_zscore_enabled is not None:
             updates["min_zscore_enabled"] = bool(min_zscore_enabled)
         if min_zscore is not None:
@@ -335,6 +339,7 @@ class AutoGhostService:
             "ai_trade_interval": self.config.ai_trade_interval,
             "ai_pulse_enabled": self.config.ai_pulse_enabled,
             "ai_pulse_interval_seconds": self.config.ai_pulse_interval_seconds,
+            "auto_ghost_auto_execute_ai_pulse": self.config.auto_execute_ai_pulse,
             "auto_ghost_min_zscore_enabled": self.config.min_zscore_enabled,
             "auto_ghost_min_zscore": self.config.min_zscore,
             "auto_ghost_max_zscore_enabled": self.config.max_zscore_enabled,
@@ -829,6 +834,77 @@ class AutoGhostService:
         )
         return result
 
+    async def execute_ai_pulse_signal(
+        self,
+        *,
+        asset: str,
+        direction: str,
+        target_expiration: int | None = None,
+        confidence: float | None = None,
+    ) -> Any:
+        """Directly dispatch an AI Pulse suggested signal under the ghost controller."""
+        if not self.config.enabled:
+            logger.info("Auto-Ghost is disabled; skipping AI Pulse signal for %s", asset)
+            return None
+
+        if asset in self._active_assets:
+            logger.info("Auto-Ghost already has active trade for %s; skipping AI Pulse signal", asset)
+            return None
+
+        if len(self._active_assets) >= self.config.max_concurrent_trades:
+            logger.info("Auto-Ghost max concurrent trades (%d) reached; skipping AI Pulse signal", self.config.max_concurrent_trades)
+            return None
+
+        exp = target_expiration or self.config.expiration_seconds
+        price = 1.0
+        if hasattr(self.trade_service, "_latest_logged_price"):
+            price = self.trade_service._latest_logged_price(asset) or 1.0
+        elif hasattr(self.trade_service, "get_last_price"):
+            price = self.trade_service.get_last_price(asset) or 1.0
+        payout_pct = 85.0
+        if hasattr(self.trade_service, "adapter") and self.trade_service.adapter:
+            payout_pct = self.trade_service._resolve_payout_pct(self.trade_service.adapter, asset)
+
+        entry_context = {
+            "asset": asset,
+            "price": price,
+            "timestamp": unix_time(),
+            "expiration_seconds": exp,
+            "recommended": direction.upper(),
+            "confidence": "HIGH" if (confidence and confidence >= 80) else "MEDIUM",
+            "trigger_mode": "ai_pulse",
+            "payout_pct": payout_pct,
+        }
+
+        request = TradeExecutionRequest(
+            asset_id=asset,
+            direction=direction.lower(),
+            amount=self.config.amount,
+            expiration=exp,
+            account_key="primary",
+            trade_mode="ghost",
+            session_id=self._session_id,
+            confidence="HIGH" if (confidence and confidence >= 80) else "MEDIUM",
+            entry_context=entry_context,
+            trigger_mode="ai_pulse",
+        )
+
+        try:
+            self._active_assets.add(asset)
+            self._session_trade_count += 1
+            self._trade_timestamps.append(unix_time())
+            self._cooldown_until[asset] = unix_time() + exp + self.config.per_asset_cooldown_seconds
+            task = asyncio.create_task(self._release_asset(asset, exp + 1))
+            task.add_done_callback(lambda t: logger.error("_release_asset failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
+
+            record = await self.trade_service.execute_trade(BrokerType.POCKET_OPTION, request)
+            logger.info("Auto-Ghost executed AI Pulse trade: %s %s %ds", asset, direction, exp)
+            return record
+        except Exception as exc:
+            logger.error("Auto-Ghost AI Pulse trade failed for %s: %s", asset, exc)
+            self._active_assets.discard(asset)
+            return None
+
     async def _release_asset(self, asset: str, delay_seconds: int) -> None:
         await asyncio.sleep(max(1, delay_seconds))
         self._active_assets.discard(asset)
@@ -884,8 +960,13 @@ class AutoGhostService:
         cci_state = market_context.get("cci_state", "unknown")
         tick_health = market_context.get("tick_health", "unknown")
         nearest_structure_atr = market_context.get("nearest_structure_atr", "N/A")
+        z_score = market_context.get("z_score", "N/A")
+        volatility_score = market_context.get("volatility_score", "N/A")
+        liquidity_score = market_context.get("liquidity_score", "N/A")
+        b_prob = market_context.get("bayesian_win_probability") or market_context.get("bayesian_win_probability_60s")
+        bayesian_str = f"{float(b_prob)*100:.1f}%" if b_prob is not None else "N/A"
 
-        # Retrieve top matching historical patterns from KB
+        # Retrieve only high-confidence historical patterns (min sample N >= 20)
         kb_loader = KnowledgeBaseLoader.get_instance()
         matched_patterns = kb_loader.query_top_patterns(
             asset=asset,
@@ -893,8 +974,13 @@ class AutoGhostService:
             oteo_score=oteo_score,
             regime_label=regime_label,
             direction=direction,
+            min_sample_size=20,
         )
-        patterns_context = format_patterns_for_prompt(matched_patterns)
+        patterns_context = (
+            format_patterns_for_prompt(matched_patterns)
+            if matched_patterns
+            else "No high-sample historical patterns (Relying strictly on live market physics & Bayesian probability)"
+        )
 
         # Format active manipulation flags cleanly
         active_manip = (
@@ -925,13 +1011,20 @@ class AutoGhostService:
             f"Suggested Expiry: {suggested_expiry_str}\n"
             f"Regime: {regime_label} (confidence: {regime_confidence}%, stable: {regime_stable})\n"
             f"Trend Direction: {trend}\n"
+            f"Z-Score: {z_score}\n"
+            f"Volatility / Liquidity: Vol={volatility_score}, Liq={liquidity_score}\n"
+            f"Bayesian Win Probability: {bayesian_str}\n"
             f"ADX: {adx}\n"
             f"CCI: {cci} ({cci_state})\n"
             f"Nearest S/R: {nearest_structure_atr} ATR\n"
             f"Tick Health: {tick_health}\n"
             f"Active Manipulation: {active_manip}\n\n"
-            f"Historical Context (Top Matching KB Patterns):\n"
+            f"Historical Context (Statistically Proven Patterns N >= 20):\n"
             f"{patterns_context}\n\n"
+            f"Decision Criteria:\n"
+            f"1. Base decision on live market physics, manipulation severity, regime alignment, and Bayesian probability.\n"
+            f"2. Confirm clean, stable structural setups with low manipulation.\n"
+            f"3. Reject setups during extreme manipulation spikes (>0.40) or severe momentum divergence.\n\n"
             f"Should we execute this trade? Respond with CONFIRM or REJECT."
         )
 
