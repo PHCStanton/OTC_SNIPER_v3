@@ -26,11 +26,17 @@ from ..config import RuntimeSettings, get_settings
 from ..services.ai_service import get_ai_service
 from ..models.ai_models import AIChatRequest, AIContext, AIMessage
 
-# Import shared BayesianPriorStore for atomic cross-process transactions
+# Import shared BayesianPriorStore and BayesianProtocolManager for atomic cross-process transactions
 try:
     from shared.bayesian_prior_store import (
         BayesianPriorStore,
         PriorStoreError,
+    )
+    from shared.bayesian_protocol import (
+        BayesianProtocolManager,
+        ProtocolError,
+        ProtocolValidationError,
+        compute_protocol_health,
     )
 except ImportError:
     import sys
@@ -41,15 +47,19 @@ except ImportError:
         BayesianPriorStore,
         PriorStoreError,
     )
+    from shared.bayesian_protocol import (
+        BayesianProtocolManager,
+        ProtocolError,
+        ProtocolValidationError,
+        compute_protocol_health,
+    )
 
 logger = logging.getLogger("otc_sniper.journal_stats_service")
 
 
 def _get_score_band(score: float) -> str:
     """Map OTEO score to standardized score band."""
-    if score < 50:
-        return "<50"
-    elif score < 65:
+    if score < 65:
         return "<65"
     elif score < 75:
         return "65-74"
@@ -89,14 +99,16 @@ class JournalStatsService:
 
     def __init__(self, settings: Optional[RuntimeSettings] = None) -> None:
         self.settings = settings or get_settings()
+        self.stats_dir = self.settings.data_dir / "ghost_trades" / "stats"
         self.staged_updates_path = (
-            self.settings.data_dir / "ghost_trades" / "stats" / "staged_knowledge_updates.json"
+            self.stats_dir / "staged_knowledge_updates.json"
         )
         self.bayesian_priors_path = (
-            self.settings.data_dir / "ghost_trades" / "stats" / "bayesian_priors.json"
+            self.stats_dir / "bayesian_priors.json"
         )
         self.kb_path = self._find_kb_path()
         self._ensure_staging_file()
+        self.protocol_manager = BayesianProtocolManager(self.stats_dir)
         self._stats_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self._cache_ttl_sec = 180.0  # 3 minutes in-memory cache
 
@@ -776,8 +788,12 @@ class JournalStatsService:
         })
 
         bayesian_deltas: Dict[str, Dict[str, int]] = defaultdict(lambda: {"win": 0, "loss": 0})
-        total_wins = 0
-        total_losses = 0
+        bayesian_total_wins = 0
+        bayesian_total_losses = 0
+
+        bayesian_deltas_300: Dict[str, Dict[str, int]] = defaultdict(lambda: {"win": 0, "loss": 0})
+        bayesian_total_wins_300 = 0
+        bayesian_total_losses_300 = 0
 
         for t in trades:
             asset = str(t.get("asset") or "UNKNOWN")
@@ -787,11 +803,6 @@ class JournalStatsService:
             is_win = (outcome == "win")
             is_loss = (outcome == "loss")
             profit = float(t.get("profit") or 0.0)
-
-            if is_win:
-                total_wins += 1
-            elif is_loss:
-                total_losses += 1
 
             oteo_score = float(t.get("oteo_score") or 50.0)
             score_band = _get_score_band(oteo_score)
@@ -806,6 +817,7 @@ class JournalStatsService:
             manip = entry_ctx.get("manipulation") or t.get("manipulation_at_entry")
             has_manip = "MANIP_TRUE" if (isinstance(manip, (dict, list, bool)) and bool(manip)) else "MANIP_FALSE"
 
+            # 1. Observational candidate patterns include all session trades
             pkey = f"{asset}|{strategy_level}|{score_band}|{regime}|{direction}"
             pg = pattern_groups[pkey]
             pg["pattern_key"] = pkey
@@ -821,14 +833,43 @@ class JournalStatsService:
                 pg["losses"] += 1
             pg["profit"] += profit
 
+            # 2. Bayesian Prior Deltas separated by horizon (60s and 300s)
+            exp_sec = t.get("expiration_seconds")
+            if exp_sec is None and isinstance(entry_ctx, dict):
+                exp_sec = entry_ctx.get("expiration_seconds")
+            try:
+                exp_int = int(exp_sec) if exp_sec is not None else 60
+            except (ValueError, TypeError):
+                exp_int = 60
+
             bucket = "win" if is_win else ("loss" if is_loss else None)
-            if bucket:
-                bayesian_deltas[f"oteo_band={score_band}"][bucket] += 1
-                bayesian_deltas[f"regime={regime}"][bucket] += 1
-                bayesian_deltas[f"confidence={confidence}"][bucket] += 1
-                bayesian_deltas[f"z_band={z_band}"][bucket] += 1
-                bayesian_deltas[f"has_manip={has_manip}"][bucket] += 1
-                bayesian_deltas[f"direction={direction}"][bucket] += 1
+
+            if exp_int == 60:
+                if is_win:
+                    bayesian_total_wins += 1
+                elif is_loss:
+                    bayesian_total_losses += 1
+
+                if bucket:
+                    bayesian_deltas[f"oteo_band={score_band}"][bucket] += 1
+                    bayesian_deltas[f"regime={regime}"][bucket] += 1
+                    bayesian_deltas[f"confidence={confidence}"][bucket] += 1
+                    bayesian_deltas[f"z_band={z_band}"][bucket] += 1
+                    bayesian_deltas[f"has_manip={has_manip}"][bucket] += 1
+                    bayesian_deltas[f"direction={direction}"][bucket] += 1
+            elif exp_int == 300:
+                if is_win:
+                    bayesian_total_wins_300 += 1
+                elif is_loss:
+                    bayesian_total_losses_300 += 1
+
+                if bucket:
+                    bayesian_deltas_300[f"oteo_band={score_band}"][bucket] += 1
+                    bayesian_deltas_300[f"regime={regime}"][bucket] += 1
+                    bayesian_deltas_300[f"confidence={confidence}"][bucket] += 1
+                    bayesian_deltas_300[f"z_band={z_band}"][bucket] += 1
+                    bayesian_deltas_300[f"has_manip={has_manip}"][bucket] += 1
+                    bayesian_deltas_300[f"direction={direction}"][bucket] += 1
 
         candidate_patterns = []
         for pkey, pg in pattern_groups.items():
@@ -866,11 +907,27 @@ class JournalStatsService:
 
         candidate_patterns.sort(key=lambda p: (p["sample_size"], p["win_rate_pct"]), reverse=True)
 
-        bayesian_summary = {
-            "total_wins_delta": total_wins,
-            "total_losses_delta": total_losses,
-            "total_trades_delta": total_wins + total_losses,
+        bayesian_summary_60s = {
+            "total_wins_delta": bayesian_total_wins,
+            "total_losses_delta": bayesian_total_losses,
+            "total_trades_delta": bayesian_total_wins + bayesian_total_losses,
             "feature_deltas": dict(bayesian_deltas),
+        }
+
+        bayesian_summary_300s = {
+            "total_wins_delta": bayesian_total_wins_300,
+            "total_losses_delta": bayesian_total_losses_300,
+            "total_trades_delta": bayesian_total_wins_300 + bayesian_total_losses_300,
+            "feature_deltas": dict(bayesian_deltas_300),
+        }
+
+        bayesian_summary = {
+            "total_wins_delta": bayesian_total_wins,
+            "total_losses_delta": bayesian_total_losses,
+            "total_trades_delta": bayesian_total_wins + bayesian_total_losses,
+            "feature_deltas": dict(bayesian_deltas),
+            "bayesian_deltas_60s": bayesian_summary_60s,
+            "bayesian_deltas_300s": bayesian_summary_300s,
         }
 
         return candidate_patterns, bayesian_summary
@@ -1184,6 +1241,79 @@ Keep the language direct, authoritative, and concise (under 250 words total).
             "patterns_committed": committed_patterns_count,
             "message": f"Successfully committed updates with {len(backup_files)} automated backup(s) created.",
         }
+
+    # --------------------------------------------------------------------------
+    # Bayesian Protocol Management (Library & Active State)
+    # --------------------------------------------------------------------------
+
+    def list_protocols(self) -> List[Dict[str, Any]]:
+        """List all saved protocol snapshots."""
+        return self.protocol_manager.list_protocols()
+
+    def get_protocol(self, proto_id: str) -> Optional[Dict[str, Any]]:
+        """Get full details of a specific protocol snapshot."""
+        return self.protocol_manager.get_protocol(proto_id)
+
+    def save_protocol_from_staged(
+        self,
+        staged_id: str,
+        name: str = "",
+        notes: str = "",
+        horizon_seconds: int = 60,
+    ) -> Dict[str, Any]:
+        """Save a staged report into the protocol library as a named snapshot."""
+        reports = self.get_staged_reports()
+        matched = next((r for r in reports if r.get("staged_id") == staged_id), None)
+        if not matched:
+            raise ValueError(f"Staged report {staged_id} not found.")
+
+        all_b_deltas = matched.get("bayesian_deltas") or {}
+        if horizon_seconds == 300 and "bayesian_deltas_300s" in all_b_deltas:
+            b_deltas = all_b_deltas["bayesian_deltas_300s"]
+        elif horizon_seconds == 60 and "bayesian_deltas_60s" in all_b_deltas:
+            b_deltas = all_b_deltas["bayesian_deltas_60s"]
+        else:
+            b_deltas = all_b_deltas
+
+        tw = int(b_deltas.get("total_wins_delta", 0))
+        tl = int(b_deltas.get("total_losses_delta", 0))
+        session_id = matched.get("session_id", "staged_session")
+
+        proto_dict = {
+            "schema_version": 1,
+            "id": f"proto_{staged_id}_{horizon_seconds}s",
+            "name": name or f"Protocol: {session_id} ({horizon_seconds}s)",
+            "horizon_seconds": horizon_seconds,
+            "source_sessions": [session_id] if session_id != "ALL" else [],
+            "trade_count": tw + tl,
+            "created_utc": datetime.now(timezone.utc).isoformat(),
+            "notes": notes or matched.get("user_notes", ""),
+            "priors": {
+                "total_wins": tw,
+                "total_losses": tl,
+                "total_trades": tw + tl,
+                "feature_counts": b_deltas.get("feature_deltas", {}),
+            },
+            "patterns": matched.get("candidate_patterns", []),
+            "gates": {"min_win_probability": 0.55},
+        }
+        return self.protocol_manager.save_protocol(proto_dict)
+
+    def import_protocol(self, raw_content: str | bytes) -> Dict[str, Any]:
+        """Import a protocol from raw JSON or legacy export bundle."""
+        return self.protocol_manager.import_from_json(raw_content)
+
+    def activate_protocol(self, proto_id: str, allow_experimental: bool = True) -> Dict[str, Any]:
+        """Activate a protocol by ID into the live working copy."""
+        return self.protocol_manager.activate_protocol(proto_id, allow_experimental=allow_experimental)
+
+    def delete_protocol(self, proto_id: str) -> bool:
+        """Delete a protocol snapshot from the library."""
+        return self.protocol_manager.delete_protocol(proto_id)
+
+    def get_active_protocol(self) -> Optional[Dict[str, Any]]:
+        """Get information about the currently active protocol."""
+        return self.protocol_manager.get_active_protocol_info()
 
 
 _journal_stats_service: Optional[JournalStatsService] = None

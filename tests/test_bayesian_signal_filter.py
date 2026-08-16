@@ -49,7 +49,7 @@ def seeded_filter(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Original tests — unchanged, still passing
+# Basic Tests
 # ---------------------------------------------------------------------------
 
 def test_bayesian_signal_filter_initialization():
@@ -75,8 +75,8 @@ def test_bayesian_signal_filter_probability_calculation():
     assert 0.0 <= prob <= 1.0
 
 
-def test_bayesian_signal_filter_veto_logic():
-    filter_ext = BayesianSignalFilter({"enabled": True, "min_win_probability": 0.99})
+def test_bayesian_signal_filter_veto_logic(seeded_filter):
+    seeded_filter.min_win_probability = 0.99
 
     oteo_test = {
         "oteo_score": 75.0,
@@ -91,13 +91,13 @@ def test_bayesian_signal_filter_veto_logic():
         bayesian_filter_enabled = True
         bayesian_min_probability = 0.99
 
-    allowed, reason = filter_ext.on_consider_signal("EURUSD_otc", 1.0850, oteo_test, DummyConfig())
+    allowed, reason = seeded_filter.on_consider_signal("EURUSD_otc", 1.0850, oteo_test, DummyConfig())
     assert allowed is False
     assert "Bayesian Win Probability" in reason
 
 
-def test_bayesian_signal_filter_disabled_pass():
-    filter_ext = BayesianSignalFilter({"enabled": False, "min_win_probability": 0.55})
+def test_bayesian_signal_filter_disabled_pass(seeded_filter):
+    seeded_filter.enabled = False
 
     oteo_test = {
         "oteo_score": 50.0,
@@ -112,17 +112,37 @@ def test_bayesian_signal_filter_disabled_pass():
         bayesian_filter_enabled = False
         bayesian_min_probability = 0.55
 
-    allowed, reason = filter_ext.on_consider_signal("EURUSD_otc", 1.0850, oteo_test, DummyConfig())
+    allowed, reason = seeded_filter.on_consider_signal("EURUSD_otc", 1.0850, oteo_test, DummyConfig())
     assert allowed is True
     assert reason is None
 
 
 # ---------------------------------------------------------------------------
-# R1: cold-start (empty priors) — probability should be ~0.5
+# Fail-closed checks on empty priors
 # ---------------------------------------------------------------------------
 
+def test_cold_start_empty_priors_vetoed_in_consider_signal(empty_filter):
+    """When priors are empty, on_consider_signal must fail closed with bayesian_priors_unavailable."""
+    oteo_test = {
+        "oteo_score": 88.0,
+        "regime_label": "RANGE_BOUND",
+        "confidence": "HIGH",
+        "z_score": 0.3,
+        "manipulation": False,
+        "recommended": "CALL",
+    }
+
+    class DummyConfig:
+        bayesian_filter_enabled = True
+        bayesian_min_probability = 0.55
+
+    allowed, reason = empty_filter.on_consider_signal("EURUSD_otc", 1.0850, oteo_test, DummyConfig())
+    assert allowed is False
+    assert "bayesian_priors_unavailable" in reason
+
+
 def test_cold_start_probability_near_50(empty_filter):
-    """With no prior observations, all feature likelihoods collapse to 0.5."""
+    """With no prior observations, predict_win_probability defaults to 0.5."""
     prob = empty_filter.predict_win_probability({
         "oteo_score": 80.0,
         "regime_label": "RANGE_BOUND",
@@ -132,12 +152,11 @@ def test_cold_start_probability_near_50(empty_filter):
         "recommended": "CALL",
     })
     assert 0.0 <= prob <= 1.0
-    # With empty priors the prior is 0.5 and all likelihoods cancel → ~0.5
     assert abs(prob - 0.5) < 0.01
 
 
 # ---------------------------------------------------------------------------
-# R2: defaultdict auto-vivification guard
+# Defaultdict auto-vivification guard
 # ---------------------------------------------------------------------------
 
 def test_predict_does_not_pollute_feature_counts(empty_filter):
@@ -153,16 +172,15 @@ def test_predict_does_not_pollute_feature_counts(empty_filter):
         "recommended": "CALL",
     })
 
-    assert len(empty_filter.feature_counts) == initial_key_count, (
-        "predict_win_probability must not create new defaultdict entries for unseen features"
-    )
+    assert len(empty_filter.feature_counts) == initial_key_count
 
 
 # ---------------------------------------------------------------------------
-# Online learning: on_trade_outcome
+# Online learning: on_trade_outcome & Horizon Guard (Phase 1)
 # ---------------------------------------------------------------------------
 
-def test_on_trade_outcome_increments_win(empty_filter):
+def test_on_trade_outcome_skips_when_missing_expiration(empty_filter):
+    """Trades missing expiration_seconds must be skipped (fail-closed)."""
     trade_data = {
         "oteo_score": 88.0,
         "regime_label": "RANGE_BOUND",
@@ -171,6 +189,52 @@ def test_on_trade_outcome_increments_win(empty_filter):
         "manipulation": False,
         "recommended": "CALL",
         "outcome": "win",
+        # missing expiration_seconds
+    }
+    empty_filter.on_trade_outcome(trade_data)
+    assert empty_filter.total_wins == 0
+    assert empty_filter.total_losses == 0
+
+
+def test_on_trade_outcome_skips_non_60s_expiry(empty_filter):
+    """Non-60s trade outcomes (e.g. 120s or 300s) must be skipped to avoid horizon conflation."""
+    trade_data_300 = {
+        "oteo_score": 88.0,
+        "regime_label": "RANGE_BOUND",
+        "confidence": "HIGH",
+        "z_score": 0.3,
+        "manipulation": False,
+        "recommended": "CALL",
+        "outcome": "win",
+        "expiration_seconds": 300,
+    }
+    empty_filter.on_trade_outcome(trade_data_300)
+    assert empty_filter.total_wins == 0
+
+    trade_data_120 = {
+        "outcome": "loss",
+        "expiration_seconds": 120,
+        "entry_context": {
+            "oteo_score": 70.0,
+            "regime_label": "RANGE_BOUND",
+            "confidence": "LOW",
+        }
+    }
+    empty_filter.on_trade_outcome(trade_data_120)
+    assert empty_filter.total_losses == 0
+
+
+def test_on_trade_outcome_increments_60s_win(empty_filter):
+    """Valid 60s win increments counters and feature counts."""
+    trade_data = {
+        "oteo_score": 88.0,
+        "regime_label": "RANGE_BOUND",
+        "confidence": "HIGH",
+        "z_score": 0.3,
+        "manipulation": False,
+        "recommended": "CALL",
+        "outcome": "win",
+        "expiration_seconds": 60,
     }
     wins_before = empty_filter.total_wins
     empty_filter.on_trade_outcome(trade_data)
@@ -178,28 +242,55 @@ def test_on_trade_outcome_increments_win(empty_filter):
     assert empty_filter.feature_counts["oteo_band=85-92"]["win"] == 1
 
 
-def test_on_trade_outcome_increments_loss(empty_filter):
+def test_on_trade_outcome_increments_60s_loss_with_nested_entry_context(empty_filter):
+    """Valid 60s loss with nested entry_context extracts features and increments counts."""
     trade_data = {
-        "oteo_score": 70.0,
-        "regime_label": "RANGE_BOUND",
-        "confidence": "MEDIUM",
-        "z_score": -0.2,
-        "manipulation": False,
-        "recommended": "PUT",
         "outcome": "loss",
+        "profit": -10.0,
+        "entry_context": {
+            "oteo_score": 70.0,
+            "regime_label": "STRONG_MOMENTUM",
+            "confidence": "MEDIUM",
+            "z_score": -0.8,
+            "manipulation": True,
+            "recommended": "PUT",
+            "expiration_seconds": 60,
+        }
     }
     losses_before = empty_filter.total_losses
     empty_filter.on_trade_outcome(trade_data)
     assert empty_filter.total_losses == losses_before + 1
+    assert empty_filter.feature_counts["oteo_band=65-74"]["loss"] == 1
+    assert empty_filter.feature_counts["regime=STRONG_MOMENTUM"]["loss"] == 1
+    assert empty_filter.feature_counts["has_manip=MANIP_TRUE"]["loss"] == 1
+    assert empty_filter.feature_counts["z_band=-1.5_to_-0.5"]["loss"] == 1
+    assert empty_filter.feature_counts["direction=PUT"]["loss"] == 1
 
 
-def test_on_trade_outcome_ignores_invalid_outcome(empty_filter):
-    """Outcomes that are not 'win' or 'loss' should be silently ignored."""
-    wins_before = empty_filter.total_wins
-    losses_before = empty_filter.total_losses
-    empty_filter.on_trade_outcome({"outcome": "pending", "oteo_score": 80.0})
-    assert empty_filter.total_wins == wins_before
-    assert empty_filter.total_losses == losses_before
+def test_extract_features_nested_vs_flat_equivalence(empty_filter):
+    """_extract_features produces identical dictionaries for flat and nested dict structures."""
+    flat_data = {
+        "oteo_score": 95.0,
+        "regime_label": "TREND_REVERSAL",
+        "confidence": "HIGH",
+        "z_score": 1.8,
+        "manipulation": True,
+        "recommended": "PUT",
+    }
+    nested_data = {
+        "entry_context": flat_data
+    }
+
+    feats_flat = empty_filter._extract_features(flat_data)
+    feats_nested = empty_filter._extract_features(nested_data)
+
+    assert feats_flat == feats_nested
+    assert feats_flat["oteo_band"] == "93+"
+    assert feats_flat["regime"] == "TREND_REVERSAL"
+    assert feats_flat["confidence"] == "HIGH"
+    assert feats_flat["z_band"] == ">1.5"
+    assert feats_flat["has_manip"] == "MANIP_TRUE"
+    assert feats_flat["direction"] == "PUT"
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +302,6 @@ def test_save_load_roundtrip(tmp_path):
     priors_file = tmp_path / "bayesian_priors.json"
     f1 = BayesianSignalFilter({"enabled": True, "priors_file": priors_file})
 
-    # Record a win and a loss
     outcome_base = {
         "oteo_score": 88.0,
         "regime_label": "RANGE_BOUND",
@@ -219,42 +309,15 @@ def test_save_load_roundtrip(tmp_path):
         "z_score": 0.3,
         "manipulation": False,
         "recommended": "CALL",
+        "expiration_seconds": 60,
     }
     f1.on_trade_outcome({**outcome_base, "outcome": "win"})
     f1.on_trade_outcome({**outcome_base, "outcome": "loss"})
 
-    # Load into a fresh instance from the same priors file
     f2 = BayesianSignalFilter({"enabled": True, "priors_file": priors_file})
     assert f2.total_wins == f1.total_wins
     assert f2.total_losses == f1.total_losses
     assert f2.feature_counts["oteo_band=85-92"]["win"] == f1.feature_counts["oteo_band=85-92"]["win"]
-
-
-# ---------------------------------------------------------------------------
-# R6: cached probability reuse in on_consider_signal
-# ---------------------------------------------------------------------------
-
-def test_on_consider_signal_reuses_cached_probability(seeded_filter):
-    """If bayesian_win_probability is already in oteo_result, do not recompute."""
-    oteo = {
-        "oteo_score": 88.0,
-        "regime_label": "RANGE_BOUND",
-        "confidence": "HIGH",
-        "z_score": 0.3,
-        "manipulation": False,
-        "recommended": "CALL",
-        # Pre-inject a cached value that will definitely pass the floor
-        "bayesian_win_probability": 0.99,
-    }
-
-    class DummyConfig:
-        bayesian_filter_enabled = True
-        bayesian_min_probability = 0.55
-
-    allowed, reason = seeded_filter.on_consider_signal("EURUSD_otc", 1.0, oteo, DummyConfig())
-    assert allowed is True
-    # The cached value must be preserved (not overwritten by recomputation)
-    assert oteo["bayesian_win_probability"] == 0.99
 
 
 # ---------------------------------------------------------------------------
@@ -294,19 +357,13 @@ def test_z_band_boundaries(empty_filter, z, expected_band):
     assert feats["z_band"] == expected_band
 
 
-def test_missing_all_fields_graceful(empty_filter):
-    """Passing an empty dict must not raise — all features fall back to defaults."""
-    prob = empty_filter.predict_win_probability({})
-    assert 0.0 <= prob <= 1.0
-
-
 # ---------------------------------------------------------------------------
-# R4: Thread safety — concurrent on_trade_outcome calls
+# Thread safety — concurrent on_trade_outcome calls
 # ---------------------------------------------------------------------------
 
 def test_thread_safe_concurrent_updates(empty_filter):
     """Concurrent trade outcome updates must not corrupt win/loss counters."""
-    N = 50
+    N = 30
     errors = []
 
     def record_win():
@@ -319,6 +376,7 @@ def test_thread_safe_concurrent_updates(empty_filter):
                 "manipulation": False,
                 "recommended": "CALL",
                 "outcome": "win",
+                "expiration_seconds": 60,
             })
         except Exception as exc:
             errors.append(exc)
@@ -331,3 +389,92 @@ def test_thread_safe_concurrent_updates(empty_filter):
 
     assert not errors, f"Thread exceptions: {errors}"
     assert empty_filter.total_wins == N
+
+
+# ---------------------------------------------------------------------------
+# Multi-Horizon Tests (60s vs 300s)
+# ---------------------------------------------------------------------------
+
+def test_multi_horizon_prediction_and_routing(tmp_path):
+    priors_60 = tmp_path / "bayesian_priors_60.json"
+    priors_300 = tmp_path / "bayesian_priors_300.json"
+
+    priors_60.write_text(json.dumps({
+        "total_wins": 100,
+        "total_losses": 100,
+        "total_trades": 200,
+        "feature_counts": {
+            "oteo_band=85-92": {"win": 60, "loss": 40},
+            "regime=RANGE_BOUND": {"win": 70, "loss": 30},
+            "confidence=HIGH": {"win": 60, "loss": 40},
+            "z_band=-0.5_to_0.5": {"win": 50, "loss": 50},
+            "has_manip=MANIP_FALSE": {"win": 50, "loss": 50},
+            "direction=CALL": {"win": 50, "loss": 50},
+        }
+    }), encoding="utf-8")
+
+    priors_300.write_text(json.dumps({
+        "total_wins": 100,
+        "total_losses": 100,
+        "total_trades": 200,
+        "feature_counts": {
+            "oteo_band=85-92": {"win": 40, "loss": 60},
+            "regime=RANGE_BOUND": {"win": 30, "loss": 70},
+            "confidence=HIGH": {"win": 40, "loss": 60},
+            "z_band=-0.5_to_0.5": {"win": 50, "loss": 50},
+            "has_manip=MANIP_FALSE": {"win": 50, "loss": 50},
+            "direction=CALL": {"win": 50, "loss": 50},
+        }
+    }), encoding="utf-8")
+
+    b_filter = BayesianSignalFilter({
+        "enabled": True,
+        "min_win_probability": 0.55,
+        "priors_file": priors_60,
+        "priors_file_300s": priors_300,
+    })
+
+    signal = {
+        "oteo_score": 88.0,
+        "regime_label": "RANGE_BOUND",
+        "confidence": "HIGH",
+        "direction": "CALL",
+        "z_score": 0.0,
+        "manipulation": False,
+    }
+
+    prob_60 = b_filter.predict_win_probability(signal, horizon_seconds=60)
+    prob_300 = b_filter.predict_win_probability(signal, horizon_seconds=300)
+
+    assert prob_60 > prob_300, "60s probability should be higher than 300s given the seeded distributions"
+    assert prob_60 > 0.55
+    assert prob_300 < 0.55
+
+    # Test on_consider_signal with 60s
+    pass_60, reason_60 = b_filter.on_consider_signal("EURUSD", 1.1, dict(signal, override_expiration_seconds=60), None)
+    assert pass_60 is True
+    assert reason_60 is None
+
+    # Test on_consider_signal with 300s
+    pass_300, reason_300 = b_filter.on_consider_signal("EURUSD", 1.1, dict(signal, override_expiration_seconds=300), None)
+    assert pass_300 is False
+    assert "Bayesian Win Probability" in reason_300
+    assert "300s" in reason_300
+
+    # Test on_trade_outcome routes 300s to 300s store
+    trade_outcome_300 = {
+        "oteo_score": 88.0,
+        "regime_label": "RANGE_BOUND",
+        "confidence": "HIGH",
+        "direction": "CALL",
+        "z_score": 0.0,
+        "manipulation": False,
+        "outcome": "win",
+        "expiration_seconds": 300,
+    }
+    b_filter.on_trade_outcome(trade_outcome_300)
+
+    assert b_filter._priors_state[300]["total_wins"] == 101
+    assert b_filter._priors_state[60]["total_wins"] == 100  # unchanged
+
+

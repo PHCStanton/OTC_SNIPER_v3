@@ -412,6 +412,7 @@ class TradeService:
                     asset=trade.asset,
                     entry_context=trade.entry_context,
                     direction=trade.direction,
+                    expiration_seconds=trade.expiration_seconds,
                 )
                 
             logger.info(

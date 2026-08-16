@@ -94,7 +94,7 @@ def mock_env(tmp_path):
 
 
 def test_score_and_z_bands():
-    assert _get_score_band(45) == "<50"
+    assert _get_score_band(45) == "<65"
     assert _get_score_band(60) == "<65"
     assert _get_score_band(70) == "65-74"
     assert _get_score_band(80) == "75-84"
@@ -173,13 +173,13 @@ def test_staging_and_transactional_commit(mock_env):
     assert res["status"] == "COMMITTED"
     assert len(res["backups"]) >= 1
 
-    # Verify Bayesian priors were updated
+    # Verify Bayesian priors were updated strictly with 60s trades (2 wins, 1 loss; 120s loss excluded)
     priors_data = json.loads(priors_file.read_text(encoding="utf-8"))
-    assert priors_data["total_wins"] == 12  # 10 initial + 2 new
-    assert priors_data["total_losses"] == 12 # 10 initial + 2 new
-    assert priors_data["total_trades"] == 24
+    assert priors_data["total_wins"] == 12   # 10 initial + 2 new (60s wins)
+    assert priors_data["total_losses"] == 11 # 10 initial + 1 new (60s loss)
+    assert priors_data["total_trades"] == 23
     assert priors_data["feature_counts"]["regime=RANGE_BOUND"]["win"] == 7  # 5 + 2
 
-    # Verify Knowledge Base was updated
+    # Verify Knowledge Base was updated with candidate patterns
     kb_data = json.loads(kb_file.read_text(encoding="utf-8"))
     assert len(kb_data["patterns"]) >= 1

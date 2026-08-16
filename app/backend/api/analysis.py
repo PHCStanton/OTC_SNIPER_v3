@@ -49,6 +49,19 @@ class CommitStagedRequest(BaseModel):
     commit_bayesian: bool = True
     commit_kb: bool = True
 
+class SaveProtocolRequest(BaseModel):
+    staged_id: str
+    name: str = ""
+    notes: str = ""
+    horizon_seconds: int = 60
+
+class ActivateProtocolRequest(BaseModel):
+    id: str
+    allow_experimental: bool = True
+
+class ImportProtocolRequest(BaseModel):
+    content: str  # raw JSON string
+
 @router.get("/sessions")
 async def get_sessions():
     """Load session list and daily statistical charts data."""
@@ -157,6 +170,106 @@ async def commit_staged_to_knowledge_base(request: CommitStagedRequest):
     except Exception as e:
         logger.error("Failed to commit staged updates: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# --------------------------------------------------------------------------
+# Bayesian Protocol Library Endpoints
+# --------------------------------------------------------------------------
+
+@router.get("/protocols")
+async def get_protocols():
+    """Retrieve list of all saved Bayesian protocols and active pointer."""
+    try:
+        service = get_journal_stats_service()
+        protocols = service.list_protocols()
+        active = service.get_active_protocol()
+        return {
+            "protocols": protocols,
+            "active_protocol": active,
+        }
+    except Exception as e:
+        logger.error("Failed to list protocols: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/protocols/active")
+async def get_active_protocol():
+    """Get currently active protocol details."""
+    try:
+        service = get_journal_stats_service()
+        active = service.get_active_protocol()
+        return active or {}
+    except Exception as e:
+        logger.error("Failed to get active protocol: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/protocols/{proto_id}")
+async def get_protocol_details(proto_id: str):
+    """Get full document for a specific protocol."""
+    try:
+        service = get_journal_stats_service()
+        proto = service.get_protocol(proto_id)
+        if not proto:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        return proto
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get protocol %s: %s", proto_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/protocols/save-from-staged")
+async def save_protocol_from_staged(request: SaveProtocolRequest):
+    """Save a staged report into the protocol library as a named snapshot."""
+    try:
+        service = get_journal_stats_service()
+        return service.save_protocol_from_staged(
+            staged_id=request.staged_id,
+            name=request.name,
+            notes=request.notes,
+            horizon_seconds=request.horizon_seconds,
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error("Failed to save protocol from staged: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/protocols/import")
+async def import_protocol(request: ImportProtocolRequest):
+    """Import a protocol from JSON payload or legacy staging export bundle."""
+    try:
+        service = get_journal_stats_service()
+        return service.import_protocol(request.content)
+    except Exception as e:
+        logger.error("Failed to import protocol: %s", e)
+        raise HTTPException(status_code=400, detail=f"Import failed: {e}")
+
+@router.post("/protocols/activate")
+async def activate_protocol(request: ActivateProtocolRequest):
+    """Activate a protocol into the working copy bayesian_priors.json."""
+    try:
+        service = get_journal_stats_service()
+        return service.activate_protocol(
+            proto_id=request.id,
+            allow_experimental=request.allow_experimental,
+        )
+    except Exception as e:
+        logger.error("Failed to activate protocol %s: %s", request.id, e)
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/protocols/{proto_id}")
+async def delete_protocol(proto_id: str):
+    """Delete a protocol snapshot from the library."""
+    try:
+        service = get_journal_stats_service()
+        success = service.delete_protocol(proto_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Protocol not found")
+        return {"success": True, "id": proto_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to delete protocol %s: %s", proto_id, e)
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/run-ai-refinement")
 async def run_ai_refinement(request: AIAnalysisRequest):

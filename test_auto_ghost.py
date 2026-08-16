@@ -442,30 +442,22 @@ async def test_auto_ghost():
     assert res_ok2 and res_ok2["success"] is True, "Should succeed as ADX & CCI are friendly"
     print("Test 12 passed: ADX & CCI gates verified.")
 
-    # Test 13: Dynamic Knowledge Base Outcome Logging
-    print("Starting Test 13 (Dynamic KB Outcome Logging)...")
+    # Test 13: Silent Dynamic KB Outcome Logging is Disabled (CORE_PRINCIPLES: Zero Silent Writes)
+    print("Starting Test 13 (Silent KB Auto-Write Disabled)...")
     from app.backend.services.ai_review import KnowledgeBaseLoader
     from pathlib import Path
     import os
     
     kb_loader = KnowledgeBaseLoader.get_instance()
-    # Mock kb_path to temporary file
-    temp_kb_path = Path("c:/v3/OTC_SNIPER/scratch_test_kb.json")
-    original_kb_path = kb_loader.kb_path
-    original_patterns = list(kb_loader.patterns)
-    original_metadata = dict(kb_loader.metadata)
-    
-    kb_loader.kb_path = temp_kb_path
-    kb_loader.patterns = []
-    kb_loader.metadata = {}
-    kb_loader.loaded = True  # force loaded
+    original_patterns_count = len(kb_loader.patterns)
     
     # Report a win
     entry_context = {
         "oteo_score": 88.5,
         "level3_enabled": True,
         "regime_label": "RANGE_BOUND",
-        "recommended": "CALL"
+        "recommended": "CALL",
+        "expiration_seconds": 60,
     }
     service.report_outcome(
         trade_id="trade_test_13",
@@ -473,38 +465,15 @@ async def test_auto_ghost():
         profit=5.0,
         asset="USDJPY",
         entry_context=entry_context,
-        direction="CALL"
+        direction="CALL",
+        expiration_seconds=60,
     )
     
-    assert len(kb_loader.patterns) == 1, "Should have added exactly 1 new pattern to the KB list"
-    new_pattern = kb_loader.patterns[0]
-    assert new_pattern["pattern_key"] == "USDJPY|level3|85-92|RANGE_BOUND|CALL"
-    assert new_pattern["sample_size"] == 1
-    assert new_pattern["win_rate_pct"] == 100.0
-    assert new_pattern["net_profit"] == 5.0
-    assert temp_kb_path.exists(), "Dynamic KB JSON file should be created/updated on disk"
-    
-    # Report a loss for the same pattern
-    service.report_outcome(
-        trade_id="trade_test_13_2",
-        outcome="loss",
-        profit=-5.0,
-        asset="USDJPY",
-        entry_context=entry_context,
-        direction="CALL"
+    # Assert that KB patterns were NOT mutated automatically in the background
+    assert len(kb_loader.patterns) == original_patterns_count, (
+        "KB should not be silently mutated on live trade outcome; updates must pass via staging review"
     )
-    assert len(kb_loader.patterns) == 1, "Should still have 1 pattern key"
-    assert new_pattern["sample_size"] == 2
-    assert new_pattern["win_rate_pct"] == 50.0
-    assert new_pattern["net_profit"] == 0.0
-    
-    # Clean up temp file and restore original state
-    if temp_kb_path.exists():
-        os.remove(temp_kb_path)
-    kb_loader.kb_path = original_kb_path
-    kb_loader.patterns = original_patterns
-    kb_loader.metadata = original_metadata
-    print("Test 13 passed: Dynamic KB outcome logging verified.")
+    print("Test 13 passed: Silent KB auto-write disabled verified.")
 
     # Test 14: Adaptive Expiry Toggle Check
     from app.backend.services.extensions.volatility_adaptive_expiry import VolatilityAdaptiveExpiry

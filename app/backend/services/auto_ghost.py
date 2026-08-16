@@ -382,10 +382,14 @@ class AutoGhostService:
         asset: str | None = None,
         entry_context: dict[str, Any] | None = None,
         direction: str | None = None,
+        expiration_seconds: int | None = None,
     ) -> None:
         self._session_trade_count += 1
         self._session_pnl += profit
         now = unix_time()
+
+        if expiration_seconds is None and entry_context:
+            expiration_seconds = entry_context.get("expiration_seconds")
 
         # Cache completed trade context in memory for AI Pulse
         self._session_trades.append({
@@ -394,38 +398,15 @@ class AutoGhostService:
             "direction": direction or "unknown",
             "outcome": outcome,
             "pnl": profit,
+            "expiration_seconds": expiration_seconds,
             "regime_label": entry_context.get("regime_label", "UNKNOWN") if entry_context else "UNKNOWN",
             "entry_context": entry_context,
         })
         # deque(maxlen=200) handles eviction automatically
 
-        # Dynamic Knowledge Base updating
-        if asset and entry_context and outcome in {"win", "loss"}:
-            try:
-                from .ai_review import KnowledgeBaseLoader
-                kb_loader = KnowledgeBaseLoader.get_instance()
-                
-                strategy_level = "level1"
-                if entry_context.get("level3_enabled") and (entry_context.get("regime_label") or entry_context.get("regime")):
-                    strategy_level = "level3"
-                elif entry_context.get("level2_enabled"):
-                    strategy_level = "level2"
-                    
-                regime_label = entry_context.get("regime_label") or (entry_context.get("regime", {}).get("regime_label") if isinstance(entry_context.get("regime"), dict) else entry_context.get("regime"))
-                if not regime_label:
-                    regime_label = "RANGE_BOUND"
-                    
-                kb_loader.record_trade_outcome(
-                    asset=asset,
-                    strategy_level=strategy_level,
-                    oteo_score=float(entry_context.get("oteo_score", 50.0)),
-                    regime_label=str(regime_label),
-                    direction=direction or str(entry_context.get("recommended", "CALL")),
-                    outcome=outcome,
-                    profit=profit,
-                )
-            except Exception as kb_err:
-                logger.error("Failed to dynamically update Knowledge Base in report_outcome: %s", kb_err)
+        # Note: Silent live KB auto-writing (kb_loader.record_trade_outcome) is intentionally disabled
+        # to uphold CORE_PRINCIPLES (Zero Silent Writes). All knowledge base mutations must be vetted
+        # through the Staging Review gate.
 
         if outcome == "win":
             self._session_wins += 1
@@ -496,6 +477,7 @@ class AutoGhostService:
                             "outcome": outcome,
                             "profit": profit,
                             "direction": direction,
+                            "expiration_seconds": expiration_seconds,
                             "entry_context": entry_context,
                         })
                     except Exception as ext_err:
@@ -774,10 +756,14 @@ class AutoGhostService:
             )
             advisory_task.add_done_callback(lambda t: logger.error("_run_ai_advisory failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
 
+        # Resolve trade expiration duration
+        target_expiration = oteo_result.get("override_expiration_seconds") or self.config.expiration_seconds
+
         entry_context = {
             "asset": asset,
             "price": price,
             "timestamp": timestamp,
+            "expiration_seconds": target_expiration,
             "recommended": oteo_result.get("recommended"),
             "confidence": oteo_result.get("confidence"),
             "oteo_score": oteo_result.get("oteo_score"),
@@ -808,7 +794,7 @@ class AutoGhostService:
             asset_id=asset,
             direction=str(oteo_result["recommended"]).lower(),
             amount=self.config.amount,
-            expiration=oteo_result.get("override_expiration_seconds") or self.config.expiration_seconds,
+            expiration=target_expiration,
             account_key="primary",
             trade_mode="ghost",
             session_id=self._session_id,
