@@ -523,9 +523,11 @@ class AutoGhostService:
         manipulation: dict[str, Any],
         payout_pct: float | None = 100.0,
     ) -> dict[str, Any] | None:
-        # Defensive fallback: clean up active assets whose cooldowns have fully elapsed
+        # Defensive fallback: clean up active assets whose cooldowns have fully elapsed.
+        # Only discard assets that have an explicit cooldown set AND it has elapsed;
+        # assets currently mid-execution (no cooldown set yet) must be preserved.
         now = unix_time()
-        for a in [a for a in self._active_assets if now >= self._cooldown_until.get(a, 0)]:
+        for a in [a for a in self._active_assets if a in self._cooldown_until and now >= self._cooldown_until[a]]:
             self._active_assets.discard(a)
 
         if self.config.blacklist_assets and asset in self.config.blacklist_assets:
@@ -803,16 +805,27 @@ class AutoGhostService:
             trigger_mode="auto_ghost",
         )
 
-        result = await self.trade_service.execute_trade(BrokerType.POCKET_OPTION, request)
+        # C3 fix: reserve capacity SYNCHRONOUSLY before the first await point.
+        # There are no awaits between the gate checks above and this line, so the
+        # check-and-reserve sequence is atomic within the event loop - concurrent
+        # consider_signal tasks can no longer both pass the capacity check.
+        self._active_assets.add(asset)
+
+        try:
+            result = await self.trade_service.execute_trade(BrokerType.POCKET_OPTION, request)
+        except Exception:
+            self._active_assets.discard(asset)
+            raise
+
         if not result.get("success"):
             logger.warning("Auto-Ghost failed for %s: %s", asset, result.get("message"))
+            self._active_assets.discard(asset)
             return result
 
         # Record trade execution timestamp for timeframe gating
         self._trade_timestamps.append(timestamp)
 
         actual_expiry = request.expiration
-        self._active_assets.add(asset)
         self._cooldown_until[asset] = unix_time() + actual_expiry + self.config.per_asset_cooldown_seconds
         task = asyncio.create_task(self._release_asset(asset, actual_expiry + 1))
         task.add_done_callback(lambda t: logger.error("_release_asset failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
@@ -1022,10 +1035,16 @@ class AutoGhostService:
                 await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return
 
-        # 5. Bayesian Win Probability floor check (51% - 56%)
+        # 5. Bayesian Win Probability floor check (51% - 56%) - fail-closed (C2 fix)
         calibrated_floor = confluence.get("calibrated_bayesian_floor", self.config.bayesian_min_probability)
         b_prob = mc.get("bayesian_win_probability_60s") or mc.get("bayesian_win_probability")
-        if self.config.bayesian_filter_enabled and b_prob is not None:
+        if self.config.bayesian_filter_enabled:
+            if b_prob is None:
+                reason = "Bayesian win probability unavailable (fail-closed: filter enabled but no WP computed yet)"
+                logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
+                if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                    await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+                return
             if float(b_prob) < calibrated_floor:
                 reason = f"Bayesian probability ({float(b_prob)*100:.1f}%) below floor ({calibrated_floor*100:.1f}%)"
                 logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)

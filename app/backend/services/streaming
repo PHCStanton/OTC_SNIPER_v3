@@ -107,8 +107,6 @@ class StreamingService:
         self._last_prices: Dict[str, float] = {}
         # C1 fix: bounded per-asset recent-tick buffers feeding the AI Pulse pre-flight gate
         self._recent_ticks: Dict[str, Deque[Dict[str, Any]]] = {}
-        # C2 fix: latest Bayesian win-probability cache consumed by the pre-flight gate
-        self._latest_bayesian_wp: Dict[str, Dict[str, float]] = {}
         # PERF 3: bound concurrent consider_signal tasks to prevent pile-up under burst
         self._signal_task_sem: asyncio.Semaphore | None = None
         self._active_signal_tasks: set[asyncio.Task] = set()
@@ -281,7 +279,6 @@ class StreamingService:
             self._payout_fail_counts.pop(asset, None)
             self._last_prices.pop(asset, None)
             self._recent_ticks.pop(asset, None)
-            self._latest_bayesian_wp.pop(asset, None)
             if self._ai_review:
                 self._ai_review.clear_asset(asset)
             logger.info("Cleaned up engines for removed asset: %s", asset)
@@ -364,7 +361,6 @@ class StreamingService:
         self._payout_fail_counts.clear()
         self._last_prices.clear()
         self._recent_ticks.clear()
-        self._latest_bayesian_wp.clear()
         logger.info("StreamingService stopped — all engines cleared")
 
     def _get_or_create_engines(self, asset: str) -> tuple[OTEO, MarketContextEngine, ManipulationDetector]:
@@ -566,20 +562,6 @@ class StreamingService:
                 except Exception as ext_err:
                     logger.error("Error in extension %s.on_tick_processed: %s", ext.__class__.__name__, ext_err)
  
-            # C2 fix: cache latest Bayesian win probabilities emitted by the signal-filter extension
-            _wp60 = enriched_result.get("bayesian_win_probability_60s")
-            if _wp60 is not None:
-                try:
-                    self._latest_bayesian_wp[asset] = {
-                        "bayesian_win_probability": float(_wp60),
-                        "bayesian_win_probability_60s": float(_wp60),
-                        "bayesian_win_probability_300s": float(
-                            enriched_result.get("bayesian_win_probability_300s") or _wp60
-                        ),
-                    }
-                except (TypeError, ValueError):
-                    logger.warning("Invalid Bayesian win probability for %s: %r", asset, _wp60)
-
             payload.update({
                 "oteo_score": enriched_result["oteo_score"],
                 "recommended": enriched_result["recommended"],
@@ -766,9 +748,6 @@ class StreamingService:
         regime = self._last_regime.get(asset, {})
         ctx["closed_candles"] = closed_candles
         ctx["recent_ticks"] = list(self._recent_ticks.get(asset, ()))
-        _wp_cache = self._latest_bayesian_wp.get(asset)
-        if _wp_cache:
-            ctx.update(_wp_cache)
         ctx["manipulation"] = manip
         ctx["regime_label"] = regime.get("regime_label") or ctx.get("adx_regime", "UNKNOWN")
         ctx["regime_confidence"] = regime.get("confidence")
