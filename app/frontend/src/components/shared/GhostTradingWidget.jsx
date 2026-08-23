@@ -10,6 +10,7 @@ import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useAIStore } from '../../stores/useAIStore.js';
 import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award, ChevronDown, RotateCcw } from 'lucide-react';
 import { Tooltip } from './StitchComponents.jsx';
+import { getSocket } from '../../api/socketClient.js';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
 import bobble from '../../../assets/bobble.gif';
@@ -135,11 +136,63 @@ export default function GhostTradingWidget() {
   const [requestingInsight, setRequestingInsight] = useState(false);
   const [selectedSuggestedWhitelist, setSelectedSuggestedWhitelist] = useState([]);
   const [selectedSuggestedBlacklist, setSelectedSuggestedBlacklist] = useState([]);
+  const [pendingPulseSignal, setPendingPulseSignal] = useState(null);
+  const [pulseSecondsLeft, setPulseSecondsLeft] = useState(0);
 
   const notifications = useNotificationStore((s) => s.notifications);
   const latestPulse = notifications.find(
     (n) => n.type === 'ai_pulse' || n.type === 'ai_advisory'
   );
+
+  useEffect(() => {
+    let socket;
+    try {
+      socket = getSocket();
+    } catch {
+      // Socket not yet initialized
+    }
+
+    if (socket) {
+      const onPending = (data) => {
+        setPendingPulseSignal(data);
+        setPulseSecondsLeft(data.seconds_remaining || 15);
+      };
+      const onAborted = (data) => {
+        setPendingPulseSignal(null);
+        if (data?.reason) {
+          useToastStore.getState().addToast({
+            type: 'info',
+            message: `⚡ AI Pulse (${data.asset}): ${data.reason}`,
+            duration: 4000,
+          });
+        }
+      };
+
+      socket.on('ai_pulse_pending', onPending);
+      socket.on('ai_pulse_aborted', onAborted);
+
+      return () => {
+        socket.off('ai_pulse_pending', onPending);
+        socket.off('ai_pulse_aborted', onAborted);
+      };
+    }
+  }, []);
+
+  // Countdown timer for pending pulse setup
+  useEffect(() => {
+    if (!pendingPulseSignal) return;
+    const timer = setInterval(() => {
+      setPulseSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setPendingPulseSignal(null);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pendingPulseSignal]);
 
   useEffect(() => {
     if (latestPulse?.suggestions) {
@@ -474,6 +527,41 @@ export default function GhostTradingWidget() {
                 <StatBox label="Ghost Trades" value={String(ghostTotalTrades)} tone="slate" icon={Target} />
                 <StatBox label="Max DD" value={formatCurrency(-Math.abs(ghostMaxDrawdown))} tone="rose" icon={TrendingDown} />
               </div>
+
+              {/* Pending AI Pulse Setup Card */}
+              {pendingPulseSignal && (
+                <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex items-center justify-between animate-pulse shadow-md shadow-cyan-500/10">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-lg bg-cyan-500/20 text-cyan-400 font-bold text-xs">
+                      ⚡
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-black uppercase text-white tracking-wide">
+                          {pendingPulseSignal.asset?.replace(/_otc$/i, ' OTC')}
+                        </span>
+                        <span className={`text-[8.5px] font-black uppercase ${pendingPulseSignal.direction === 'CALL' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {pendingPulseSignal.direction}
+                        </span>
+                      </div>
+                      <span className="text-[7.5px] text-cyan-300 font-semibold block">
+                        Armed for Candle Open {pendingPulseSignal.target_price ? `| Target: ${pendingPulseSignal.target_price}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[7px] uppercase tracking-wider text-gray-400 block font-semibold">Entry In</span>
+                    <span className="text-xs font-black font-mono text-cyan-400">
+                      {(() => {
+                        const totalSec = Math.max(0, Math.round(pulseSecondsLeft || pendingPulseSignal.seconds_remaining || 0));
+                        const mins = Math.floor(totalSec / 60);
+                        const secs = totalSec % 60;
+                        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                      })()}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Recent Executed Trades */}
               <div className="border-t border-white/5 pt-3">

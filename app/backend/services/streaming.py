@@ -17,6 +17,7 @@ from .extensions.manager import ExtensionManager
 from .manipulation import ManipulationDetector
 from .regime_classifier import RegimeClassifier
 from .trade_service import TradeService
+from .pulse_trajectory_engine import PulseTrajectoryEngine
 from .tick_logger import TickLogger
 from .signal_logger import SignalLogger
 from ..brokers.base import BrokerType
@@ -25,6 +26,35 @@ from ..config import get_settings
 from ..dependencies import get_data_repository
 
 logger = logging.getLogger(__name__)
+
+RESERVED_OTC_TOKENS = {
+    "CALL", "PUT", "BUY", "SELL", "CALL_OTC", "PUT_OTC", "TARGET", "WAIT", "FOCUS", "AVOID", "UNKNOWN"
+}
+
+
+def normalize_otc_asset_symbol(raw: str, allowed_assets: set[str] | list[str] | None = None) -> str | None:
+    """
+    Defensively normalize and validate asset names, sanitizing reserved tokens and enforcing _otc suffix.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    cleaned = raw.strip().rstrip(":,|").strip()
+    if not cleaned:
+        return None
+    upper_c = cleaned.upper()
+    if upper_c in RESERVED_OTC_TOKENS:
+        return None
+    if upper_c.endswith(".OTC"):
+        cleaned = cleaned[:-4] + "_otc"
+    elif not cleaned.lower().endswith("_otc"):
+        cleaned = f"{cleaned}_otc"
+    # Cross-reference with allowed assets if provided
+    if allowed_assets:
+        for allowed in allowed_assets:
+            if allowed.lower() == cleaned.lower():
+                return allowed
+    return cleaned
+
 
 class StreamingService:
     """
@@ -45,6 +75,7 @@ class StreamingService:
         self.oteo_ai_enabled = False
         self.oteo_ai_execution_mode = "advisory"
         self.trade_service = TradeService(repository=get_data_repository(), sio=sio_server)
+        self.trade_service._get_market_context = self._get_asset_market_context_snapshot
         self.auto_ghost = AutoGhostService(self.trade_service)
         self.trade_service.set_auto_ghost(self.auto_ghost)
         self.extension_manager = ExtensionManager(on_reload=self.auto_ghost.clear_plugin_cache)
@@ -447,6 +478,7 @@ class StreamingService:
             return
 
         self._last_prices[asset] = price
+        PulseTrajectoryEngine.get_instance().record_tick(asset, price, timestamp)
         oteo, market_context_engine, manip_detector = self._get_or_create_engines(asset)
         
         oteo_result = oteo.update_tick(price, timestamp=timestamp)
@@ -691,6 +723,22 @@ class StreamingService:
                     "condition_stats": self.auto_ghost.get_condition_stats(),
                 })
 
+    def _get_asset_market_context_snapshot(self, asset: str) -> Dict[str, Any]:
+        """Provide a rich snapshot of live market context, closed candles, manipulation, and Bayesian WP."""
+        mc_engine = self._market_context_engines.get(asset)
+        ctx = dict(mc_engine._cached_context) if mc_engine and hasattr(mc_engine, "_cached_context") else {}
+        closed_candles = list(mc_engine._closed_candles) if mc_engine and hasattr(mc_engine, "_closed_candles") else []
+        manip = self._last_manip_flags.get(asset, {})
+        regime = self._last_regime.get(asset, {})
+        ctx["closed_candles"] = closed_candles
+        ctx["manipulation"] = manip
+        ctx["regime_label"] = regime.get("regime_label") or ctx.get("adx_regime", "UNKNOWN")
+        ctx["regime_confidence"] = regime.get("confidence")
+        ctx["regime_stable"] = regime.get("stable")
+        ctx["volatility_score"] = ctx.get("volatility_score", 50.0)
+        ctx["liquidity_score"] = ctx.get("liquidity_score", 50.0)
+        return ctx
+
     def clear_detector_buffers(self, asset: str) -> None:
         """Clear manipulation detector buffers (used on focus switch)."""
         if asset in self._manip_engines:
@@ -698,13 +746,18 @@ class StreamingService:
             logger.debug("Cleared detector buffers for %s", asset)
 
     async def _ai_pulse_loop(self) -> None:
-        """Background loop querying the AI provider for periodic market insights (AI Pulse)."""
-        logger.info("AI Pulse background loop started.")
+        """Background loop querying the AI provider for periodic market insights (AI Pulse), synchronized to minute candle boundaries."""
+        logger.info("AI Pulse background loop started (synchronized to candle boundary T-15s).")
         consecutive_failures = 0
         while self._streaming_active:
-            interval = self.auto_ghost.config.ai_pulse_interval_seconds
-            backoff = min(300, interval * (2 ** consecutive_failures)) if consecutive_failures > 0 else interval
-            await asyncio.sleep(max(10, backoff))
+            interval = max(60, int(self.auto_ghost.config.ai_pulse_interval_seconds or 120))
+            now_epoch = time.time()
+            target_offset = max(15, interval - 15)  # E.g. for 60s, fire at 45s; for 180s, fire at 165s
+            curr_offset = now_epoch % interval
+            delay = (target_offset - curr_offset) if curr_offset < target_offset else (interval - curr_offset + target_offset)
+            sleep_duration = max(5.0, delay)
+
+            await asyncio.sleep(sleep_duration)
             if not self._streaming_active or not self.oteo_ai_enabled or not self.auto_ghost.config.ai_pulse_enabled:
                 break
             try:
@@ -792,30 +845,32 @@ class StreamingService:
 
         system_msg = (
             "You are OTC SNIPER's real-time AI market pulse and calibration assistant.\n"
-            "Your job is to write a highly informative, structured market insight and recommend optimizations for the Ghost Controller gate settings.\n\n"
+            "Your job is to write a highly informative, structured market insight and recommend trade setups and Ghost Controller gate settings.\n\n"
             "CRITICAL INSTRUCTIONS:\n"
             "1. Output a user-facing text insight message with structured formatting and emojis:\n"
             "   - Emojis/Colors for Directions: Use 🟢 CALL for buy setups and 🔴 PUT for sell setups.\n"
-            "   - Format suggestion entries like: '🟢 CALL: EURUSD | Target: 1.0850 | Wait: 2m'\n"
+            "   - Format suggestion entries like: '🟢 CALL: EURUSD_otc | Target: 1.0850 | Wait: 2m'\n"
             "   - Explicitly list '🔥 FOCUS:' (assets/regimes with high win rates/low risk) and '⚠️ AVOID:' (assets/regimes with high manipulation severity or choppiness).\n"
             "   - Keep the total message under 120 words. Format with clean line breaks and section markers.\n"
             "   - Tone must be professional, alert, and highly actionable.\n"
-            "2. If you see recurring losses or clear patterns under certain conditions (e.g. low win rate in CHOPPY regime, low Z-scores, high manipulation), suggest gate adjustments for the Ghost Controller. Format the suggested adjustments inside a strict JSON code block:\n"
+            "2. If you identify a high-conviction trade setup or controller calibration, output it inside a strict JSON code block:\n"
             "```json\n"
             "{\n"
-            "  \"ghostMinConfidence\": 80,\n"
-            "  \"ghostMinConfidenceEnabled\": true,\n"
+            "  \"signal\": {\n"
+            "    \"asset\": \"EURUSD_otc\",\n"
+            "    \"direction\": \"CALL\",\n"
+            "    \"target_price\": 1.0850,\n"
+            "    \"wait_minutes\": 2,\n"
+            "    \"target_expiry_seconds\": 60,\n"
+            "    \"confidence\": 85\n"
+            "  },\n"
             "  \"ghostAllowedRegimes\": [\"RANGE_BOUND\", \"TREND_PULLBACK\"],\n"
-            "  \"ghostRegimeGateEnabled\": true,\n"
-            "  \"autoGhostManipulationSeverityThreshold\": 0.35,\n"
-            "  \"ghostMinZScore\": -0.8,\n"
-            "  \"ghostMinZScoreEnabled\": true,\n"
             "  \"whitelistAssets\": [\"EURUSD_otc\"],\n"
             "  \"blacklistAssets\": [\"AUDNZD_otc\"]\n"
             "}\n"
             "```\n"
-            "Only suggest parameters that need changing. Do NOT include unchanged parameters. Whitelisted assets under 'whitelistAssets' will be starred/favorited in the UI. Blacklisted assets under 'blacklistAssets' will be added to the ghost blacklist in the UI.\n"
-            "3. If there is insufficient data to make reliable gate suggestions (e.g., you marked it as insufficient), do not output suggested settings in the JSON block (use '{}' or omit) and explicitly state in the message text that you are waiting for more trade results to calibrate."
+            "If there is no clear actionable trade, omit the 'signal' key. Only suggest settings that need changing.\n"
+            "3. If there is insufficient data to make reliable gate suggestions, state in the message text that you are waiting for more trade results to calibrate."
         )
 
         user_msg = (
@@ -832,7 +887,7 @@ class StreamingService:
             f"- Data Sufficiency Flag: {'INSUFFICIENT (Waiting for more trades)' if is_insufficient else 'SUFFICIENT'}\n\n"
             f"Recent Session Trades under observation (Last {interval}s lookback window):\n"
             f"{recent_trades_str}\n\n"
-            f"Formulate a brief market pulse update and calibrate settings suggestions if appropriate."
+            f"Formulate a brief market pulse update, identifying actionable trade setups and calibration recommendations."
         )
 
         chat_req = AIChatRequest(
@@ -864,6 +919,52 @@ class StreamingService:
             except Exception as parse_err:
                 logger.warning(f"Failed to parse AI pulse suggestions JSON: {parse_err}")
 
+        # Text Regex Fallback if 'signal' object was omitted from JSON block
+        extracted_signal = suggestions.get("signal") if isinstance(suggestions.get("signal"), dict) else None
+        if not extracted_signal:
+            call_match = re.search(r'(?:🟢\s*(?:CALL|BUY)?[:\s]+|(?<!\w)CALL[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
+            put_match = re.search(r'(?:🔴\s*(?:PUT|SELL)?[:\s]+|(?<!\w)PUT[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?', pulse_insight, re.IGNORECASE)
+
+            if call_match:
+                candidate = normalize_otc_asset_symbol(call_match.group(1), getattr(self, "_allowed_assets", None))
+                if candidate:
+                    t_price = float(call_match.group(2)) if call_match.group(2) else None
+                    w_mins = int(call_match.group(3)) if call_match.group(3) else 1
+                    extracted_signal = {
+                        "asset": candidate,
+                        "direction": "CALL",
+                        "target_price": t_price,
+                        "wait_minutes": w_mins,
+                        "target_expiry_seconds": 60,
+                        "confidence": 85,
+                    }
+            elif put_match:
+                candidate = normalize_otc_asset_symbol(put_match.group(1), getattr(self, "_allowed_assets", None))
+                if candidate:
+                    t_price = float(put_match.group(2)) if put_match.group(2) else None
+                    # Search for wait minutes in put text if present
+                    w_match = re.search(r'Wait:\s*(\d+)m?', pulse_insight, re.IGNORECASE)
+                    w_mins = int(w_match.group(1)) if w_match else 1
+                    extracted_signal = {
+                        "asset": candidate,
+                        "direction": "PUT",
+                        "target_price": t_price,
+                        "wait_minutes": w_mins,
+                        "target_expiry_seconds": 60,
+                        "confidence": 85,
+                    }
+        else:
+            # Normalize and sanitize asset if signal was in JSON
+            if extracted_signal.get("asset"):
+                norm_asset = normalize_otc_asset_symbol(str(extracted_signal["asset"]), getattr(self, "_allowed_assets", None))
+                if norm_asset:
+                    extracted_signal["asset"] = norm_asset
+                else:
+                    extracted_signal = None
+
+        if extracted_signal:
+            suggestions["signal"] = extracted_signal
+
         if self.sio:
             await self.sio.emit("notification", {
                 "type": "ai_pulse",
@@ -872,15 +973,16 @@ class StreamingService:
                 "suggestions": suggestions or None,
             })
 
-        # Auto-execute AI Pulse signal if enabled
-        if self.auto_ghost.config.auto_execute_ai_pulse and suggestions:
-            sig = suggestions.get("signal")
-            if isinstance(sig, dict) and sig.get("asset") and sig.get("direction"):
+        # Precision Auto-Execute on upcoming Candle Open (with T-5s Pre-Flight Validation)
+        if self.auto_ghost.config.auto_execute_ai_pulse and extracted_signal:
+            if extracted_signal.get("asset") and extracted_signal.get("direction"):
                 asyncio.create_task(
-                    self.auto_ghost.execute_ai_pulse_signal(
-                        asset=str(sig["asset"]),
-                        direction=str(sig["direction"]),
-                        target_expiration=sig.get("target_expiry_seconds") or sig.get("expiration_seconds"),
-                        confidence=sig.get("confidence"),
+                    self.auto_ghost.schedule_candle_open_pulse_execution(
+                        asset=str(extracted_signal["asset"]),
+                        direction=str(extracted_signal["direction"]),
+                        target_price=extracted_signal.get("target_price"),
+                        wait_minutes=extracted_signal.get("wait_minutes", 1),
+                        target_expiration=extracted_signal.get("target_expiry_seconds") or extracted_signal.get("expiration_seconds"),
+                        confidence=extracted_signal.get("confidence"),
                     )
                 )

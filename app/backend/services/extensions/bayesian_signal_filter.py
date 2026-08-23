@@ -45,12 +45,12 @@ class BayesianSignalFilter(BaseExtension):
     def __init__(self, settings: Dict[str, Any]):
         defaults = {
             "enabled": False,
-            "min_win_probability": 0.55,
+            "min_win_probability": 0.535,
         }
         defaults.update(settings)
         super().__init__(defaults)
 
-        self.min_win_probability = float(self.settings.get("min_win_probability", 0.55))
+        self.min_win_probability = float(self.settings.get("min_win_probability", 0.535))
         self.alpha = 1.0  # Laplace smoothing
         
         # Horizon prior files
@@ -358,13 +358,8 @@ class BayesianSignalFilter(BaseExtension):
         exp_sec = trade_data.get("expiration_seconds")
         if exp_sec is None and isinstance(trade_data.get("entry_context"), dict):
             exp_sec = trade_data["entry_context"].get("expiration_seconds")
-
         if exp_sec is None:
-            logger.warning(
-                "BayesianSignalFilter skipped trade outcome for %s: missing expiration_seconds (Fail-Closed)",
-                trade_data.get("asset", "unknown"),
-            )
-            return
+            exp_sec = trade_data.get("expiration", 60)
 
         try:
             exp_int = int(exp_sec)

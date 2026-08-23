@@ -168,7 +168,7 @@ def test_staging_and_transactional_commit(mock_env):
     assert reports[0]["staged_id"] == staged_id
 
     # 2. Commit staged report with backup creation
-    res = service.commit_staged_to_knowledge_base(staged_id=staged_id, commit_bayesian=True, commit_kb=True)
+    res = service.commit_staged_to_knowledge_base(staged_id=staged_id, commit_bayesian=True, commit_kb=True, min_sample_size=1)
     assert res["success"] is True
     assert res["status"] == "COMMITTED"
     assert len(res["backups"]) >= 1

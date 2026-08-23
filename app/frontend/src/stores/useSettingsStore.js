@@ -61,7 +61,7 @@ export const SETTINGS_DEFAULTS = {
   autoGhostAdxGateEnabled: false,
   autoGhostCciGateEnabled: false,
   autoGhostBayesianFilterEnabled: false,
-  autoGhostBayesianMinProbability: 55,
+  autoGhostBayesianMinProbability: 53.5,
   autoGhostAutoExecuteAiPulse: false,
 
 

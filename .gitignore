@@ -8,7 +8,7 @@ ssid_integration_package/**/.env
 app/data/
 *.db
 data-agent/data/*.db
-
+/data/Top_20_otc_currency_pair/*.jsonl
 # Backtester 
 app/backtesting/results/
 scripts/
@@ -56,5 +56,5 @@ dist/
 .DS_Store
 
 # Standalone dataset repository
-pocket-option-otc-dataset/
+pocket-option-otc-dataset/data
 

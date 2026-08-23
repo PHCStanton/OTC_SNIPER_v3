@@ -11,6 +11,7 @@ from ..config import get_settings
 from ..data.repository import DataRepository
 from ..models.domain import TradeKind, TradeRecord
 from ..models.requests import TradeExecutionRequest
+from .pulse_trajectory_engine import PulseTrajectoryEngine
 from .tick_logger import TickLogger
 
 logger = logging.getLogger(__name__)
@@ -284,6 +285,16 @@ class TradeService:
                 simulated_amount=request.amount,
             )
             await self.repository.write_trade(trade_record)
+            if trade_record.trigger_mode == "ai_pulse" or (trade_record.entry_context and trade_record.entry_context.get("trigger_mode") == "ai_pulse"):
+                PulseTrajectoryEngine.get_instance().register_pulse_trade(
+                    trade_id=trade_record.trade_id,
+                    asset=trade_record.asset,
+                    direction=trade_record.direction,
+                    entry_price=trade_record.entry_price or 1.0,
+                    opened_at=trade_record.entry_time,
+                    expiration_seconds=trade_record.expiration_seconds,
+                    entry_context=trade_record.entry_context,
+                )
             await self._emit_trade_entry(trade_record)
             task = asyncio.create_task(self._track_ghost_trade_outcome(trade_record, request.expiration))
             task.add_done_callback(lambda t: self._log_task_failure(t, "_track_ghost_trade_outcome"))
@@ -400,6 +411,16 @@ class TradeService:
                     profit = 0.0
                 trade.profit = profit
                 trade.simulated_profit = profit
+
+            if trade.trigger_mode == "ai_pulse" or (trade.entry_context and trade.entry_context.get("trigger_mode") == "ai_pulse"):
+                traj = PulseTrajectoryEngine.get_instance().settle_pulse_trade(
+                    trade_id=trade.trade_id,
+                    exit_price=trade.exit_price,
+                    outcome=trade.outcome,
+                    settled_at=trade.exit_time,
+                )
+                if traj and isinstance(trade.entry_context, dict):
+                    trade.entry_context["trajectory"] = traj
 
             await self.repository.update_trade(trade)
             await self._emit_trade_result(trade)

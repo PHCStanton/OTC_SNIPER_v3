@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 from ..services.analysis_service import get_analysis_service
@@ -48,6 +48,7 @@ class CommitStagedRequest(BaseModel):
     selected_pattern_keys: List[str] | None = None
     commit_bayesian: bool = True
     commit_kb: bool = True
+    min_sample_size: int = Field(default=5, ge=1)
 
 class SaveProtocolRequest(BaseModel):
     staged_id: str
@@ -164,6 +165,7 @@ async def commit_staged_to_knowledge_base(request: CommitStagedRequest):
             selected_pattern_keys=request.selected_pattern_keys,
             commit_bayesian=request.commit_bayesian,
             commit_kb=request.commit_kb,
+            min_sample_size=request.min_sample_size,
         )
     except ValueError as ve:
         raise HTTPException(status_code=404, detail=str(ve))

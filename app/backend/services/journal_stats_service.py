@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 from ..config import RuntimeSettings, get_settings
 from ..services.ai_service import get_ai_service
 from ..models.ai_models import AIChatRequest, AIContext, AIMessage
+from .pulse_trajectory_engine import PulseTrajectoryEngine
 
 # Import shared BayesianPriorStore and BayesianProtocolManager for atomic cross-process transactions
 try:
@@ -288,6 +289,9 @@ class JournalStatsService:
         # 6. Candidate Knowledge Base Patterns & Bayesian Deltas
         candidate_patterns, bayesian_deltas = self._extract_knowledge_updates(trades)
 
+        # 7. AI Pulse Trajectory & Expiry Attribution (Phase 4.4)
+        ai_pulse_trajectory = self._compute_ai_pulse_trajectories(trades)
+
         # Statistical significance check: at least 25 trades across >= 2 sessions or >= 30 in single session
         statistical_significance = (
             (total_trades >= 25 and sessions_scanned >= 2) or (total_trades >= 30 and sessions_scanned == 1)
@@ -312,6 +316,7 @@ class JournalStatsService:
             "manipulation": manipulation_stats,
             "regimes": regimes_ranking,
             "expiries": expiries_stats,
+            "ai_pulse_trajectory": ai_pulse_trajectory,
             "candidate_patterns_count": len(candidate_patterns),
             "candidate_patterns": candidate_patterns[:50],  # top 50 candidates
             "bayesian_deltas": bayesian_deltas,
@@ -933,6 +938,80 @@ class JournalStatsService:
         return candidate_patterns, bayesian_summary
 
     # --------------------------------------------------------------------------
+    # Sub-Engine 7: AI Pulse Trajectory & Expiry Attribution (Phase 4.4)
+    # --------------------------------------------------------------------------
+
+    def _compute_ai_pulse_trajectories(self, trades: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Aggregate and classify price trajectories and attribution for AI Pulse trades.
+        """
+        pulse_trades = []
+        for t in trades:
+            entry_ctx = t.get("entry_context") or {}
+            is_pulse = (
+                t.get("trigger_mode") == "ai_pulse"
+                or entry_ctx.get("trigger_mode") == "ai_pulse"
+                or entry_ctx.get("source") == "ai_pulse"
+            )
+            if is_pulse:
+                pulse_trades.append(t)
+
+        engine_analytics = PulseTrajectoryEngine.get_instance().get_trajectory_analytics()
+        
+        historical_trajectories = []
+        counts = {
+            "CLEAN_WIN": 0,
+            "PREMATURE_EXPIRATION": 0,
+            "MOMENTUM_EXHAUSTION": 0,
+            "STRUCTURAL_TRAP": 0,
+            "DIRECTIONAL_FAIL": 0,
+        }
+        rec_horizons = {"60s": 0, "300s": 0}
+        wins = 0
+
+        for t in pulse_trades:
+            entry_ctx = t.get("entry_context") or {}
+            traj = entry_ctx.get("trajectory")
+            outcome = str(t.get("outcome", "")).lower()
+            if outcome == "win":
+                wins += 1
+                
+            if isinstance(traj, dict):
+                historical_trajectories.append(traj)
+                attr = traj.get("attribution", "DIRECTIONAL_FAIL")
+                counts[attr] = counts.get(attr, 0) + 1
+                rec_h = traj.get("recommended_horizon")
+                if rec_h == 60:
+                    rec_horizons["60s"] += 1
+                elif rec_h == 300:
+                    rec_horizons["300s"] += 1
+            else:
+                exp = int(t.get("expiration_seconds") or 60)
+                if outcome == "win":
+                    counts["CLEAN_WIN"] += 1
+                    rec_horizons[f"{exp}s" if exp in (60, 300) else "60s"] += 1
+                else:
+                    counts["DIRECTIONAL_FAIL"] += 1
+
+        total_pulse = len(pulse_trades)
+        if total_pulse == 0 and engine_analytics.get("total_trades", 0) > 0:
+            return engine_analytics
+
+        wr = round((wins / total_pulse * 100.0), 1) if total_pulse > 0 else 0.0
+
+        return {
+            "total_trades": total_pulse,
+            "clean_wins": counts["CLEAN_WIN"],
+            "premature_expirations": counts["PREMATURE_EXPIRATION"],
+            "momentum_exhaustions": counts["MOMENTUM_EXHAUSTION"],
+            "structural_traps": counts["STRUCTURAL_TRAP"],
+            "directional_fails": counts["DIRECTIONAL_FAIL"],
+            "win_rate": wr,
+            "horizon_recommendations": rec_horizons,
+            "recent_trajectories": (historical_trajectories or engine_analytics.get("recent_trajectories", []))[-10:],
+        }
+
+    # --------------------------------------------------------------------------
     # AI Briefing & Strategic Advisory Generator
     # --------------------------------------------------------------------------
 
@@ -1107,7 +1186,7 @@ Keep the language direct, authoritative, and concise (under 250 words total).
         selected_pattern_keys: Optional[List[str]] = None,
         commit_bayesian: bool = True,
         commit_kb: bool = True,
-        min_sample_size: int = 1,
+        min_sample_size: int = 5,
     ) -> Dict[str, Any]:
         """
         User-approved transactional commit of staged patterns and Bayesian prior updates.

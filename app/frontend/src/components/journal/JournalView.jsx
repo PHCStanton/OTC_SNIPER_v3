@@ -26,6 +26,7 @@ import LiquidityVolatilityGauges from './LiquidityVolatilityGauges.jsx';
 import AssetManipulationStats from './AssetManipulationStats.jsx';
 import FavouredRegimesCard from './FavouredRegimesCard.jsx';
 import AdaptiveExpiriesCard from './AdaptiveExpiriesCard.jsx';
+import AIPulseTrajectoryCard from './AIPulseTrajectoryCard.jsx';
 import AISessionBriefingCard from './AISessionBriefingCard.jsx';
 import KnowledgeBaseStagingModal from './KnowledgeBaseStagingModal.jsx';
 
@@ -226,14 +227,19 @@ export default function JournalView() {
           <FavouredRegimesCard stats={journalStats} />
         </div>
 
-        {/* Adaptive Expiries & Classic Journal Panels */}
+        {/* Adaptive Expiries & AI Pulse Trajectory Attribution */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <AdaptiveExpiriesCard stats={journalStats} />
-          <OTEOEfficiency ghostTrades={ghostTrades} />
+          <AIPulseTrajectoryCard stats={journalStats} />
         </div>
 
+        {/* Efficiency & Recovery Analytics */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <OTEOEfficiency ghostTrades={ghostTrades} />
           <StreakAnalytics autoGhostMetrics={autoGhostMetrics} />
+        </div>
+
+        <div>
           <EquityCurve ghostTrades={ghostTrades} />
         </div>
 

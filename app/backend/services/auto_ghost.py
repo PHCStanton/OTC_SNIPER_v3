@@ -24,6 +24,14 @@ def _get_severity(val: Any) -> float:
         return 1.0 if val else 0.0
 
 
+def _extract_market_context_field(oteo_result: dict[str, Any], field: str) -> Any:
+    """Safely extract a field from nested market_context or top-level oteo_result."""
+    mc = oteo_result.get("market_context")
+    if isinstance(mc, dict) and field in mc and mc[field] is not None:
+        return mc[field]
+    return oteo_result.get(field)
+
+
 @dataclass(frozen=True)
 class AutoGhostConfig:
     enabled: bool = False
@@ -69,7 +77,7 @@ class AutoGhostConfig:
     adx_gate_enabled: bool = False
     cci_gate_enabled: bool = False
     bayesian_filter_enabled: bool = False
-    bayesian_min_probability: float = 0.55
+    bayesian_min_probability: float = 0.535
 
     def __post_init__(self):
         pass
@@ -260,19 +268,7 @@ class AutoGhostService:
             updates["bayesian_min_probability"] = float(bayesian_min_probability)
 
         self.config = replace(self.config, **updates)
-
-        # Update extensions' enabled flags dynamically
-        if getattr(self, "extension_manager", None) is not None:
-            for ext in self.extension_manager.get_active_extensions():
-                if ext.__class__.__name__ == "VolatilityAdaptiveExpiry":
-                    ext.enabled = self.config.adaptive_expiry_enabled
-                elif ext.__class__.__name__ == "VolatilityLiquidityGates":
-                    ext.enabled = self.config.volatility_gate_enabled or self.config.liquidity_gate_enabled
-                elif ext.__class__.__name__ == "RSICCIConfluenceExtension":
-                    ext.enabled = self.config.rsi_cci_enabled
-                elif ext.__class__.__name__ == "BayesianSignalFilter":
-                    ext.enabled = self.config.bayesian_filter_enabled
-                    ext.min_win_probability = self.config.bayesian_min_probability
+        self._sync_extension_states()
 
         if self.config.enabled and (not previous_enabled or not self._session_id):
             self._session_id = f"auto_ghost_{int(unix_time())}"
@@ -300,20 +296,24 @@ class AutoGhostService:
             self._pending_signals.clear()
         return self.status
 
-    def clear_plugin_cache(self) -> None:
-        """Invalidate cached extension detection flags (called on plugin reload)."""
-        # Re-apply current enablement state to extensions
+    def _sync_extension_states(self) -> None:
+        """Propagate current configuration flags dynamically to active extensions."""
         if getattr(self, "extension_manager", None) is not None:
             for ext in self.extension_manager.get_active_extensions():
-                if ext.__class__.__name__ == "VolatilityAdaptiveExpiry":
+                name = ext.__class__.__name__
+                if name == "VolatilityAdaptiveExpiry":
                     ext.enabled = self.config.adaptive_expiry_enabled
-                elif ext.__class__.__name__ == "VolatilityLiquidityGates":
+                elif name == "VolatilityLiquidityGates":
                     ext.enabled = self.config.volatility_gate_enabled or self.config.liquidity_gate_enabled
-                elif ext.__class__.__name__ == "RSICCIConfluenceExtension":
+                elif name == "RSICCIConfluenceExtension":
                     ext.enabled = self.config.rsi_cci_enabled
-                elif ext.__class__.__name__ == "BayesianSignalFilter":
+                elif name == "BayesianSignalFilter":
                     ext.enabled = self.config.bayesian_filter_enabled
                     ext.min_win_probability = self.config.bayesian_min_probability
+
+    def clear_plugin_cache(self) -> None:
+        """Invalidate cached extension detection flags (called on plugin reload)."""
+        self._sync_extension_states()
 
     @property
     def status(self) -> dict[str, Any]:
@@ -643,9 +643,7 @@ class AutoGhostService:
             return self._reject(asset, 'regime_unstable')
 
         # Volatility Gate checks
-        vol_score = oteo_result.get("market_context", {}).get("volatility_score") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("volatility_score")
-        if vol_score is None:
-            vol_score = oteo_result.get("volatility_score")
+        vol_score = _extract_market_context_field(oteo_result, "volatility_score")
         if self.config.volatility_gate_enabled and vol_score is not None:
             if vol_score < self.config.min_volatility or vol_score > self.config.max_volatility:
                 logger.info(
@@ -658,9 +656,7 @@ class AutoGhostService:
                 return self._reject(asset, 'volatility_gate')
 
         # Liquidity Gate checks
-        liq_score = oteo_result.get("market_context", {}).get("liquidity_score") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("liquidity_score")
-        if liq_score is None:
-            liq_score = oteo_result.get("liquidity_score")
+        liq_score = _extract_market_context_field(oteo_result, "liquidity_score")
         if self.config.liquidity_gate_enabled and liq_score is not None:
             if liq_score < self.config.min_liquidity or liq_score > self.config.max_liquidity:
                 logger.info(
@@ -673,12 +669,8 @@ class AutoGhostService:
                 return self._reject(asset, 'liquidity_gate')
 
         # ADX Gate checks
-        adx_regime = oteo_result.get("market_context", {}).get("adx_regime") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("adx_regime")
-        if adx_regime is None:
-            adx_regime = oteo_result.get("adx_regime")
-        reversal_friendly = oteo_result.get("market_context", {}).get("reversal_friendly") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("reversal_friendly")
-        if reversal_friendly is None:
-            reversal_friendly = oteo_result.get("reversal_friendly")
+        adx_regime = _extract_market_context_field(oteo_result, "adx_regime")
+        reversal_friendly = _extract_market_context_field(oteo_result, "reversal_friendly")
 
         if self.config.adx_gate_enabled and adx_regime is not None:
             if str(adx_regime).upper() == "STRONG" and not reversal_friendly:
@@ -689,9 +681,7 @@ class AutoGhostService:
                 return self._reject(asset, 'adx_gate_trend_block')
 
         # CCI Gate checks
-        cci_state = oteo_result.get("market_context", {}).get("cci_state") if isinstance(oteo_result.get("market_context"), dict) else oteo_result.get("cci_state")
-        if cci_state is None:
-            cci_state = oteo_result.get("cci_state")
+        cci_state = _extract_market_context_field(oteo_result, "cci_state")
         direction = str(oteo_result.get("recommended")).upper()
 
         if self.config.cci_gate_enabled and cci_state is not None:
@@ -843,6 +833,10 @@ class AutoGhostService:
         confidence: float | None = None,
     ) -> Any:
         """Directly dispatch an AI Pulse suggested signal under the ghost controller."""
+        if not asset or asset.upper() in ("CALL", "PUT", "BUY", "SELL", "CALL_OTC", "PUT_OTC", "UNKNOWN"):
+            logger.warning("Auto-Ghost rejected malformed AI Pulse asset: %r", asset)
+            return None
+
         if not self.config.enabled:
             logger.info("Auto-Ghost is disabled; skipping AI Pulse signal for %s", asset)
             return None
@@ -855,7 +849,22 @@ class AutoGhostService:
             logger.info("Auto-Ghost max concurrent trades (%d) reached; skipping AI Pulse signal", self.config.max_concurrent_trades)
             return None
 
-        exp = target_expiration or self.config.expiration_seconds
+        # Adaptive expiry resolution if not explicitly specified
+        exp = target_expiration
+        if not exp or exp <= 0:
+            if self.config.adaptive_expiry_enabled and hasattr(self.trade_service, "_get_market_context"):
+                mc = self.trade_service._get_market_context(asset) or {}
+                regime = mc.get("regime_label", "")
+                vol = float(mc.get("volatility_score", 50.0) or 50.0)
+                if regime in ("RANGE_BOUND", "TREND_REVERSAL") and vol < 60.0:
+                    exp = 300
+                elif regime in ("STRONG_MOMENTUM", "BREAKOUT") or vol >= 70.0:
+                    exp = 60
+                else:
+                    exp = self.config.expiration_seconds or 60
+            else:
+                exp = self.config.expiration_seconds or 60
+
         price = 1.0
         if hasattr(self.trade_service, "_latest_logged_price"):
             price = self.trade_service._latest_logged_price(asset) or 1.0
@@ -865,14 +874,18 @@ class AutoGhostService:
         if hasattr(self.trade_service, "adapter") and self.trade_service.adapter:
             payout_pct = self.trade_service._resolve_payout_pct(self.trade_service.adapter, asset)
 
+        conf_level = "HIGH" if (confidence and confidence >= 80) else "MEDIUM"
         entry_context = {
             "asset": asset,
             "price": price,
             "timestamp": unix_time(),
             "expiration_seconds": exp,
             "recommended": direction.upper(),
-            "confidence": "HIGH" if (confidence and confidence >= 80) else "MEDIUM",
+            "confidence": conf_level,
             "trigger_mode": "ai_pulse",
+            "source": "ai_pulse",
+            "pulse_confidence": confidence,
+            "forecast_horizon": exp,
             "payout_pct": payout_pct,
         }
 
@@ -904,6 +917,133 @@ class AutoGhostService:
             logger.error("Auto-Ghost AI Pulse trade failed for %s: %s", asset, exc)
             self._active_assets.discard(asset)
             return None
+
+    async def schedule_candle_open_pulse_execution(
+        self,
+        *,
+        asset: str,
+        direction: str,
+        target_price: float | None = None,
+        wait_minutes: int | None = 1,
+        target_expiration: int | None = None,
+        confidence: float | None = None,
+    ) -> None:
+        """
+        Schedule an AI Pulse trade for precision execution on the upcoming 1-minute candle open (T = 00s),
+        honoring the requested wait duration (wait_minutes) and running a pre-flight validation gate at T - 5s.
+        """
+        if not asset or asset.upper() in ("CALL", "PUT", "BUY", "SELL", "CALL_OTC", "PUT_OTC", "UNKNOWN"):
+            logger.warning("Auto-Ghost rejected malformed AI Pulse asset in schedule: %r", asset)
+            return
+
+        if not self.config.enabled:
+            logger.info("Auto-Ghost disabled; skipping scheduled AI Pulse signal for %s", asset)
+            return
+
+        now = unix_time()
+        wait_m = max(1, int(wait_minutes or 1))
+        # Target candle open wait_m minutes away
+        target_candle_open = (int(now // 60) + wait_m) * 60.0
+        seconds_to_open = max(1.0, target_candle_open - now)
+
+        pending_info = {
+            "asset": asset,
+            "direction": direction.upper(),
+            "target_price": target_price,
+            "wait_minutes": wait_m,
+            "confidence": confidence,
+            "target_candle_open": target_candle_open,
+            "seconds_remaining": round(seconds_to_open, 1),
+        }
+
+        # Emit WebSocket pending status to UI
+        if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+            await self.trade_service.sio.emit("ai_pulse_pending", pending_info)
+
+        # Wait until T - 5s before candle open for pre-flight validation
+        pre_flight_wait = max(0.1, seconds_to_open - 5.0)
+        await asyncio.sleep(pre_flight_wait)
+
+        # PRE-FLIGHT VALIDATION GATE (at T - 5s)
+        # 1. Capacity & active asset check
+        if asset in self._active_assets or len(self._active_assets) >= self.config.max_concurrent_trades:
+            reason = "Asset active or max concurrent trades reached"
+            logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            return
+
+        # 2. Target Price Proximity Check (Option 2)
+        if target_price and target_price > 0:
+            current_p = None
+            if hasattr(self.trade_service, "_latest_logged_price"):
+                current_p = self.trade_service._latest_logged_price(asset)
+            elif hasattr(self.trade_service, "get_last_price"):
+                current_p = self.trade_service.get_last_price(asset)
+
+            if current_p and current_p > 0:
+                deviation_pct = abs(current_p - target_price) / target_price * 100.0
+                if deviation_pct > 0.4:
+                    reason = f"Price ({current_p:.5f}) deviated {deviation_pct:.2f}% from target zone ({target_price:.5f})"
+                    logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
+                    if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                        await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+                    return
+
+        # 3. Manipulation check
+        mc = {}
+        if hasattr(self.trade_service, "_get_market_context"):
+            mc = self.trade_service._get_market_context(asset) or {}
+        manip = mc.get("manipulation") or {}
+        max_sev = max(manip.values()) if manip and isinstance(manip, dict) and manip.values() else 0.0
+        if self.config.block_on_manipulation and max_sev >= self.config.manipulation_severity_threshold and self.config.manipulation_severity_threshold > 0:
+            reason = f"Manipulation spike ({max_sev:.2f}) >= threshold ({self.config.manipulation_severity_threshold:.2f})"
+            logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            return
+
+        # 4. Multi-Scale HTF Directional Bias check
+        from .htf_directional_bias import HTFDirectionalBiasEngine
+        htf_engine = HTFDirectionalBiasEngine.get_instance()
+        candles_1m = mc.get("closed_candles") or []
+        recent_ticks = mc.get("recent_ticks") or []
+        confluence = htf_engine.evaluate_directional_confluence(
+            asset=asset,
+            direction=direction,
+            candles_1m=candles_1m,
+            recent_ticks=recent_ticks,
+        )
+
+        if confluence.get("veto"):
+            reason = str(confluence.get("veto_reason") or "HTF Directional Bias Veto")
+            logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            return
+
+        # 5. Bayesian Win Probability floor check (51% - 56%)
+        calibrated_floor = confluence.get("calibrated_bayesian_floor", self.config.bayesian_min_probability)
+        b_prob = mc.get("bayesian_win_probability_60s") or mc.get("bayesian_win_probability")
+        if self.config.bayesian_filter_enabled and b_prob is not None:
+            if float(b_prob) < calibrated_floor:
+                reason = f"Bayesian probability ({float(b_prob)*100:.1f}%) below floor ({calibrated_floor*100:.1f}%)"
+                logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
+                if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                    await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+                return
+
+        # Wait remaining time until EXACT T = 00.000s (New Candle Open)
+        remaining = max(0.001, target_candle_open - unix_time())
+        await asyncio.sleep(remaining)
+
+        # Execute market trade on candle open
+        await self.execute_ai_pulse_signal(
+            asset=asset,
+            direction=direction,
+            target_expiration=target_expiration,
+            confidence=confidence,
+        )
 
     async def _release_asset(self, asset: str, delay_seconds: int) -> None:
         await asyncio.sleep(max(1, delay_seconds))

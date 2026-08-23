@@ -20,8 +20,8 @@ class TestKnowledgeBaseRetrieval(unittest.TestCase):
         KnowledgeBaseLoader._instance = None
 
     def test_get_score_band(self):
-        self.assertEqual(get_score_band(45), "<50")
-        self.assertEqual(get_score_band(55), "50-64")
+        self.assertEqual(get_score_band(45), "<65")
+        self.assertEqual(get_score_band(64.9), "<65")
         self.assertEqual(get_score_band(70), "65-74")
         self.assertEqual(get_score_band(80), "75-84")
         self.assertEqual(get_score_band(90), "85-92")
@@ -246,7 +246,7 @@ class TestKnowledgeBaseRetrieval(unittest.TestCase):
         # Verify user prompt has formatted setup, patterns, and active flags
         self.assertIn("Strategy Level: LEVEL3", user_content)
         self.assertIn("Active Manipulation: pinning (severity: 0.75), push_snap (severity: 0.20)", user_content)
-        self.assertIn("Historical Context (Top Matching KB Patterns):", user_content)
+        self.assertIn("Historical Context (Statistically Proven Patterns N >= 20):", user_content)
         self.assertIn("EURUSD_otc|level3|85-92|RANGE_BOUND|CALL: N=50, WinRate=62.0%, Expectancy=45.00", user_content)
 
 
