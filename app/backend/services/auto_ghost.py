@@ -84,6 +84,81 @@ class AutoGhostConfig:
 
 
 
+# H3 rewrite: declarative configuration specification tables (replace ~90 repeated
+# if-not-None blocks in AutoGhostService.update_config).
+#
+# _AUTO_GHOST_FIELD_SPECS: config_field -> (caster, lower_bound, upper_bound).
+# Bounds are applied after casting (max(lo, v) then min(hi, v)); None disables a bound.
+# Values mirror the exact semantics of the previous hand-written cascade.
+_AUTO_GHOST_FIELD_SPECS: dict[str, tuple] = {
+    "enabled": (bool, None, None),
+    "amount": (float, 0.1, None),
+    "expiration_seconds": (int, 5, None),
+    "max_concurrent_trades": (int, 1, None),
+    "per_asset_cooldown_seconds": (int, 0, None),
+    "minimum_payout_pct": (float, 0.0, 100.0),
+    "block_on_manipulation": (bool, None, None),
+    "manipulation_severity_threshold": (float, 0.0, 1.0),
+    "max_session_trades": (int, 1, None),
+    "max_drawdown_amount": (float, 0.0, None),
+    "drawdown_cooldown_seconds": (int, 0, None),
+    "min_confidence_enabled": (bool, None, None),
+    "min_confidence": (float, None, None),
+    "max_confidence_enabled": (bool, None, None),
+    "max_confidence": (float, None, None),
+    "max_trades_per_timeframe": (int, 0, None),
+    "timeframe_seconds": (int, 0, None),
+    "oteo_ai_enabled": (bool, None, None),
+    "oteo_ai_execution_mode": (str, None, None),
+    "ai_trade_interval": (int, 1, None),
+    "ai_pulse_enabled": (bool, None, None),
+    "ai_pulse_interval_seconds": (int, 10, None),
+    "auto_execute_ai_pulse": (bool, None, None),
+    "min_zscore_enabled": (bool, None, None),
+    "min_zscore": (float, None, None),
+    "max_zscore_enabled": (bool, None, None),
+    "max_zscore": (float, None, None),
+    "regime_gate_enabled": (bool, None, None),
+    "require_regime_stable": (bool, None, None),
+    "adaptive_expiry_enabled": (bool, None, None),
+    "min_adaptive_expiry": (int, None, None),
+    "rsi_cci_enabled": (bool, None, None),
+    "volatility_gate_enabled": (bool, None, None),
+    "min_volatility": (float, None, None),
+    "max_volatility": (float, None, None),
+    "liquidity_gate_enabled": (bool, None, None),
+    "min_liquidity": (float, None, None),
+    "max_liquidity": (float, None, None),
+    "adx_gate_enabled": (bool, None, None),
+    "cci_gate_enabled": (bool, None, None),
+    "bayesian_filter_enabled": (bool, None, None),
+    "bayesian_min_probability": (float, None, None),
+}
+
+# List-valued config fields with per-item normalization (order-preserving).
+_AUTO_GHOST_LIST_CASTERS: dict[str, Any] = {
+    "allowed_regimes": lambda items: [
+        str(r).strip().upper() for r in items if str(r).strip()
+    ],
+    "blacklist_assets": lambda items: [
+        str(a).strip() for a in items if str(a).strip()
+    ],
+}
+
+# Legacy fields accepted for backward API compatibility but owned/managed by the
+# plugin extensions (never written into AutoGhostConfig by update_config).
+_PLUGIN_MANAGED_CONFIG_FIELDS = frozenset({
+    "hurst_filter_enabled",
+    "hurst_filter_threshold",
+    "hurst_mean_revert_threshold",
+    "hurst_trend_threshold",
+    "hurst_min_scale_cutoff",
+    "hurst_ai_confidence_threshold",
+    "hurst_l2_enabled",
+    "hurst_l3_enabled",
+})
+
+
 class AutoGhostService:
     CONFIRMATION_TICKS = 1
 
@@ -119,153 +194,38 @@ class AutoGhostService:
         self._last_reject_reason_by_asset[asset] = reason
         self._reject_counts[reason] = self._reject_counts.get(reason, 0) + 1
 
-    def update_config(
-        self,
-        *,
-        enabled: bool | None = None,
-        amount: float | None = None,
-        expiration_seconds: int | None = None,
-        max_concurrent_trades: int | None = None,
-        per_asset_cooldown_seconds: int | None = None,
-        minimum_payout_pct: float | None = None,
-        max_session_trades: int | None = None,
-        max_drawdown_amount: float | None = None,
-        drawdown_cooldown_seconds: int | None = None,
-        manipulation_severity_threshold: float | None = None,
-        block_on_manipulation: bool | None = None,
-        min_confidence_enabled: bool | None = None,
-        min_confidence: float | None = None,
-        max_confidence_enabled: bool | None = None,
-        max_confidence: float | None = None,
-        max_trades_per_timeframe: int | None = None,
-        timeframe_seconds: int | None = None,
-        oteo_ai_enabled: bool | None = None,
-        oteo_ai_execution_mode: str | None = None,
-        ai_trade_interval: int | None = None,
-        ai_pulse_enabled: bool | None = None,
-        ai_pulse_interval_seconds: int | None = None,
-        auto_execute_ai_pulse: bool | None = None,
-        min_zscore_enabled: bool | None = None,
-        min_zscore: float | None = None,
-        max_zscore_enabled: bool | None = None,
-        max_zscore: float | None = None,
-        regime_gate_enabled: bool | None = None,
-        allowed_regimes: list[str] | None = None,
-        require_regime_stable: bool | None = None,
-        adaptive_expiry_enabled: bool | None = None,
-        hurst_filter_enabled: bool | None = None,
-        hurst_filter_threshold: float | None = None,
-        hurst_mean_revert_threshold: float | None = None,
-        hurst_trend_threshold: float | None = None,
-        min_adaptive_expiry: int | None = None,
-        hurst_min_scale_cutoff: int | None = None,
-        hurst_ai_confidence_threshold: float | None = None,
-        blacklist_assets: list[str] | None = None,
-        hurst_l2_enabled: bool | None = None,
-        hurst_l3_enabled: bool | None = None,
-        rsi_cci_enabled: bool | None = None,
-        volatility_gate_enabled: bool | None = None,
-        min_volatility: float | None = None,
-        max_volatility: float | None = None,
-        liquidity_gate_enabled: bool | None = None,
-        min_liquidity: float | None = None,
-        max_liquidity: float | None = None,
-        adx_gate_enabled: bool | None = None,
-        cci_gate_enabled: bool | None = None,
-        bayesian_filter_enabled: bool | None = None,
-        bayesian_min_probability: float | None = None,
+    def update_config(self, **kwargs: Any) -> dict[str, Any]:
+        """
+        Update controller configuration via the declarative field-spec table (H3).
 
-    ) -> dict[str, Any]:
+        Explicit None means "no change" — semantics preserved from the previous
+        explicit-signature API. Unknown fields are logged and ignored; plugin-managed
+        ``hurst_*`` fields are accepted for backward compatibility but are extension-
+        owned and never written into AutoGhostConfig here.
+        """
         previous_enabled = self.config.enabled
+        # H3 rewrite: declarative spec-table update (was ~90 repeated if-blocks).
+        # Explicit None still means "no change"; cast+bound semantics preserved per
+        # `_AUTO_GHOST_FIELD_SPECS`; plugin-managed hurst_* fields are accepted but
+        # never written here (extension-owned).
         updates: dict[str, Any] = {}
-        if enabled is not None:
-            updates["enabled"] = bool(enabled)
-        if amount is not None:
-            updates["amount"] = max(0.1, float(amount))
-        if expiration_seconds is not None:
-            updates["expiration_seconds"] = max(5, int(expiration_seconds))
-        if max_concurrent_trades is not None:
-            updates["max_concurrent_trades"] = max(1, int(max_concurrent_trades))
-        if per_asset_cooldown_seconds is not None:
-            updates["per_asset_cooldown_seconds"] = max(0, int(per_asset_cooldown_seconds))
-        if minimum_payout_pct is not None:
-            updates["minimum_payout_pct"] = max(0.0, min(100.0, float(minimum_payout_pct)))
-        if block_on_manipulation is not None:
-            updates["block_on_manipulation"] = bool(block_on_manipulation)
-        if manipulation_severity_threshold is not None:
-            updates["manipulation_severity_threshold"] = max(0.0, min(1.0, float(manipulation_severity_threshold)))
-        if max_session_trades is not None:
-            updates["max_session_trades"] = max(1, int(max_session_trades))
-        if max_drawdown_amount is not None:
-            updates["max_drawdown_amount"] = max(0.0, float(max_drawdown_amount))
-        if drawdown_cooldown_seconds is not None:
-            updates["drawdown_cooldown_seconds"] = max(0, int(drawdown_cooldown_seconds))
-        if min_confidence_enabled is not None:
-            updates["min_confidence_enabled"] = bool(min_confidence_enabled)
-        if min_confidence is not None:
-            updates["min_confidence"] = float(min_confidence)
-        if max_confidence_enabled is not None:
-            updates["max_confidence_enabled"] = bool(max_confidence_enabled)
-        if max_confidence is not None:
-            updates["max_confidence"] = float(max_confidence)
-        if max_trades_per_timeframe is not None:
-            updates["max_trades_per_timeframe"] = max(0, int(max_trades_per_timeframe))
-        if timeframe_seconds is not None:
-            updates["timeframe_seconds"] = max(0, int(timeframe_seconds))
-        if oteo_ai_enabled is not None:
-            updates["oteo_ai_enabled"] = bool(oteo_ai_enabled)
-        if oteo_ai_execution_mode is not None:
-            updates["oteo_ai_execution_mode"] = str(oteo_ai_execution_mode)
-        if ai_trade_interval is not None:
-            updates["ai_trade_interval"] = max(1, int(ai_trade_interval))
-        if ai_pulse_enabled is not None:
-            updates["ai_pulse_enabled"] = bool(ai_pulse_enabled)
-        if ai_pulse_interval_seconds is not None:
-            updates["ai_pulse_interval_seconds"] = max(10, int(ai_pulse_interval_seconds))
-        if auto_execute_ai_pulse is not None:
-            updates["auto_execute_ai_pulse"] = bool(auto_execute_ai_pulse)
-        if min_zscore_enabled is not None:
-            updates["min_zscore_enabled"] = bool(min_zscore_enabled)
-        if min_zscore is not None:
-            updates["min_zscore"] = float(min_zscore)
-        if max_zscore_enabled is not None:
-            updates["max_zscore_enabled"] = bool(max_zscore_enabled)
-        if max_zscore is not None:
-            updates["max_zscore"] = float(max_zscore)
-        if regime_gate_enabled is not None:
-            updates["regime_gate_enabled"] = bool(regime_gate_enabled)
-        if allowed_regimes is not None:
-            updates["allowed_regimes"] = [str(r).strip().upper() for r in allowed_regimes if str(r).strip()]
-        if require_regime_stable is not None:
-            updates["require_regime_stable"] = bool(require_regime_stable)
-        if adaptive_expiry_enabled is not None:
-            updates["adaptive_expiry_enabled"] = bool(adaptive_expiry_enabled)
-        if min_adaptive_expiry is not None:
-            updates["min_adaptive_expiry"] = int(min_adaptive_expiry)
-        if blacklist_assets is not None:
-            updates["blacklist_assets"] = [str(a).strip() for a in blacklist_assets if str(a).strip()]
-        if rsi_cci_enabled is not None:
-            updates["rsi_cci_enabled"] = bool(rsi_cci_enabled)
-        if volatility_gate_enabled is not None:
-            updates["volatility_gate_enabled"] = bool(volatility_gate_enabled)
-        if min_volatility is not None:
-            updates["min_volatility"] = float(min_volatility)
-        if max_volatility is not None:
-            updates["max_volatility"] = float(max_volatility)
-        if liquidity_gate_enabled is not None:
-            updates["liquidity_gate_enabled"] = bool(liquidity_gate_enabled)
-        if min_liquidity is not None:
-            updates["min_liquidity"] = float(min_liquidity)
-        if max_liquidity is not None:
-            updates["max_liquidity"] = float(max_liquidity)
-        if adx_gate_enabled is not None:
-            updates["adx_gate_enabled"] = bool(adx_gate_enabled)
-        if cci_gate_enabled is not None:
-            updates["cci_gate_enabled"] = bool(cci_gate_enabled)
-        if bayesian_filter_enabled is not None:
-            updates["bayesian_filter_enabled"] = bool(bayesian_filter_enabled)
-        if bayesian_min_probability is not None:
-            updates["bayesian_min_probability"] = float(bayesian_min_probability)
+        for _name, _value in kwargs.items():
+            if _value is None:
+                continue
+            if _name in _AUTO_GHOST_LIST_CASTERS:
+                updates[_name] = _AUTO_GHOST_LIST_CASTERS[_name](_value)
+            elif _name in _AUTO_GHOST_FIELD_SPECS:
+                _caster, _lo, _hi = _AUTO_GHOST_FIELD_SPECS[_name]
+                _casted = _caster(_value)
+                if _lo is not None:
+                    _casted = max(_lo, _casted)
+                if _hi is not None:
+                    _casted = min(_hi, _casted)
+                updates[_name] = _casted
+            elif _name in _PLUGIN_MANAGED_CONFIG_FIELDS:
+                logger.debug("update_config: %s is plugin-managed; ignoring", _name)
+            else:
+                logger.warning("update_config: ignoring unknown config field %r", _name)
 
         self.config = replace(self.config, **updates)
         self._sync_extension_states()
@@ -513,6 +473,298 @@ class AutoGhostService:
         self._record_reject(asset, reason)
         self._pending_signals.pop(asset, None)
 
+    def _passes_ghost_gates(
+        self,
+        *,
+        asset: str,
+        price: float,
+        timestamp: float,
+        oteo_result: dict[str, Any],
+        manipulation: dict[str, Any],
+        payout_pct: float | None,
+    ) -> str | None:
+        """
+        Run the ordered Ghost gate cascade (H4 extraction from consider_signal).
+
+        Returns the reject reason string when a gate blocks the signal, or None when
+        every gate passes. Rejection bookkeeping (`_reject`) stays with the caller so
+        the observable flow contract is unchanged.
+        """
+        now = unix_time()
+
+        if self.config.blacklist_assets and asset in self.config.blacklist_assets:
+            logger.info("Auto-Ghost skipped %s: asset is blacklisted", asset)
+            return 'asset_blacklisted'
+
+        if not self.config.enabled:
+            return 'disabled'
+
+        if self._session_halted:
+            return 'session_halted'
+        if self._session_trade_count >= self.config.max_session_trades:
+            return 'max_session_trades'
+        if now < self._drawdown_cooldown_until:
+            return 'drawdown_cooldown'
+
+        # Timeframe limit gate check
+        if self.config.max_trades_per_timeframe > 0 and self.config.timeframe_seconds > 0:
+            self._trade_timestamps = [t for t in self._trade_timestamps if timestamp - t < self.config.timeframe_seconds]
+            if len(self._trade_timestamps) >= self.config.max_trades_per_timeframe:
+                logger.info(
+                    "Auto-Ghost skipped %s: timeframe limit reached (%d trades in last %ds, limit: %d)",
+                    asset,
+                    len(self._trade_timestamps),
+                    self.config.timeframe_seconds,
+                    self.config.max_trades_per_timeframe
+                )
+                return 'timeframe_limit'
+
+        if oteo_result.get("recommended") not in {"CALL", "PUT"}:
+            return 'not_call_or_put'
+        if not oteo_result.get("actionable"):
+            return 'not_actionable'
+
+        # Numeric confidence gate bounds checks
+        score = float(oteo_result.get("oteo_score", 0.0))
+        if self.config.min_confidence_enabled and self.config.min_confidence is not None:
+            if score < self.config.min_confidence:
+                logger.info(
+                    "Auto-Ghost skipped %s: score %.1f < min confidence bounds %.1f",
+                    asset,
+                    score,
+                    self.config.min_confidence
+                )
+                return 'below_min_confidence'
+        if self.config.max_confidence_enabled and self.config.max_confidence is not None:
+            if score > self.config.max_confidence:
+                logger.info(
+                    "Auto-Ghost skipped %s: score %.1f > max confidence bounds %.1f",
+                    asset,
+                    score,
+                    self.config.max_confidence
+                )
+                return 'above_max_confidence'
+        if payout_pct is None:
+            logger.warning("Auto-Ghost skipped %s: payout unavailable", asset)
+            return 'payout_unavailable'
+        if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
+            logger.info(
+                "Auto-Ghost skipped %s: payout %.1f%% < minimum %.1f%%",
+                asset,
+                payout_pct,
+                self.config.minimum_payout_pct,
+            )
+            return 'payout_below_minimum'
+        if self.config.block_on_manipulation and manipulation:
+            if any(_get_severity(sev_val) >= self.config.manipulation_severity_threshold for sev_val in manipulation.values()):
+                logger.info(
+                    "Auto-Ghost skipped %s due to active manipulation severity: %s (threshold: %.2f)",
+                    asset,
+                    manipulation,
+                    self.config.manipulation_severity_threshold
+                )
+                return 'manipulation_block'
+
+        # Z-Score Gate Bounds checks (Ghost Protocol)
+        z_score = oteo_result.get("z_score")
+        if z_score is not None:
+            try:
+                z_val = float(z_score)
+                if self.config.min_zscore_enabled and self.config.min_zscore is not None:
+                    if z_val < self.config.min_zscore:
+                        logger.info(
+                            "Auto-Ghost skipped %s: z-score %.2f < min gate %.2f (Ghost Protocol gate)",
+                            asset,
+                            z_val,
+                            self.config.min_zscore,
+                        )
+                        return 'below_min_zscore'
+                if self.config.max_zscore_enabled and self.config.max_zscore is not None:
+                    if z_val > self.config.max_zscore:
+                        logger.info(
+                            "Auto-Ghost skipped %s: z-score %.2f > max gate %.2f (Ghost Protocol gate)",
+                            asset,
+                            z_val,
+                            self.config.max_zscore,
+                        )
+                        return 'above_max_zscore'
+            except (ValueError, TypeError) as exc:
+                logger.warning("Auto-Ghost: non-numeric z_score %r for %s, skipping Z gates: %s", z_score, asset, exc)
+
+        # Regime Gate checks (Ghost Protocol)
+        regime_label = oteo_result.get("regime_label")
+        regime_stable = oteo_result.get("regime_stable")
+        if self.config.regime_gate_enabled and self.config.allowed_regimes:
+            if regime_label is None:
+                logger.info("Auto-Ghost skipped %s: regime gate enabled but signal has no regime label", asset)
+                return 'missing_regime_label'
+            if str(regime_label).upper() not in self.config.allowed_regimes:
+                logger.info("Auto-Ghost skipped %s: regime %s not in allowed %s (Ghost Protocol gate)", asset, regime_label, self.config.allowed_regimes)
+                return 'regime_not_allowed'
+
+        if self.config.regime_gate_enabled and self.config.require_regime_stable and regime_stable is False:
+            logger.info("Auto-Ghost skipped %s: regime %s is unstable (Ghost Protocol gate)", asset, regime_label)
+            return 'regime_unstable'
+
+        # Volatility Gate checks
+        vol_score = _extract_market_context_field(oteo_result, "volatility_score")
+        if self.config.volatility_gate_enabled and vol_score is not None:
+            if vol_score < self.config.min_volatility or vol_score > self.config.max_volatility:
+                logger.info(
+                    "Auto-Ghost skipped %s: volatility score %.1f outside gate [%.1f, %.1f] (Volatility Gate)",
+                    asset,
+                    vol_score,
+                    self.config.min_volatility,
+                    self.config.max_volatility,
+                )
+                return 'volatility_gate'
+
+        # Liquidity Gate checks
+        liq_score = _extract_market_context_field(oteo_result, "liquidity_score")
+        if self.config.liquidity_gate_enabled and liq_score is not None:
+            if liq_score < self.config.min_liquidity or liq_score > self.config.max_liquidity:
+                logger.info(
+                    "Auto-Ghost skipped %s: liquidity score %.1f outside gate [%.1f, %.1f] (Liquidity Gate)",
+                    asset,
+                    liq_score,
+                    self.config.min_liquidity,
+                    self.config.max_liquidity,
+                )
+                return 'liquidity_gate'
+
+        # ADX Gate checks
+        adx_regime = _extract_market_context_field(oteo_result, "adx_regime")
+        reversal_friendly = _extract_market_context_field(oteo_result, "reversal_friendly")
+
+        if self.config.adx_gate_enabled and adx_regime is not None:
+            if str(adx_regime).upper() == "STRONG" and not reversal_friendly:
+                logger.info(
+                    "Auto-Ghost skipped %s: ADX regime is strong and not reversal friendly (ADX Gate)",
+                    asset
+                )
+                return 'adx_gate_trend_block'
+
+        # CCI Gate checks
+        cci_state = _extract_market_context_field(oteo_result, "cci_state")
+        direction = str(oteo_result.get("recommended")).upper()
+
+        if self.config.cci_gate_enabled and cci_state is not None:
+            if direction == "CALL" and str(cci_state).upper() == "OVERBOUGHT":
+                logger.info("Auto-Ghost skipped %s: CCI is overbought but signal recommended CALL (CCI Gate)", asset)
+                return 'cci_gate_overbought_call'
+            if direction == "PUT" and str(cci_state).upper() == "OVERSOLD":
+                logger.info("Auto-Ghost skipped %s: CCI is oversold but signal recommended PUT (CCI Gate)", asset)
+                return 'cci_gate_oversold_put'
+
+        # Plugin veto check
+        if getattr(self, "extension_manager", None) is not None:
+            for ext in self.extension_manager.get_active_extensions():
+                try:
+                    allow, reason = ext.on_consider_signal(asset, price, oteo_result, self.config)
+                    if not allow:
+                        logger.info(
+                            "Auto-Ghost skipped %s: vetoed by extension %s (reason: %s)",
+                            asset,
+                            ext.__class__.__name__,
+                            reason or "No reason given",
+                        )
+                        return f"plugin_veto_{reason or 'unknown'}"
+                except Exception as ext_err:
+                    logger.error("Error in extension %s.on_consider_signal: %s", ext.__class__.__name__, ext_err)
+
+        if asset in self._active_assets:
+            return 'asset_active'
+        if len(self._active_assets) >= self.config.max_concurrent_trades:
+            return 'max_concurrent_trades'
+        if unix_time() < self._cooldown_until.get(asset, 0):
+            return 'asset_cooldown'
+
+        return None
+
+    def _build_trade_request(
+        self,
+        *,
+        asset: str,
+        price: float,
+        timestamp: float,
+        oteo_result: dict[str, Any],
+        manipulation: dict[str, Any],
+        payout_pct: float | None,
+    ) -> TradeExecutionRequest:
+        """Build the ghost TradeExecutionRequest with full entry context (H4 extraction)."""
+        target_expiration = oteo_result.get("override_expiration_seconds") or self.config.expiration_seconds
+
+        entry_context = {
+            "asset": asset,
+            "price": price,
+            "timestamp": timestamp,
+            "expiration_seconds": target_expiration,
+            "recommended": oteo_result.get("recommended"),
+            "confidence": oteo_result.get("confidence"),
+            "oteo_score": oteo_result.get("oteo_score"),
+            "base_oteo_score": oteo_result.get("base_oteo_score"),
+            "base_confidence": oteo_result.get("base_confidence"),
+            "pressure_pct": oteo_result.get("pressure_pct"),
+            "velocity": oteo_result.get("velocity"),
+            "z_score": oteo_result.get("z_score"),
+            "slow_velocity": oteo_result.get("slow_velocity"),
+            "stretch_alignment": oteo_result.get("stretch_alignment"),
+            "level2_enabled": oteo_result.get("level2_enabled"),
+            "level2_score_adjustment": oteo_result.get("level2_score_adjustment"),
+            "level2_suppressed_reason": oteo_result.get("level2_suppressed_reason"),
+            "level3_enabled": oteo_result.get("level3_enabled"),
+            "level3_score_adjustment": oteo_result.get("level3_score_adjustment"),
+            "level3_suppressed_reason": oteo_result.get("level3_suppressed_reason"),
+            "oteo_ai_enabled": oteo_result.get("oteo_ai_enabled"),
+            "regime_label": oteo_result.get("regime_label"),
+            "regime_confidence": oteo_result.get("regime_confidence"),
+            "regime_stable": oteo_result.get("regime_stable"),
+            "regime_detail": oteo_result.get("regime_detail"),
+            "market_context": oteo_result.get("market_context"),
+            "manipulation": manipulation,
+            "payout_pct": payout_pct,
+        }
+
+        return TradeExecutionRequest(
+            asset_id=asset,
+            direction=str(oteo_result["recommended"]).lower(),
+            amount=self.config.amount,
+            expiration=target_expiration,
+            account_key="primary",
+            trade_mode="ghost",
+            session_id=self._session_id,
+            confidence=oteo_result.get("confidence"),
+            oteo_score=oteo_result.get("oteo_score"),
+            base_oteo_score=oteo_result.get("base_oteo_score"),
+            level2_score_adjustment=oteo_result.get("level2_score_adjustment"),
+            strategy_level="level3" if oteo_result.get("level3_enabled") else "level2" if oteo_result.get("level2_enabled") else "level1",
+            manipulation_at_entry=manipulation or None,
+            entry_context=entry_context,
+            trigger_mode="auto_ghost",
+        )
+
+    def _finalize_execution(
+        self,
+        *,
+        asset: str,
+        timestamp: float,
+        actual_expiry: int,
+        recommended: str,
+    ) -> None:
+        """Post-success bookkeeping: timeframe stamping, cooldown, release task (H4 extraction)."""
+        # Record trade execution timestamp for timeframe gating
+        self._trade_timestamps.append(timestamp)
+
+        self._cooldown_until[asset] = unix_time() + actual_expiry + self.config.per_asset_cooldown_seconds
+        task = asyncio.create_task(self._release_asset(asset, actual_expiry + 1))
+        task.add_done_callback(lambda t: logger.error("_release_asset failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
+        logger.info(
+            "Auto-Ghost trade opened for %s (%s, %ss)",
+            asset,
+            recommended,
+            actual_expiry,
+        )
+
     async def consider_signal(
         self,
         *,
@@ -530,192 +782,19 @@ class AutoGhostService:
         for a in [a for a in self._active_assets if a in self._cooldown_until and now >= self._cooldown_until[a]]:
             self._active_assets.discard(a)
 
-        if self.config.blacklist_assets and asset in self.config.blacklist_assets:
-            logger.info("Auto-Ghost skipped %s: asset is blacklisted", asset)
-            return self._reject(asset, 'asset_blacklisted')
+        # H4 extraction: ordered gate cascade (reject bookkeeping preserved at call site).
+        reject_reason = self._passes_ghost_gates(
+            asset=asset,
+            price=price,
+            timestamp=timestamp,
+            oteo_result=oteo_result,
+            manipulation=manipulation,
+            payout_pct=payout_pct,
+        )
+        if reject_reason is not None:
+            return self._reject(asset, reject_reason)
 
-        if not self.config.enabled:
-            return self._reject(asset, 'disabled')
-            
-        if self._session_halted:
-            return self._reject(asset, 'session_halted')
-        if self._session_trade_count >= self.config.max_session_trades:
-            return self._reject(asset, 'max_session_trades')
-        if now < self._drawdown_cooldown_until:
-            return self._reject(asset, 'drawdown_cooldown')
-
-        # Timeframe limit gate check
-        if self.config.max_trades_per_timeframe > 0 and self.config.timeframe_seconds > 0:
-            self._trade_timestamps = [t for t in self._trade_timestamps if timestamp - t < self.config.timeframe_seconds]
-            if len(self._trade_timestamps) >= self.config.max_trades_per_timeframe:
-                logger.info(
-                    "Auto-Ghost skipped %s: timeframe limit reached (%d trades in last %ds, limit: %d)",
-                    asset,
-                    len(self._trade_timestamps),
-                    self.config.timeframe_seconds,
-                    self.config.max_trades_per_timeframe
-                )
-                return self._reject(asset, 'timeframe_limit')
-
-        if oteo_result.get("recommended") not in {"CALL", "PUT"}:
-            return self._reject(asset, 'not_call_or_put')
-        if not oteo_result.get("actionable"):
-            return self._reject(asset, 'not_actionable')
-
-        # Numeric confidence gate bounds checks
         score = float(oteo_result.get("oteo_score", 0.0))
-        if self.config.min_confidence_enabled and self.config.min_confidence is not None:
-            if score < self.config.min_confidence:
-                logger.info(
-                    "Auto-Ghost skipped %s: score %.1f < min confidence bounds %.1f",
-                    asset,
-                    score,
-                    self.config.min_confidence
-                )
-                return self._reject(asset, 'below_min_confidence')
-        if self.config.max_confidence_enabled and self.config.max_confidence is not None:
-            if score > self.config.max_confidence:
-                logger.info(
-                    "Auto-Ghost skipped %s: score %.1f > max confidence bounds %.1f",
-                    asset,
-                    score,
-                    self.config.max_confidence
-                )
-                return self._reject(asset, 'above_max_confidence')
-        if payout_pct is None:
-            logger.warning("Auto-Ghost skipped %s: payout unavailable", asset)
-            return self._reject(asset, 'payout_unavailable')
-        if self.config.minimum_payout_pct > 0 and payout_pct < self.config.minimum_payout_pct:
-            logger.info(
-                "Auto-Ghost skipped %s: payout %.1f%% < minimum %.1f%%",
-                asset,
-                payout_pct,
-                self.config.minimum_payout_pct,
-            )
-            return self._reject(asset, 'payout_below_minimum')
-        if self.config.block_on_manipulation and manipulation:
-            if any(_get_severity(sev_val) >= self.config.manipulation_severity_threshold for sev_val in manipulation.values()):
-                logger.info(
-                    "Auto-Ghost skipped %s due to active manipulation severity: %s (threshold: %.2f)",
-                    asset,
-                    manipulation,
-                    self.config.manipulation_severity_threshold
-                )
-                return self._reject(asset, 'manipulation_block')
-
-        # Z-Score Gate Bounds checks (Ghost Protocol)
-        z_score = oteo_result.get("z_score")
-        if z_score is not None:
-            try:
-                z_val = float(z_score)
-                if self.config.min_zscore_enabled and self.config.min_zscore is not None:
-                    if z_val < self.config.min_zscore:
-                        logger.info(
-                            "Auto-Ghost skipped %s: z-score %.2f < min gate %.2f (Ghost Protocol gate)",
-                            asset,
-                            z_val,
-                            self.config.min_zscore,
-                        )
-                        return self._reject(asset, 'below_min_zscore')
-                if self.config.max_zscore_enabled and self.config.max_zscore is not None:
-                    if z_val > self.config.max_zscore:
-                        logger.info(
-                            "Auto-Ghost skipped %s: z-score %.2f > max gate %.2f (Ghost Protocol gate)",
-                            asset,
-                            z_val,
-                            self.config.max_zscore,
-                        )
-                        return self._reject(asset, 'above_max_zscore')
-            except (ValueError, TypeError) as exc:
-                logger.warning("Auto-Ghost: non-numeric z_score %r for %s, skipping Z gates: %s", z_score, asset, exc)
-
-        # Regime Gate checks (Ghost Protocol)
-        regime_label = oteo_result.get("regime_label")
-        regime_stable = oteo_result.get("regime_stable")
-        if self.config.regime_gate_enabled and self.config.allowed_regimes:
-            if regime_label is None:
-                logger.info("Auto-Ghost skipped %s: regime gate enabled but signal has no regime label", asset)
-                return self._reject(asset, 'missing_regime_label')
-            if str(regime_label).upper() not in self.config.allowed_regimes:
-                logger.info("Auto-Ghost skipped %s: regime %s not in allowed %s (Ghost Protocol gate)", asset, regime_label, self.config.allowed_regimes)
-                return self._reject(asset, 'regime_not_allowed')
-
-        if self.config.regime_gate_enabled and self.config.require_regime_stable and regime_stable is False:
-            logger.info("Auto-Ghost skipped %s: regime %s is unstable (Ghost Protocol gate)", asset, regime_label)
-            return self._reject(asset, 'regime_unstable')
-
-        # Volatility Gate checks
-        vol_score = _extract_market_context_field(oteo_result, "volatility_score")
-        if self.config.volatility_gate_enabled and vol_score is not None:
-            if vol_score < self.config.min_volatility or vol_score > self.config.max_volatility:
-                logger.info(
-                    "Auto-Ghost skipped %s: volatility score %.1f outside gate [%.1f, %.1f] (Volatility Gate)",
-                    asset,
-                    vol_score,
-                    self.config.min_volatility,
-                    self.config.max_volatility,
-                )
-                return self._reject(asset, 'volatility_gate')
-
-        # Liquidity Gate checks
-        liq_score = _extract_market_context_field(oteo_result, "liquidity_score")
-        if self.config.liquidity_gate_enabled and liq_score is not None:
-            if liq_score < self.config.min_liquidity or liq_score > self.config.max_liquidity:
-                logger.info(
-                    "Auto-Ghost skipped %s: liquidity score %.1f outside gate [%.1f, %.1f] (Liquidity Gate)",
-                    asset,
-                    liq_score,
-                    self.config.min_liquidity,
-                    self.config.max_liquidity,
-                )
-                return self._reject(asset, 'liquidity_gate')
-
-        # ADX Gate checks
-        adx_regime = _extract_market_context_field(oteo_result, "adx_regime")
-        reversal_friendly = _extract_market_context_field(oteo_result, "reversal_friendly")
-
-        if self.config.adx_gate_enabled and adx_regime is not None:
-            if str(adx_regime).upper() == "STRONG" and not reversal_friendly:
-                logger.info(
-                    "Auto-Ghost skipped %s: ADX regime is strong and not reversal friendly (ADX Gate)",
-                    asset
-                )
-                return self._reject(asset, 'adx_gate_trend_block')
-
-        # CCI Gate checks
-        cci_state = _extract_market_context_field(oteo_result, "cci_state")
-        direction = str(oteo_result.get("recommended")).upper()
-
-        if self.config.cci_gate_enabled and cci_state is not None:
-            if direction == "CALL" and str(cci_state).upper() == "OVERBOUGHT":
-                logger.info("Auto-Ghost skipped %s: CCI is overbought but signal recommended CALL (CCI Gate)", asset)
-                return self._reject(asset, 'cci_gate_overbought_call')
-            if direction == "PUT" and str(cci_state).upper() == "OVERSOLD":
-                logger.info("Auto-Ghost skipped %s: CCI is oversold but signal recommended PUT (CCI Gate)", asset)
-                return self._reject(asset, 'cci_gate_oversold_put')
-
-        # Plugin veto check
-        if getattr(self, "extension_manager", None) is not None:
-            for ext in self.extension_manager.get_active_extensions():
-                try:
-                    allow, reason = ext.on_consider_signal(asset, price, oteo_result, self.config)
-                    if not allow:
-                        logger.info(
-                            "Auto-Ghost skipped %s: vetoed by extension %s (reason: %s)",
-                            asset,
-                            ext.__class__.__name__,
-                            reason or "No reason given",
-                        )
-                        return self._reject(asset, f"plugin_veto_{reason or 'unknown'}")
-                except Exception as ext_err:
-                    logger.error("Error in extension %s.on_consider_signal: %s", ext.__class__.__name__, ext_err)
-
-        if asset in self._active_assets:
-            return self._reject(asset, 'asset_active')
-        if len(self._active_assets) >= self.config.max_concurrent_trades:
-            return self._reject(asset, 'max_concurrent_trades')
-        if unix_time() < self._cooldown_until.get(asset, 0):
-            return self._reject(asset, 'asset_cooldown')
 
         # Confirmation Gate (primarily for Phase 3 backward-compatibility tests)
         # Bypassed in production since CONFIRMATION_TICKS = 1 by default
@@ -753,56 +832,14 @@ class AutoGhostService:
             )
             advisory_task.add_done_callback(lambda t: logger.error("_run_ai_advisory failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
 
-        # Resolve trade expiration duration
-        target_expiration = oteo_result.get("override_expiration_seconds") or self.config.expiration_seconds
-
-        entry_context = {
-            "asset": asset,
-            "price": price,
-            "timestamp": timestamp,
-            "expiration_seconds": target_expiration,
-            "recommended": oteo_result.get("recommended"),
-            "confidence": oteo_result.get("confidence"),
-            "oteo_score": oteo_result.get("oteo_score"),
-            "base_oteo_score": oteo_result.get("base_oteo_score"),
-            "base_confidence": oteo_result.get("base_confidence"),
-            "pressure_pct": oteo_result.get("pressure_pct"),
-            "velocity": oteo_result.get("velocity"),
-            "z_score": oteo_result.get("z_score"),
-            "slow_velocity": oteo_result.get("slow_velocity"),
-            "stretch_alignment": oteo_result.get("stretch_alignment"),
-            "level2_enabled": oteo_result.get("level2_enabled"),
-            "level2_score_adjustment": oteo_result.get("level2_score_adjustment"),
-            "level2_suppressed_reason": oteo_result.get("level2_suppressed_reason"),
-            "level3_enabled": oteo_result.get("level3_enabled"),
-            "level3_score_adjustment": oteo_result.get("level3_score_adjustment"),
-            "level3_suppressed_reason": oteo_result.get("level3_suppressed_reason"),
-            "oteo_ai_enabled": oteo_result.get("oteo_ai_enabled"),
-            "regime_label": oteo_result.get("regime_label"),
-            "regime_confidence": oteo_result.get("regime_confidence"),
-            "regime_stable": oteo_result.get("regime_stable"),
-            "regime_detail": oteo_result.get("regime_detail"),
-            "market_context": oteo_result.get("market_context"),
-            "manipulation": manipulation,
-            "payout_pct": payout_pct,
-        }
-
-        request = TradeExecutionRequest(
-            asset_id=asset,
-            direction=str(oteo_result["recommended"]).lower(),
-            amount=self.config.amount,
-            expiration=target_expiration,
-            account_key="primary",
-            trade_mode="ghost",
-            session_id=self._session_id,
-            confidence=oteo_result.get("confidence"),
-            oteo_score=oteo_result.get("oteo_score"),
-            base_oteo_score=oteo_result.get("base_oteo_score"),
-            level2_score_adjustment=oteo_result.get("level2_score_adjustment"),
-            strategy_level="level3" if oteo_result.get("level3_enabled") else "level2" if oteo_result.get("level2_enabled") else "level1",
-            manipulation_at_entry=manipulation or None,
-            entry_context=entry_context,
-            trigger_mode="auto_ghost",
+        # H4 extraction: entry-context + request construction
+        request = self._build_trade_request(
+            asset=asset,
+            price=price,
+            timestamp=timestamp,
+            oteo_result=oteo_result,
+            manipulation=manipulation,
+            payout_pct=payout_pct,
         )
 
         # C3 fix: reserve capacity SYNCHRONOUSLY before the first await point.
@@ -822,18 +859,11 @@ class AutoGhostService:
             self._active_assets.discard(asset)
             return result
 
-        # Record trade execution timestamp for timeframe gating
-        self._trade_timestamps.append(timestamp)
-
-        actual_expiry = request.expiration
-        self._cooldown_until[asset] = unix_time() + actual_expiry + self.config.per_asset_cooldown_seconds
-        task = asyncio.create_task(self._release_asset(asset, actual_expiry + 1))
-        task.add_done_callback(lambda t: logger.error("_release_asset failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
-        logger.info(
-            "Auto-Ghost trade opened for %s (%s, %ss)",
-            asset,
-            oteo_result.get("recommended"),
-            actual_expiry,
+        self._finalize_execution(
+            asset=asset,
+            timestamp=timestamp,
+            actual_expiry=request.expiration,
+            recommended=str(oteo_result.get("recommended")),
         )
         return result
 
@@ -892,9 +922,19 @@ class AutoGhostService:
             price = self.trade_service._latest_logged_price(asset) or 1.0
         elif hasattr(self.trade_service, "get_last_price"):
             price = self.trade_service.get_last_price(asset) or 1.0
-        payout_pct = 85.0
+        # M5 fix: explicit None-handling — never fabricate a payout value.
+        payout_pct: float | None = None
         if hasattr(self.trade_service, "adapter") and self.trade_service.adapter:
-            payout_pct = self.trade_service._resolve_payout_pct(self.trade_service.adapter, asset)
+            try:
+                payout_pct = self.trade_service._resolve_payout_pct(self.trade_service.adapter, asset)
+            except Exception as payout_err:
+                logger.warning("AI Pulse payout resolution failed for %s: %s", asset, payout_err)
+                payout_pct = None
+        if payout_pct is None:
+            logger.info(
+                "AI Pulse payout unavailable for %s; recording payout_pct=None in entry context",
+                asset,
+            )
 
         conf_level = "HIGH" if (confidence and confidence >= 80) else "MEDIUM"
         entry_context = {

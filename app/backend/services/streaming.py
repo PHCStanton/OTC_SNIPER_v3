@@ -34,6 +34,51 @@ RESERVED_OTC_TOKENS = {
     "CALL", "PUT", "BUY", "SELL", "CALL_OTC", "PUT_OTC", "TARGET", "WAIT", "FOCUS", "AVOID", "UNKNOWN"
 }
 
+# H3 rewrite: declarative forwarding map from StreamingService.update_runtime_settings
+# parameter names to AutoGhostConfig field names (replaces ~40 hand-written kwarg lines).
+# Parameters absent from this map (oteo_ai_enabled / oteo_ai_execution_mode) are always
+# forwarded from local service state, matching the previous unconditional pass-through.
+_AUTO_GHOST_FORWARD_MAP: dict[str, str] = {
+    "auto_ghost_enabled": "enabled",
+    "auto_ghost_amount": "amount",
+    "auto_ghost_expiration_seconds": "expiration_seconds",
+    "auto_ghost_max_concurrent_trades": "max_concurrent_trades",
+    "auto_ghost_per_asset_cooldown_seconds": "per_asset_cooldown_seconds",
+    "auto_ghost_minimum_payout_pct": "minimum_payout_pct",
+    "auto_ghost_max_session_trades": "max_session_trades",
+    "auto_ghost_max_drawdown_amount": "max_drawdown_amount",
+    "auto_ghost_drawdown_cooldown_seconds": "drawdown_cooldown_seconds",
+    "auto_ghost_manipulation_severity_threshold": "manipulation_severity_threshold",
+    "auto_ghost_block_on_manipulation": "block_on_manipulation",
+    "auto_ghost_min_confidence_enabled": "min_confidence_enabled",
+    "auto_ghost_min_confidence": "min_confidence",
+    "auto_ghost_max_confidence_enabled": "max_confidence_enabled",
+    "auto_ghost_max_confidence": "max_confidence",
+    "auto_ghost_max_trades_per_timeframe": "max_trades_per_timeframe",
+    "auto_ghost_timeframe_seconds": "timeframe_seconds",
+    "ai_trade_interval": "ai_trade_interval",
+    "ai_pulse_enabled": "ai_pulse_enabled",
+    "ai_pulse_interval_seconds": "ai_pulse_interval_seconds",
+    "auto_ghost_auto_execute_ai_pulse": "auto_execute_ai_pulse",
+    "min_adaptive_expiry": "min_adaptive_expiry",
+    "adaptive_expiry_enabled": "adaptive_expiry_enabled",
+    "auto_ghost_blacklist_assets": "blacklist_assets",
+    "auto_ghost_rsi_cci_enabled": "rsi_cci_enabled",
+    "auto_ghost_regime_gate_enabled": "regime_gate_enabled",
+    "auto_ghost_allowed_regimes": "allowed_regimes",
+    "auto_ghost_require_regime_stable": "require_regime_stable",
+    "volatility_gate_enabled": "volatility_gate_enabled",
+    "min_volatility": "min_volatility",
+    "max_volatility": "max_volatility",
+    "liquidity_gate_enabled": "liquidity_gate_enabled",
+    "min_liquidity": "min_liquidity",
+    "max_liquidity": "max_liquidity",
+    "adx_gate_enabled": "adx_gate_enabled",
+    "cci_gate_enabled": "cci_gate_enabled",
+    "bayesian_filter_enabled": "bayesian_filter_enabled",
+    "bayesian_min_probability": "bayesian_min_probability",
+}
+
 
 def normalize_otc_asset_symbol(raw: str, allowed_assets: set[str] | list[str] | None = None) -> str | None:
     """
@@ -201,53 +246,57 @@ class StreamingService:
             self._clear_level3_state(reset_classifiers=False)
         elif not previous_level3_enabled and self.level3_enabled:
             self._clear_level3_state(reset_classifiers=True)
-        auto_ghost_status = self.auto_ghost.update_config(
-            enabled=auto_ghost_enabled,
-            amount=auto_ghost_amount,
-            expiration_seconds=auto_ghost_expiration_seconds,
-            max_concurrent_trades=auto_ghost_max_concurrent_trades,
-            per_asset_cooldown_seconds=auto_ghost_per_asset_cooldown_seconds,
-            minimum_payout_pct=auto_ghost_minimum_payout_pct,
-            max_session_trades=auto_ghost_max_session_trades,
-            max_drawdown_amount=auto_ghost_max_drawdown_amount,
-            drawdown_cooldown_seconds=auto_ghost_drawdown_cooldown_seconds,
-            manipulation_severity_threshold=auto_ghost_manipulation_severity_threshold,
-            block_on_manipulation=auto_ghost_block_on_manipulation,
-            min_confidence_enabled=auto_ghost_min_confidence_enabled,
-            min_confidence=auto_ghost_min_confidence,
-            max_confidence_enabled=auto_ghost_max_confidence_enabled,
-            max_confidence=auto_ghost_max_confidence,
-            max_trades_per_timeframe=auto_ghost_max_trades_per_timeframe,
-            timeframe_seconds=auto_ghost_timeframe_seconds,
-            min_zscore_enabled=auto_ghost_min_zscore_enabled,
-            min_zscore=auto_ghost_min_zscore,
-            max_zscore_enabled=auto_ghost_max_zscore_enabled,
-            max_zscore=auto_ghost_max_zscore,
-            regime_gate_enabled=auto_ghost_regime_gate_enabled,
-            allowed_regimes=auto_ghost_allowed_regimes,
-            require_regime_stable=auto_ghost_require_regime_stable,
-            oteo_ai_enabled=self.oteo_ai_enabled,
-            oteo_ai_execution_mode=self.oteo_ai_execution_mode,
-            ai_trade_interval=ai_trade_interval,
-            ai_pulse_enabled=ai_pulse_enabled,
-            ai_pulse_interval_seconds=ai_pulse_interval_seconds,
-            auto_execute_ai_pulse=auto_ghost_auto_execute_ai_pulse,
-            adaptive_expiry_enabled=adaptive_expiry_enabled,
-            min_adaptive_expiry=min_adaptive_expiry,
-            blacklist_assets=auto_ghost_blacklist_assets,
-            rsi_cci_enabled=auto_ghost_rsi_cci_enabled,
+        # H3 rewrite: map-driven forwarding (was ~40 hand-written kwarg lines).
+        _param_values = {
+            "auto_ghost_enabled": auto_ghost_enabled,
+            "auto_ghost_amount": auto_ghost_amount,
+            "auto_ghost_expiration_seconds": auto_ghost_expiration_seconds,
+            "auto_ghost_max_concurrent_trades": auto_ghost_max_concurrent_trades,
+            "auto_ghost_per_asset_cooldown_seconds": auto_ghost_per_asset_cooldown_seconds,
+            "auto_ghost_minimum_payout_pct": auto_ghost_minimum_payout_pct,
+            "auto_ghost_max_session_trades": auto_ghost_max_session_trades,
+            "auto_ghost_max_drawdown_amount": auto_ghost_max_drawdown_amount,
+            "auto_ghost_drawdown_cooldown_seconds": auto_ghost_drawdown_cooldown_seconds,
+            "auto_ghost_manipulation_severity_threshold": auto_ghost_manipulation_severity_threshold,
+            "auto_ghost_block_on_manipulation": auto_ghost_block_on_manipulation,
+            "auto_ghost_min_confidence_enabled": auto_ghost_min_confidence_enabled,
+            "auto_ghost_min_confidence": auto_ghost_min_confidence,
+            "auto_ghost_max_confidence_enabled": auto_ghost_max_confidence_enabled,
+            "auto_ghost_max_confidence": auto_ghost_max_confidence,
+            "auto_ghost_max_trades_per_timeframe": auto_ghost_max_trades_per_timeframe,
+            "auto_ghost_timeframe_seconds": auto_ghost_timeframe_seconds,
+            "ai_trade_interval": ai_trade_interval,
+            "ai_pulse_enabled": ai_pulse_enabled,
+            "ai_pulse_interval_seconds": ai_pulse_interval_seconds,
+            "auto_ghost_auto_execute_ai_pulse": auto_ghost_auto_execute_ai_pulse,
+            "min_adaptive_expiry": min_adaptive_expiry,
+            "adaptive_expiry_enabled": adaptive_expiry_enabled,
+            "auto_ghost_blacklist_assets": auto_ghost_blacklist_assets,
+            "auto_ghost_rsi_cci_enabled": auto_ghost_rsi_cci_enabled,
+            "auto_ghost_regime_gate_enabled": auto_ghost_regime_gate_enabled,
+            "auto_ghost_allowed_regimes": auto_ghost_allowed_regimes,
+            "auto_ghost_require_regime_stable": auto_ghost_require_regime_stable,
+            "volatility_gate_enabled": volatility_gate_enabled,
+            "min_volatility": min_volatility,
+            "max_volatility": max_volatility,
+            "liquidity_gate_enabled": liquidity_gate_enabled,
+            "min_liquidity": min_liquidity,
+            "max_liquidity": max_liquidity,
+            "adx_gate_enabled": adx_gate_enabled,
+            "cci_gate_enabled": cci_gate_enabled,
+            "bayesian_filter_enabled": bayesian_filter_enabled,
+            "bayesian_min_probability": bayesian_min_probability,
+        }
+        ghost_updates: dict[str, Any] = {
+            config_name: _param_values[param_name]
+            for param_name, config_name in _AUTO_GHOST_FORWARD_MAP.items()
+            if _param_values[param_name] is not None
+        }
+        # Always forwarded from local service state (unconditional, as before).
+        ghost_updates["oteo_ai_enabled"] = self.oteo_ai_enabled
+        ghost_updates["oteo_ai_execution_mode"] = self.oteo_ai_execution_mode
 
-            volatility_gate_enabled=volatility_gate_enabled,
-            min_volatility=min_volatility,
-            max_volatility=max_volatility,
-            liquidity_gate_enabled=liquidity_gate_enabled,
-            min_liquidity=min_liquidity,
-            max_liquidity=max_liquidity,
-            adx_gate_enabled=adx_gate_enabled,
-            cci_gate_enabled=cci_gate_enabled,
-            bayesian_filter_enabled=bayesian_filter_enabled,
-            bayesian_min_probability=bayesian_min_probability,
-        )
+        auto_ghost_status = self.auto_ghost.update_config(**ghost_updates)
 
 
         if getattr(self, "_streaming_active", False):

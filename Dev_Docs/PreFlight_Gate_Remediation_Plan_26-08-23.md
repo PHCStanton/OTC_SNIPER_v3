@@ -91,8 +91,17 @@ Remediate the three CRITICAL defects (C1 dead tick-flow veto, C2 inert Bayesian 
 - **L4 fix-up:** Hoisted `re`/`json` imports from `_run_ai_pulse_insight` to module level.
 - **Verification:** Backend suite green — **75/75 tests**; Vite production build clean (10.20s, 0 errors).
 
-### Phase 8 — [ ] Low-priority polish (H3/H4 rewrite proposal, M8 cache, M14 test split, M9/M10/M5/M6)
+### Phase 8 — [x] Low-priority polish (H3/H4 rewrite proposal, M8 cache, M14 test split, M9/M10/M5/M6)
 - Requires separate user approval per Core Principle #7 (rewrite rule) before executing H3/H4 decomposition.
+- **User approved the rewrite; executed 2026-08-24.**
+- **H3 rewrite:** `AutoGhostService.update_config` converted from ~90 repeated `if x is not None` blocks to a declarative spec table (`_AUTO_GHOST_FIELD_SPECS` with per-field caster + bounds, `_AUTO_GHOST_LIST_CASTERS`, `_PLUGIN_MANAGED_CONFIG_FIELDS` for accepted-but-extension-owned `hurst_*`). Explicit-None-means-no-change semantics preserved exactly; unknown fields logged+ignored. Mirrored in `streaming.py::update_runtime_settings` via `_AUTO_GHOST_FORWARD_MAP` name-mapping dict + comprehension (`oteo_ai_enabled`/`oteo_ai_execution_mode` still forwarded unconditionally from local state). ~190 lines removed.
+- **H4 rewrite:** `consider_signal` decomposed into `_passes_ghost_gates()` (ordered cascade returning reject reasons), `_build_trade_request()` (context+request construction), and `_finalize_execution()` (timeframe stamping, cooldown, release task, log). Gate order, reject-reason strings, advisory dispatch, confirmation gate, and C3 sync-capacity-reservation semantics preserved EXACTLY (reserve before first await; discard on exception/non-success).
+- **M8:** `BayesianPriorStore.read()` now serves from an in-memory cache keyed on `(mtime_ns, size)`; cache invalidated on missing file and refreshed after local atomic writes — cross-process safe.
+- **M9/M10:** `register_pulse_trade` logs a warning on rejected registrations; `settle_pulse_trade` reports `"exit_price_unresolved": true` instead of silently substituting entry price for the exit.
+- **M5:** AI Pulse payout no longer fabricates `85.0` — explicit None-handling with warning when the broker adapter is unavailable.
+- **M6:** `HTFDirectionalBiasEngine.get_instance()` guarded by a class-level lock (consistent singleton pattern).
+- **M14 (deferred):** splitting the ~500-line `test_auto_ghost.py` monolith remains open as an independent, low-risk follow-up task.
+- **Verification:** Full suite green — **84/84 tests** (`test_preflight_gate_contracts.py`, `test_auto_ghost.py`, `test_ghost_tick_safety.py`, `test_htf_directional_bias.py`, `test_pulse_trajectory_engine.py`, `tests/test_bayesian_signal_filter.py`, `tests/test_bayesian_prior_updater.py`, `test_knowledge_base_retrieval.py`) with zero regressions.
 
 ## Verification Checklist
 - [ ] `conda run -n QuFLX-v2 python -m pytest test_preflight_gate_contracts.py test_auto_ghost.py test_htf_directional_bias.py test_pulse_trajectory_engine.py tests/test_bayesian_signal_filter.py -v` all green each phase

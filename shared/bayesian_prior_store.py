@@ -273,6 +273,18 @@ class BayesianPriorStore:
             self.lock_path = Path(lock_path)
         else:
             self.lock_path = Path(str(self.priors_path) + ".lock")
+        # M8 fix: in-memory read cache invalidated on (mtime_ns, size) change.
+        # Cross-process safe: any external write changes the stat key and forces a
+        # fresh disk read; local atomic writes refresh the cache directly.
+        self._read_cache: Optional[Dict[str, Any]] = None
+        self._cache_key: Optional[tuple[int, int]] = None
+
+    def _stat_key(self) -> Optional[tuple[int, int]]:
+        try:
+            st = self.priors_path.stat()
+            return (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
 
     @contextmanager
     def _exclusive_lock(self) -> Iterator[None]:
@@ -291,7 +303,18 @@ class BayesianPriorStore:
         Permanently corrupt file → PriorStoreCorruptError (never silent empty overwrite).
         """
         if not self.priors_path.exists():
+            self._read_cache = None
+            self._cache_key = None
             return empty_priors()
+
+        # M8 fix: serve from cache when the file has not changed on disk.
+        stat_key = self._stat_key()
+        if (
+            self._read_cache is not None
+            and stat_key is not None
+            and stat_key == self._cache_key
+        ):
+            return dict(self._read_cache)
 
         last_err: Optional[BaseException] = None
         for attempt in range(READ_RETRY_ATTEMPTS):
@@ -299,7 +322,10 @@ class BayesianPriorStore:
                 # Read full text then close promptly so Windows writers can replace.
                 text = self.priors_path.read_text(encoding="utf-8")
                 raw = json.loads(text)
-                return normalize_priors(raw)
+                normalized = normalize_priors(raw)
+                self._read_cache = normalized
+                self._cache_key = self._stat_key()
+                return dict(normalized)
             except PriorStoreValidationError as err:
                 # Schema-invalid content is permanent corruption for this file.
                 raise PriorStoreCorruptError(
@@ -363,6 +389,9 @@ class BayesianPriorStore:
             # Retry under the exclusive lock until readers release (plan: bounded retry).
             self._atomic_replace_with_retry(Path(temp_name), self.priors_path)
             temp_name = None  # successfully moved
+            # M8 fix: keep the read cache coherent after a local atomic write.
+            self._read_cache = dict(normalized)
+            self._cache_key = self._stat_key()
         except PriorStoreError:
             if temp_name:
                 try:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -25,12 +26,16 @@ class HTFDirectionalBiasEngine:
     """
 
     _instance: Optional[HTFDirectionalBiasEngine] = None
+    # M6 fix: guard the singleton check-and-create for consistency with the
+    # PulseTrajectoryEngine pattern (thread-safe lazy instantiation).
+    _instance_lock: threading.Lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> HTFDirectionalBiasEngine:
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+        with cls._instance_lock:
+            if cls._instance is None:
+                cls._instance = cls()
+            return cls._instance
 
     @staticmethod
     def resample_1m_candles(candles: List[Any], timeframe_minutes: int) -> List[HTFCandle]:

@@ -80,6 +80,12 @@ class PulseTrajectoryEngine:
     ) -> None:
         """Register a newly opened AI Pulse trade for trajectory tracking."""
         if not trade_id or entry_price <= 0:
+            # M9 fix: surface rejected registrations instead of silently dropping them.
+            logger.warning(
+                "PulseTrajectoryEngine rejected pulse trade registration (trade_id=%r entry_price=%r)",
+                trade_id,
+                entry_price,
+            )
             return
 
         opened = opened_at if (opened_at and opened_at > 0) else time.time()
@@ -301,7 +307,10 @@ class PulseTrajectoryEngine:
         if not trade:
             return None
 
-        exit_p = exit_price if (exit_price is not None and exit_price > 0) else trade.entry_price
+        exit_p_raw = exit_price
+        # M10 fix: flag unresolved exits instead of silently substituting entry price.
+        exit_price_unresolved = exit_p_raw is None or exit_p_raw <= 0
+        exit_p = trade.entry_price if exit_price_unresolved else float(exit_p_raw)
         norm_outcome = outcome.lower() if outcome else "void"
         is_call = trade.direction == "call"
 
@@ -368,6 +377,7 @@ class PulseTrajectoryEngine:
             "settled_at": settled_at or time.time(),
             "mfe": round(trade.mfe, 6),
             "mae": round(trade.mae, 6),
+            "exit_price_unresolved": exit_price_unresolved,
             "checkpoints": eval_checkpoints,
             "attribution": attribution,
             "recommendation": recommendation,

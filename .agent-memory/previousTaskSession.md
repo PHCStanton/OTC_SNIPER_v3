@@ -1,10 +1,50 @@
-# Previous Task Session Summary
+## 0. ACTIVE WORK — PreFlight Gate Remediation Plan (2026-08-23/24) — ALL PHASES COMPLETE ✅ (M14 deferred)
 
-## 1. Completed Tasks (2026-06-22)
+**Plan document:** `Dev_Docs/PreFlight_Gate_Remediation_Plan_26-08-23.md` (single source of truth — read it FIRST)
+**Source diagnostic:** `Reports-1/Executive_Diagnostic_and_Audit_Report.md` (Stability 74/100)
+**Protocol:** `.agents/PHASE_REVIEW_PROTOCOL.md` — @Reviewer sign-off after every phase; explicit user command between phases.
+**Environment:** conda `QuFLX-v2`; PowerShell (`;` separators, no `&&`).
 
-### 1.1 Kalman Filter Backtester & Analysis
-*   **Harness Implementation:** Created and ran [backtest_kalman.py](file:///c:/v3/OTC_SNIPER/scripts/backtest_kalman.py) to pre-filter high-frequency tick prices ($Q = 1e-9, R = 1e-7$) prior to indicator calculations while executing at raw ticks.
-*   **Performance Impact:** Backtests on `2026-06-19` EURUSD data showed a **+2.40%** overall win rate improvement (from $52.61\%$ to $55.01\%$) and a **3.5x increase in Net Profit** (+1,967.20 units vs. +564.52 units baseline) by reducing false crossover signals by $37\%$.
+### Verification commands (all green as of session end)
+```
+conda run -n QuFLX-v2 python -m pytest test_preflight_gate_contracts.py test_auto_ghost.py test_ghost_tick_safety.py test_htf_directional_bias.py test_pulse_trajectory_engine.py tests/test_bayesian_signal_filter.py tests/test_bayesian_prior_updater.py test_knowledge_base_retrieval.py
+→ 84 passed
+npm --prefix app/frontend run build  → clean
+```
+NOTE: do NOT chain these two with `;` in one line — conda run swallows the separator and passes it to pytest.
+
+### Phase 8 rewrite (executed 2026-08-24, user-approved per Core Principle #7)
+- **H3:** `AutoGhostService.update_config` rewritten as declarative spec tables (`_AUTO_GHOST_FIELD_SPECS` caster+bounds, `_AUTO_GHOST_LIST_CASTERS`, `_PLUGIN_MANAGED_CONFIG_FIELDS`) in `auto_ghost.py`; `streaming.py::update_runtime_settings` now forwards via `_AUTO_GHOST_FORWARD_MAP`. Explicit None = no-change preserved; unknown fields logged+ignored; disabled→enabled session reset side effect preserved.
+- **H4:** `consider_signal` decomposed into `_passes_ghost_gates()` (returns reject reason strings; `_reject` bookkeeping stays at call site), `_build_trade_request()`, `_finalize_execution()`. C3 sync-capacity-reservation preserved exactly.
+- **M8:** `BayesianPriorStore.read()` cached on `(mtime_ns, size)`; refreshed after local atomic writes in `_write_atomic_under_lock`.
+- **M9/M10:** trajectory registration rejections log warnings; settlement reports carry `"exit_price_unresolved"` flag.
+- **M5:** AI Pulse payout is explicit None-handling (no fabricated 85.0); entry_context may carry `payout_pct: None`.
+- **M6:** `HTFDirectionalBiasEngine.get_instance()` now lock-guarded (`_instance_lock`).
+- **M14 DEFERRED:** split ~500-line `test_auto_ghost.py` into per-gate modules — open follow-up task.
+
+### Completed remediations (all marked ✅ Resolved in plan's Current State Map)
+| Phase | Items | Key files |
+|---|---|---|
+| 1 | C1: `_recent_ticks` wired into `_get_asset_market_context_snapshot` | `streaming.py` |
+| 2 | C2: Bayesian WP cache `_latest_bayesian_wp` + fail-closed gate at T−5s | `streaming.py`, `auto_ghost.py` |
+| 3 | C3: capacity TOCTOU closed (sync reservation before first await; cooldown-eviction fix-up) | `auto_ghost.py` |
+| 4 | H2: removed silent `expiration` fallback in `on_trade_outcome` (fail-closed skip + warning) | `extensions/bayesian_signal_filter.py` |
+| 5 | H7: `ai_pulse_aborted` emitted from all 4 skip paths of `execute_ai_pulse_signal`; M1: snapshot reads `regime_confidence`/`regime_stable` classifier keys | `auto_ghost.py`, `streaming.py` |
+| 6 | H1: post-settlement observation window (`_observation_trades`, OBSERVATION_WINDOW_SECONDS=300, MAX_OBSERVATION_TRADES=200, `_finalize_observation` replaces provisional report; fixed latent `record_tick` empty-guard bug) → PREMATURE_EXPIRATION reachable for 60s trades | `pulse_trajectory_engine.py` |
+| 7 | H5: O(1) incremental return stats (`_ret_sum`/`_ret_sumsq`) replace per-tick np.array; M11: pending-card bound to `trade_entry`(ai_pulse)/`ai_pulse_aborted` + 15s grace; M12: tabular-nums; M3: 5s sleep-floor removed in `_ai_pulse_loop`; M4: PUT wait regex scoped to match span; L1: tick_flow_300s documented report-only; L4: re/json hoisted to module level | `market_context.py`, `GhostTradingWidget.jsx`, `streaming.py`, `htf_directional_bias.py` |
+
+### Key contracts preserved by the rewrite (for future reference)
+- `TestExecutePulseAbortEmission` asserts abort reasons: substrings "disabled", "active", "concurrent", "failed".
+- `TestCapacityRace`: concurrent consider_signals with max_concurrent_trades=1 must execute exactly once (TOCTOU guard).
+- Reject reason strings flow into `_last_reject_reason_by_asset` — treat as observable contract.
+- `update_config` resets ghost session on disabled→enabled transition — preserved side effect.
+
+---
+
+
+---
+
+## 1. Historical Context (2026-06-22 backtesting session)
 
 ### 1.2 Hurst Exponent Calibration & Preset Sweep
 *   **Optimization & Veto Audit:** Optimized trade expiry logic in [backtest_hurst.py](file:///c:/v3/OTC_SNIPER/scripts/backtest_hurst.py) to run $100\times$ faster by passing pre-computed timestamps. 
