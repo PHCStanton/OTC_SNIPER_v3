@@ -236,6 +236,10 @@ class MarketContextEngine:
         self._cached_context: dict[str, Any] | None = None
         self._tick_timestamps: deque[float] = deque(maxlen=120)
         self._tick_prices: deque[float] = deque(maxlen=400)
+        # H5 fix: incremental return statistics over the bounded price buffer (O(1)/tick),
+        # replacing per-tick np.array materialization of the full deque.
+        self._ret_sum: float = 0.0
+        self._ret_sumsq: float = 0.0
         self._adx_state: dict[str, Any] | None = None
 
     def _bootstrap_adx_state(self, closed_candles: list[Candle], period: int) -> dict[str, Any] | None:
@@ -417,6 +421,18 @@ class MarketContextEngine:
         self.update_tick(price, timestamp)
 
     def update_tick(self, price: float, timestamp: float) -> dict[str, Any]:
+        # H5 fix: maintain incremental return sums aligned with the bounded price buffer.
+        # If the buffer is full, this append evicts prices[0]; the return between
+        # prices[0] and prices[1] leaves the window and is subtracted first.
+        _prices = self._tick_prices
+        if len(_prices) >= 2 and price > 0 and _prices[-1] > 0:
+            new_ret = price / _prices[-1] - 1.0
+            if len(_prices) == _prices.maxlen and _prices[0] > 0 and _prices[1] > 0:
+                old_ret = _prices[1] / _prices[0] - 1.0
+                self._ret_sum -= old_ret
+                self._ret_sumsq -= old_ret * old_ret
+            self._ret_sum += new_ret
+            self._ret_sumsq += new_ret * new_ret
         self._tick_prices.append(price)
         candle_start = _bucket_timestamp(timestamp, self.config.candle_seconds)
 
@@ -543,11 +559,14 @@ class MarketContextEngine:
         structure_atr_candidates = [value for value in [nearest_support_atr, nearest_resistance_atr] if value is not None]
         nearest_structure_atr = min(structure_atr_candidates) if structure_atr_candidates else None
 
-        # Compute volatility score
-        prices_array = np.array(self._tick_prices)
-        if len(prices_array) >= 10:
-            returns = np.diff(prices_array) / prices_array[:-1]
-            returns_std = float(np.std(returns))
+        # Compute volatility score — H5 fix: O(1) incremental population std over the
+        # bounded return window (matches np.std ddof=0 semantics of the previous
+        # full-array computation; normalization ceilings unchanged).
+        ret_count = max(0, len(self._tick_prices) - 1)
+        if ret_count >= 10:
+            mean_ret = self._ret_sum / ret_count
+            var_ret = max(0.0, self._ret_sumsq / ret_count - mean_ret * mean_ret)
+            returns_std = math.sqrt(var_ret)
         else:
             returns_std = 0.0
 

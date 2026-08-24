@@ -2,7 +2,9 @@
 Streaming Service — OTC SNIPER v3
 Orchestrates live market data enrichment and real-time emissions.
 """
+import json
 import logging
+import re
 import time
 import asyncio
 from collections import deque
@@ -771,8 +773,9 @@ class StreamingService:
             ctx.update(_wp_cache)
         ctx["manipulation"] = manip
         ctx["regime_label"] = regime.get("regime_label") or ctx.get("adx_regime", "UNKNOWN")
-        ctx["regime_confidence"] = regime.get("confidence")
-        ctx["regime_stable"] = regime.get("stable")
+        # M1 fix: read from the classifier-shaped keys actually emitted by RegimeClassifier._emit()
+        ctx["regime_confidence"] = regime.get("regime_confidence")
+        ctx["regime_stable"] = regime.get("regime_stable")
         ctx["volatility_score"] = ctx.get("volatility_score", 50.0)
         ctx["liquidity_score"] = ctx.get("liquidity_score", 50.0)
         return ctx
@@ -793,7 +796,9 @@ class StreamingService:
             target_offset = max(15, interval - 15)  # E.g. for 60s, fire at 45s; for 180s, fire at 165s
             curr_offset = now_epoch % interval
             delay = (target_offset - curr_offset) if curr_offset < target_offset else (interval - curr_offset + target_offset)
-            sleep_duration = max(5.0, delay)
+            # M3 fix: sleep exactly until the target offset — the old 5s floor overshot
+            # past the T-15s analysis point whenever the computed delay was < 5s.
+            sleep_duration = max(0.05, delay)
 
             await asyncio.sleep(sleep_duration)
             if not self._streaming_active or not self.oteo_ai_enabled or not self.auto_ghost.config.ai_pulse_enabled:
@@ -812,8 +817,7 @@ class StreamingService:
         from .ai_service import get_ai_service
         from ..models.ai_models import AIChatRequest, AIMessage
         from .analysis_service import get_analysis_service
-        import re
-        import json
+        # L4 fix: re/json are imported at module level (no per-invocation cost).
 
         ai_service = get_ai_service()
         if not ai_service.status().enabled:
@@ -961,7 +965,7 @@ class StreamingService:
         extracted_signal = suggestions.get("signal") if isinstance(suggestions.get("signal"), dict) else None
         if not extracted_signal:
             call_match = re.search(r'(?:🟢\s*(?:CALL|BUY)?[:\s]+|(?<!\w)CALL[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
-            put_match = re.search(r'(?:🔴\s*(?:PUT|SELL)?[:\s]+|(?<!\w)PUT[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?', pulse_insight, re.IGNORECASE)
+            put_match = re.search(r'(?:🔴\s*(?:PUT|SELL)?[:\s]+|(?<!\w)PUT[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
 
             if call_match:
                 candidate = normalize_otc_asset_symbol(call_match.group(1), getattr(self, "_allowed_assets", None))
@@ -980,9 +984,9 @@ class StreamingService:
                 candidate = normalize_otc_asset_symbol(put_match.group(1), getattr(self, "_allowed_assets", None))
                 if candidate:
                     t_price = float(put_match.group(2)) if put_match.group(2) else None
-                    # Search for wait minutes in put text if present
-                    w_match = re.search(r'Wait:\s*(\d+)m?', pulse_insight, re.IGNORECASE)
-                    w_mins = int(w_match.group(1)) if w_match else 1
+                    # M4 fix: wait minutes captured within the PUT match span — the old
+                    # whole-text search could bleed a Wait value from a CALL line into PUT signals.
+                    w_mins = int(put_match.group(3)) if put_match.group(3) else 1
                     extracted_signal = {
                         "asset": candidate,
                         "direction": "PUT",

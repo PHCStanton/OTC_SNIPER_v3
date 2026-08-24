@@ -381,5 +381,99 @@ class TestCapacityRace(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result.get("success"))
         self.assertNotIn("CCC_otc", service._active_assets)
 
+class _SioEventCapture:
+    """Socket.IO stub that records emitted events for assertion."""
+
+    def __init__(self):
+        self.events: list[tuple[str, dict]] = []
+
+    async def emit(self, event: str, data: dict) -> None:
+        self.events.append((event, data))
+
+
+class TestExecutePulseAbortEmission(unittest.IsolatedAsyncioTestCase):
+    """H7 remediation: all skip paths in execute_ai_pulse_signal emit ai_pulse_aborted."""
+
+    def _service(self, **config_kwargs) -> tuple:
+        trade_service = _GateTradeServiceStub(_balanced_mc())
+        trade_service.sio = _SioEventCapture()
+        service = AutoGhostService(
+            trade_service,
+            config=AutoGhostConfig(enabled=True, **config_kwargs),
+        )
+        return service, trade_service
+
+    def _aborted_events(self, trade_service) -> list:
+        return [e for e in trade_service.sio.events if e[0] == "ai_pulse_aborted"]
+
+    async def test_disabled_emits_abort(self) -> None:
+        service, ts = self._service()
+        service.config = AutoGhostConfig(enabled=False)
+        result = await service.execute_ai_pulse_signal(asset="EURUSD_otc", direction="CALL")
+        self.assertIsNone(result)
+        aborted = self._aborted_events(ts)
+        self.assertEqual(len(aborted), 1)
+        self.assertEqual(aborted[0][1]["asset"], "EURUSD_otc")
+        self.assertIn("disabled", aborted[0][1]["reason"].lower())
+
+    async def test_active_asset_emits_abort(self) -> None:
+        service, ts = self._service()
+        service._active_assets.add("EURUSD_otc")
+        result = await service.execute_ai_pulse_signal(asset="EURUSD_otc", direction="CALL")
+        self.assertIsNone(result)
+        aborted = self._aborted_events(ts)
+        self.assertEqual(len(aborted), 1)
+        self.assertIn("active", aborted[0][1]["reason"].lower())
+
+    async def test_max_concurrent_emits_abort(self) -> None:
+        service, ts = self._service(max_concurrent_trades=1)
+        service._active_assets.add("OTHER_otc")
+        result = await service.execute_ai_pulse_signal(asset="EURUSD_otc", direction="CALL")
+        self.assertIsNone(result)
+        aborted = self._aborted_events(ts)
+        self.assertEqual(len(aborted), 1)
+        self.assertIn("concurrent", aborted[0][1]["reason"].lower())
+
+    async def test_execution_failure_emits_abort(self) -> None:
+        class _FailStub(_GateTradeServiceStub):
+            async def execute_trade(self, broker_type, request):
+                raise RuntimeError("broker offline")
+
+        ts = _FailStub(_balanced_mc())
+        ts.sio = _SioEventCapture()
+        service = AutoGhostService(ts, config=AutoGhostConfig(enabled=True))
+        result = await service.execute_ai_pulse_signal(asset="EURUSD_otc", direction="CALL")
+        self.assertIsNone(result)
+        aborted = self._aborted_events(ts)
+        self.assertEqual(len(aborted), 1)
+        self.assertIn("failed", aborted[0][1]["reason"].lower())
+
+
+class TestSnapshotRegimeKeysContract(unittest.TestCase):
+    """M1 remediation: snapshot reads regime_confidence/regime_stable from classifier-shaped dicts."""
+
+    def test_snapshot_populates_regime_keys_from_classifier_shape(self) -> None:
+        service = _make_streaming_service()
+        # Exact shape emitted by RegimeClassifier._emit()
+        service._last_regime["EURUSD_otc"] = {
+            "regime_label": "RANGE_BOUND",
+            "regime_confidence": 72.5,
+            "regime_detail": {"adx": 15.0},
+            "regime_prior": None,
+            "regime_stable": True,
+            "regime_persistence": 4,
+        }
+        ctx = service._get_asset_market_context_snapshot("EURUSD_otc")
+        self.assertAlmostEqual(ctx["regime_confidence"], 72.5)
+        self.assertTrue(ctx["regime_stable"])
+        self.assertEqual(ctx["regime_label"], "RANGE_BOUND")
+
+    def test_snapshot_without_regime_defaults_to_none(self) -> None:
+        service = _make_streaming_service()
+        ctx = service._get_asset_market_context_snapshot("EURUSD_otc")
+        self.assertIsNone(ctx.get("regime_confidence"))
+        self.assertIsNone(ctx.get("regime_stable"))
+
+
 if __name__ == "__main__":
     unittest.main()

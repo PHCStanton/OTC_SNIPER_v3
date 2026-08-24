@@ -851,15 +851,24 @@ class AutoGhostService:
             return None
 
         if not self.config.enabled:
+            reason = "Auto-Ghost disabled"
             logger.info("Auto-Ghost is disabled; skipping AI Pulse signal for %s", asset)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
         if asset in self._active_assets:
+            reason = "Asset already has an active trade"
             logger.info("Auto-Ghost already has active trade for %s; skipping AI Pulse signal", asset)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
         if len(self._active_assets) >= self.config.max_concurrent_trades:
+            reason = f"Max concurrent trades ({self.config.max_concurrent_trades}) reached"
             logger.info("Auto-Ghost max concurrent trades (%d) reached; skipping AI Pulse signal", self.config.max_concurrent_trades)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
         # Adaptive expiry resolution if not explicitly specified
@@ -927,8 +936,11 @@ class AutoGhostService:
             logger.info("Auto-Ghost executed AI Pulse trade: %s %s %ds", asset, direction, exp)
             return record
         except Exception as exc:
+            reason = f"Execution failed: {exc}"
             logger.error("Auto-Ghost AI Pulse trade failed for %s: %s", asset, exc)
             self._active_assets.discard(asset)
+            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
+                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
     async def schedule_candle_open_pulse_execution(

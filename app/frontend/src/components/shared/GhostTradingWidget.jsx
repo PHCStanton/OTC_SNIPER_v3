@@ -168,31 +168,51 @@ export default function GhostTradingWidget() {
         }
       };
 
+      // M11 fix: bind pending-card lifetime to terminal events, not the local clock.
+      // A trade_entry with trigger_mode="ai_pulse" means the setup actually executed —
+      // clear the card immediately regardless of the local countdown state.
+      const onTradeEntry = (data) => {
+        const triggerMode = data?.trigger_mode || data?.entry_context?.trigger_mode;
+        if (triggerMode !== 'ai_pulse') return;
+        setPendingPulseSignal((prev) => {
+          if (!prev) return null;
+          if (data?.asset_id && prev.asset && data.asset_id !== prev.asset) return prev;
+          return null;
+        });
+        setPulseSecondsLeft(0);
+      };
+
       socket.on('ai_pulse_pending', onPending);
       socket.on('ai_pulse_aborted', onAborted);
+      socket.on('trade_entry', onTradeEntry);
 
       return () => {
         socket.off('ai_pulse_pending', onPending);
         socket.off('ai_pulse_aborted', onAborted);
+        socket.off('trade_entry', onTradeEntry);
       };
     }
   }, []);
 
-  // Countdown timer for pending pulse setup
+  // Countdown timer for pending pulse setup (display only — never clears the card)
   useEffect(() => {
     if (!pendingPulseSignal) return;
     const timer = setInterval(() => {
-      setPulseSecondsLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setPendingPulseSignal(null);
-          return 0;
-        }
-        return prev - 1;
-      });
+      setPulseSecondsLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(timer);
   }, [pendingPulseSignal]);
+
+  // M11 fix: grace fallback — if the local clock reaches zero but no terminal event
+  // (trade_entry / ai_pulse_aborted) has arrived yet, hold the card for a short grace
+  // window so background-tab throttling cannot dismiss a setup that still executes.
+  useEffect(() => {
+    if (!pendingPulseSignal || pulseSecondsLeft > 0) return;
+    const graceTimer = setTimeout(() => {
+      setPendingPulseSignal(null);
+    }, 15000);
+    return () => clearTimeout(graceTimer);
+  }, [pendingPulseSignal, pulseSecondsLeft]);
 
   useEffect(() => {
     if (latestPulse?.suggestions) {
@@ -551,7 +571,8 @@ export default function GhostTradingWidget() {
                   </div>
                   <div className="text-right">
                     <span className="text-[7px] uppercase tracking-wider text-gray-400 block font-semibold">Entry In</span>
-                    <span className="text-xs font-black font-mono text-cyan-400">
+                    {/* M12 fix: tabular-nums keeps the MM:SS digits pixel-stable across ticks */}
+                    <span className="text-xs font-black font-mono text-cyan-400 tabular-nums">
                       {(() => {
                         const totalSec = Math.max(0, Math.round(pulseSecondsLeft || pendingPulseSignal.seconds_remaining || 0));
                         const mins = Math.floor(totalSec / 60);

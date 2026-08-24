@@ -354,12 +354,16 @@ class BayesianSignalFilter(BaseExtension):
         if outcome not in ("win", "loss"):
             return
 
-        # Duration/Horizon verification
+        # Duration/Horizon verification (fail-closed: skip when expiration is unresolvable)
         exp_sec = trade_data.get("expiration_seconds")
         if exp_sec is None and isinstance(trade_data.get("entry_context"), dict):
             exp_sec = trade_data["entry_context"].get("expiration_seconds")
         if exp_sec is None:
-            exp_sec = trade_data.get("expiration", 60)
+            logger.warning(
+                "BayesianSignalFilter skipped trade outcome: missing expiration_seconds for %s",
+                trade_data.get("asset", "unknown"),
+            )
+            return
 
         try:
             exp_int = int(exp_sec)

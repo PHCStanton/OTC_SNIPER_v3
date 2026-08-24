@@ -216,6 +216,10 @@ class HTFDirectionalBiasEngine:
         dir_upper = direction.upper()
         htf_data = self.compute_htf_trend(candles_1m)
         tick_flow_60s = self.compute_tick_flow_ratio(recent_ticks or [], window_seconds=60.0, current_ts=current_ts)
+        # L1 resolution: scoring deliberately uses ONLY the 60s micro-flow window (the
+        # horizon-matched signal). The 300s macro-flow is computed for reporting/telemetry
+        # in the result dict below and must NOT be added to the confluence score without
+        # recalibrating the calibrated_bayesian_floor thresholds.
         tick_flow_300s = self.compute_tick_flow_ratio(recent_ticks or [], window_seconds=300.0, current_ts=current_ts)
 
         macro_trend = htf_data["htf_trend"]
