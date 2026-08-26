@@ -475,5 +475,37 @@ class TestSnapshotRegimeKeysContract(unittest.TestCase):
         self.assertIsNone(ctx.get("regime_stable"))
 
 
+class TestStreamingSettingsForwardingContract(unittest.TestCase):
+    """Verify update_runtime_settings forwards all gate parameters, including zscore, to auto_ghost."""
+
+    def test_zscore_and_gate_settings_forwarded_to_auto_ghost(self) -> None:
+        service = _make_streaming_service()
+        service.level2_enabled = False
+        service.level3_enabled = False
+        service.oteo_ai_enabled = False
+        service.oteo_ai_execution_mode = "advisory"
+        service._streaming_active = False
+
+        ghost_service = AutoGhostService(_GateTradeServiceStub({}))
+        service.auto_ghost = ghost_service
+
+        # Update runtime settings with zscore gate configurations
+        service.update_runtime_settings(
+            auto_ghost_min_zscore_enabled=True,
+            auto_ghost_min_zscore=-1.25,
+            auto_ghost_max_zscore_enabled=True,
+            auto_ghost_max_zscore=2.5,
+            auto_ghost_regime_gate_enabled=True,
+        )
+
+        cfg = service.auto_ghost.config
+        self.assertTrue(cfg.min_zscore_enabled)
+        self.assertEqual(cfg.min_zscore, -1.25)
+        self.assertTrue(cfg.max_zscore_enabled)
+        self.assertEqual(cfg.max_zscore, 2.5)
+        self.assertTrue(cfg.regime_gate_enabled)
+
+
 if __name__ == "__main__":
     unittest.main()
+

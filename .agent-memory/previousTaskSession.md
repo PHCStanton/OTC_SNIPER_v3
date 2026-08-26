@@ -8,10 +8,13 @@
 ### Verification commands (all green as of session end)
 ```
 conda run -n QuFLX-v2 python -m pytest test_preflight_gate_contracts.py test_auto_ghost.py test_ghost_tick_safety.py test_htf_directional_bias.py test_pulse_trajectory_engine.py tests/test_bayesian_signal_filter.py tests/test_bayesian_prior_updater.py test_knowledge_base_retrieval.py
-→ 84 passed
+→ 85 passed
 npm --prefix app/frontend run build  → clean
 ```
 NOTE: do NOT chain these two with `;` in one line — conda run swallows the separator and passes it to pytest.
+
+### Post-Remediation Polish & Audit Fixes (2026-08-24)
+- **Z-Score Gate Forwarding Fix:** Added `auto_ghost_min_zscore_enabled`, `auto_ghost_min_zscore`, `auto_ghost_max_zscore_enabled`, `auto_ghost_max_zscore` to `_AUTO_GHOST_FORWARD_MAP` and `_param_values` in `streaming.py::update_runtime_settings`. Verified with new contract test in `test_preflight_gate_contracts.py::TestStreamingSettingsForwardingContract`.
 
 ### Phase 8 rewrite (executed 2026-08-24, user-approved per Core Principle #7)
 - **H3:** `AutoGhostService.update_config` rewritten as declarative spec tables (`_AUTO_GHOST_FIELD_SPECS` caster+bounds, `_AUTO_GHOST_LIST_CASTERS`, `_PLUGIN_MANAGED_CONFIG_FIELDS`) in `auto_ghost.py`; `streaming.py::update_runtime_settings` now forwards via `_AUTO_GHOST_FORWARD_MAP`. Explicit None = no-change preserved; unknown fields logged+ignored; disabled→enabled session reset side effect preserved.
