@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from time import time as unix_time
-from typing import Any
+from typing import Any, Callable
 
 from ..brokers.base import BrokerType
 from ..models.requests import TradeExecutionRequest
@@ -78,6 +78,10 @@ class AutoGhostConfig:
     cci_gate_enabled: bool = False
     bayesian_filter_enabled: bool = False
     bayesian_min_probability: float = 0.535
+    # Calibration Mode (Plan 26-08-26): "standard" | "calibration". Owned by
+    # CalibrationService via set_calibration_mode() — NOT exposed in the spec
+    # table, so it is never API/model-writable.
+    mode: str = "standard"
 
     def __post_init__(self):
         pass
@@ -132,7 +136,10 @@ _AUTO_GHOST_FIELD_SPECS: dict[str, tuple] = {
     "adx_gate_enabled": (bool, None, None),
     "cci_gate_enabled": (bool, None, None),
     "bayesian_filter_enabled": (bool, None, None),
-    "bayesian_min_probability": (float, None, None),
+    # P0-8 (REV1 M6): clamped to the same bounds as the API path (strategy.py
+    # ge=0.50, le=0.90). Prevents a model emitting percent-form 53.5 via the
+    # direct update_config path from setting an impossible win-probability floor.
+    "bayesian_min_probability": (float, 0.50, 0.90),
 }
 
 # List-valued config fields with per-item normalization (order-preserving).
@@ -157,6 +164,52 @@ _PLUGIN_MANAGED_CONFIG_FIELDS = frozenset({
     "hurst_l2_enabled",
     "hurst_l3_enabled",
 })
+
+# Phase 3 — Calibration Mode tiered autonomy (Plan 26-08-26 REV2).
+# Locked internals live on CalibrationService.CALIBRATION_LOCKED_FIELDS.
+CALIBRATION_TIER_A_FIELDS = frozenset({
+    "min_zscore_enabled",
+    "min_zscore",
+    "max_zscore_enabled",
+    "max_zscore",
+    "volatility_gate_enabled",
+    "min_volatility",
+    "max_volatility",
+    "liquidity_gate_enabled",
+    "min_liquidity",
+    "max_liquidity",
+    "min_confidence_enabled",
+    "min_confidence",
+    "max_confidence_enabled",
+    "max_confidence",
+    "regime_gate_enabled",
+    "allowed_regimes",
+    "manipulation_severity_threshold",
+    "per_asset_cooldown_seconds",
+    "bayesian_filter_enabled",
+    "bayesian_min_probability",
+})
+
+CALIBRATION_TIER_B_FIELDS = frozenset({
+    "amount",
+    "max_concurrent_trades",
+    "max_drawdown_amount",
+    "expiration_seconds",
+    "enabled",
+})
+
+CALIBRATION_GATE_FAMILIES: dict[str, frozenset[str]] = {
+    "zscore": frozenset({"min_zscore_enabled", "min_zscore", "max_zscore_enabled", "max_zscore"}),
+    "volatility": frozenset({"volatility_gate_enabled", "min_volatility", "max_volatility"}),
+    "liquidity": frozenset({"liquidity_gate_enabled", "min_liquidity", "max_liquidity"}),
+    "confidence": frozenset({
+        "min_confidence_enabled", "min_confidence", "max_confidence_enabled", "max_confidence",
+    }),
+    "regimes": frozenset({"regime_gate_enabled", "allowed_regimes"}),
+    "manipulation": frozenset({"manipulation_severity_threshold"}),
+    "cooldown": frozenset({"per_asset_cooldown_seconds"}),
+    "bayesian": frozenset({"bayesian_filter_enabled", "bayesian_min_probability"}),
+}
 
 
 class AutoGhostService:
@@ -189,6 +242,13 @@ class AutoGhostService:
         self._last_reject_reason_by_asset: dict[str, str] = {}
         self._reject_counts: dict[str, int] = {}
         self._session_trades: deque[dict[str, Any]] = deque(maxlen=200)
+        # Phase 1 (Calibration Mode): entry veto callback + settlement observers.
+        # Both are owned by CalibrationService wiring — never API-writable.
+        self._entry_veto_check: Callable[[], str | None] | None = None
+        self._outcome_observers: list[Callable[..., None]] = []
+        # H2 drain signal: settlements not yet emitted. Independent of
+        # `_active_assets` (capacity), which `_release_asset` can clear first.
+        self._in_flight_settlements: int = 0
 
     def _record_reject(self, asset: str, reason: str) -> None:
         self._last_reject_reason_by_asset[asset] = reason
@@ -231,30 +291,106 @@ class AutoGhostService:
         self._sync_extension_states()
 
         if self.config.enabled and (not previous_enabled or not self._session_id):
-            self._session_id = f"auto_ghost_{int(unix_time())}"
-            self._pending_signals.clear()
-            self._consecutive_losses.clear()
-            self._condition_stats.clear()
-            self._session_pnl = 0.0
-            self._session_trades = deque(maxlen=200)
-            self._session_trade_count = 0
-            self._session_wins = 0
-            self._session_losses = 0
-            self._session_halted = False
-            self._current_streak_type = None
-            self._current_streak_count = 0
-            self._max_win_streak = 0
-            self._max_loss_streak = 0
-            self._last_streak_start_time = unix_time()
-            self._avg_recovery_time = 0.0
-            self._total_recovery_sessions = 0
-            self._trade_timestamps.clear()
-            self._last_reject_reason_by_asset.clear()
-            self._reject_counts.clear()
+            self._reset_session()
             logger.info("Started Auto-Ghost session %s", self._session_id)
         elif not self.config.enabled and previous_enabled:
             self._pending_signals.clear()
         return self.status
+
+    def restore_config_snapshot(self, snapshot: dict[str, Any]) -> None:
+        """D4: force-apply a full config snapshot, including None values.
+
+        ``update_config`` treats None as "no change", which would leave
+        calibration-preset bounds (e.g. min_zscore=-2.5) stuck after DONE.
+        This path is CalibrationService-owned, not API-writable.
+        """
+        allowed = {f.name for f in fields(self.config) if f.name != "mode"}
+        kwargs = {k: v for k, v in snapshot.items() if k in allowed}
+        self.config = replace(self.config, **kwargs)
+        self._sync_extension_states()
+
+    def note_in_flight_settlement(self) -> None:
+        """Increment the H2 drain counter when a ghost trade starts tracking."""
+        self._in_flight_settlements += 1
+
+    def release_in_flight_settlement(self) -> None:
+        """Decrement after emit + report_outcome (or tracking failure)."""
+        if self._in_flight_settlements <= 0:
+            logger.warning("release_in_flight_settlement called with counter already 0")
+            self._in_flight_settlements = 0
+            return
+        self._in_flight_settlements -= 1
+
+    def _reset_session(self, session_id: str | None = None) -> None:
+        """Reset ghost session counters and mint a session id.
+
+        M1/M9: calibration runs mint `auto_ghost_calib_{epoch}` so milestone and
+        journal analytics stay isolated from live ghost history.
+        """
+        if self.config.mode == "calibration":
+            self._session_id = session_id or f"auto_ghost_calib_{int(unix_time())}"
+        else:
+            self._session_id = session_id or f"auto_ghost_{int(unix_time())}"
+        self._pending_signals.clear()
+        self._consecutive_losses.clear()
+        self._condition_stats.clear()
+        self._session_pnl = 0.0
+        self._session_trades = deque(maxlen=200)
+        self._session_trade_count = 0
+        self._session_wins = 0
+        self._session_losses = 0
+        self._session_halted = False
+        self._current_streak_type = None
+        self._current_streak_count = 0
+        self._max_win_streak = 0
+        self._max_loss_streak = 0
+        self._last_streak_start_time = unix_time()
+        self._avg_recovery_time = 0.0
+        self._total_recovery_sessions = 0
+        self._trade_timestamps.clear()
+        self._last_reject_reason_by_asset.clear()
+        self._reject_counts.clear()
+
+    def set_calibration_mode(self, active: bool, session_id: str | None = None) -> None:
+        """Enter/exit calibration mode (owned by CalibrationService — not API-writable).
+
+        Entering mints the dedicated `auto_ghost_calib_{epoch}` session explicitly
+        (bypassing update_config's enabled-transition reset condition).
+        Exiting re-mints a standard session id (only meaningful when enabled).
+        """
+        new_mode = "calibration" if active else "standard"
+        if self.config.mode == new_mode and not session_id:
+            return
+        self.config = replace(self.config, mode=new_mode)
+        if active:
+            self._reset_session(session_id=session_id)
+            logger.info("Calibration mode ENTERED (session %s)", self._session_id)
+        else:
+            # Always re-mint a standard session id on exit — the D4 restore may
+            # have set enabled=False, but a stale calib_* id must never survive
+            # into post-calibration sessions (M1/M9 isolation contract).
+            self._reset_session()
+            logger.info("Calibration mode EXITED")
+
+    def set_entry_veto_check(self, veto: Callable[[], str | None] | None) -> None:
+        """Register the entry-veto callback (Phase 1 M10 freeze / calibration gates)."""
+        self._entry_veto_check = veto
+
+    def add_outcome_observer(self, callback: Callable[..., None]) -> None:
+        """Register a settlement observer (invoked from report_outcome, sync context)."""
+        if callback not in self._outcome_observers:
+            self._outcome_observers.append(callback)
+
+    def remove_outcome_observer(self, callback: Callable[..., None]) -> None:
+        self._outcome_observers = [cb for cb in self._outcome_observers if cb is not callback]
+
+    def _notify_outcome_observers(self, **kwargs: Any) -> None:
+        """Notify observers of a settlement; observer errors are logged, never silent."""
+        for cb in self._outcome_observers:
+            try:
+                cb(**kwargs)
+            except Exception as obs_err:
+                logger.error("Outcome observer %s failed: %s", getattr(cb, "__name__", cb), obs_err)
 
     def _sync_extension_states(self) -> None:
         """Propagate current configuration flags dynamically to active extensions."""
@@ -337,6 +473,33 @@ class AutoGhostService:
             "auto_ghost_last_reject_reason_by_asset": dict(self._last_reject_reason_by_asset),
             "auto_ghost_reject_counts": dict(self._reject_counts),
         }
+
+    def status_for_live_poll(self) -> dict[str, Any]:
+        """C1/H1: status payload safe for the live `status_update.auto_ghost` key.
+
+        While calibration mode is active the Ghost widget still consumes this
+        object. Session PnL/WR/counts/ids are zeroed so calibration activity
+        cannot paint the live UI. Full metrics live under `status_update.calibration`.
+        """
+        payload = dict(self.status)
+        if getattr(self.config, "mode", "standard") != "calibration":
+            return payload
+        payload["auto_ghost_session_id"] = None
+        payload["auto_ghost_session_pnl"] = 0.0
+        payload["auto_ghost_session_trades"] = 0
+        payload["auto_ghost_session_wins"] = 0
+        payload["auto_ghost_session_losses"] = 0
+        payload["auto_ghost_current_streak_type"] = None
+        payload["auto_ghost_current_streak_count"] = 0
+        payload["auto_ghost_max_win_streak"] = 0
+        payload["auto_ghost_max_loss_streak"] = 0
+        payload["auto_ghost_avg_recovery_time_mins"] = 0.0
+        payload["auto_ghost_active_trades"] = 0
+        payload["auto_ghost_last_reject_reason_by_asset"] = {}
+        payload["auto_ghost_reject_counts"] = {}
+        payload["auto_ghost_drawdown_cooldown_active"] = False
+        payload["auto_ghost_session_halted"] = False
+        return payload
 
     def report_outcome(
         self,
@@ -468,6 +631,20 @@ class AutoGhostService:
                 logger.info("Trade count interval reached (%d trades). Triggering AI Suggestions in background.", self._session_trade_count)
                 task = asyncio.create_task(self._run_trade_count_suggestions())
                 task.add_done_callback(lambda t: logger.error("_run_trade_count_suggestions failed: %s", t.exception()) if not t.cancelled() and t.exception() else None)
+
+        # Phase 1 (Calibration Mode): settlement observers (M1 budget accounting,
+        # C4 kill-switch). Called for EVERY outcome including voids — the observer
+        # decides what counts as evidence.
+        if self._outcome_observers:
+            self._notify_outcome_observers(
+                trade_id=trade_id,
+                outcome=outcome,
+                profit=profit,
+                asset=asset,
+                entry_context=entry_context,
+                direction=direction,
+                expiration_seconds=expiration_seconds,
+            )
 
     def _reject(self, asset: str, reason: str) -> None:
         self._record_reject(asset, reason)
@@ -775,6 +952,11 @@ class AutoGhostService:
         manipulation: dict[str, Any],
         payout_pct: float | None = 100.0,
     ) -> dict[str, Any] | None:
+        # Phase 1 (Calibration Mode): entry veto (M10 freeze / state gates).
+        veto = self._entry_veto_check() if self._entry_veto_check else None
+        if veto:
+            return self._reject(asset, veto)
+
         # Defensive fallback: clean up active assets whose cooldowns have fully elapsed.
         # Only discard assets that have an explicit cooldown set AND it has elapsed;
         # assets currently mid-execution (no cooldown set yet) must be preserved.
@@ -867,6 +1049,37 @@ class AutoGhostService:
         )
         return result
 
+    async def _emit_pulse_channel(self, event: str, payload: dict[str, Any]) -> None:
+        """C1 (Phase 1): route ALL pulse pending/abort emissions through one helper.
+
+        While calibration mode is active, live pulse events are remapped to
+        `calibration_*` channels so the live UI hears nothing.
+        """
+        sio = getattr(self.trade_service, "sio", None)
+        if not sio:
+            return
+        if getattr(self.config, "mode", "standard") == "calibration":
+            await sio.emit(f"calibration_{event}", payload)
+        else:
+            await sio.emit(event, payload)
+
+    async def _emit_notification(self, payload: dict[str, Any]) -> None:
+        """H4 (Phase 1.1): route leftover advisory notifications off the live UI.
+
+        Live `notification` toasts (ai_advisory / AI confirmation) must not
+        fire during calibration. Kill-switch abort stays on the live channel
+        via CalibrationService._emit_loud_abort (intentional visibility).
+        """
+        sio = getattr(self.trade_service, "sio", None)
+        if not sio:
+            return
+        event = (
+            "calibration_notification"
+            if getattr(self.config, "mode", "standard") == "calibration"
+            else "notification"
+        )
+        await sio.emit(event, payload)
+
     async def execute_ai_pulse_signal(
         self,
         *,
@@ -880,25 +1093,29 @@ class AutoGhostService:
             logger.warning("Auto-Ghost rejected malformed AI Pulse asset: %r", asset)
             return None
 
+        # Phase 1 (Calibration Mode): entry veto (M10 freeze / state gates).
+        veto = self._entry_veto_check() if self._entry_veto_check else None
+        if veto:
+            logger.info("AI Pulse signal for %s vetoed: %s", asset, veto)
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": veto})
+            return None
+
         if not self.config.enabled:
             reason = "Auto-Ghost disabled"
             logger.info("Auto-Ghost is disabled; skipping AI Pulse signal for %s", asset)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
         if asset in self._active_assets:
             reason = "Asset already has an active trade"
             logger.info("Auto-Ghost already has active trade for %s; skipping AI Pulse signal", asset)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
         if len(self._active_assets) >= self.config.max_concurrent_trades:
             reason = f"Max concurrent trades ({self.config.max_concurrent_trades}) reached"
             logger.info("Auto-Ghost max concurrent trades (%d) reached; skipping AI Pulse signal", self.config.max_concurrent_trades)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
         # Adaptive expiry resolution if not explicitly specified
@@ -979,8 +1196,7 @@ class AutoGhostService:
             reason = f"Execution failed: {exc}"
             logger.error("Auto-Ghost AI Pulse trade failed for %s: %s", asset, exc)
             self._active_assets.discard(asset)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return None
 
     async def schedule_candle_open_pulse_execution(
@@ -1022,8 +1238,7 @@ class AutoGhostService:
         }
 
         # Emit WebSocket pending status to UI
-        if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-            await self.trade_service.sio.emit("ai_pulse_pending", pending_info)
+        await self._emit_pulse_channel("ai_pulse_pending", pending_info)
 
         # Wait until T - 5s before candle open for pre-flight validation
         pre_flight_wait = max(0.1, seconds_to_open - 5.0)
@@ -1034,8 +1249,7 @@ class AutoGhostService:
         if asset in self._active_assets or len(self._active_assets) >= self.config.max_concurrent_trades:
             reason = "Asset active or max concurrent trades reached"
             logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return
 
         # 2. Target Price Proximity Check (Option 2)
@@ -1051,8 +1265,7 @@ class AutoGhostService:
                 if deviation_pct > 0.4:
                     reason = f"Price ({current_p:.5f}) deviated {deviation_pct:.2f}% from target zone ({target_price:.5f})"
                     logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
-                    if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                        await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+                    await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
                     return
 
         # 3. Manipulation check
@@ -1064,8 +1277,7 @@ class AutoGhostService:
         if self.config.block_on_manipulation and max_sev >= self.config.manipulation_severity_threshold and self.config.manipulation_severity_threshold > 0:
             reason = f"Manipulation spike ({max_sev:.2f}) >= threshold ({self.config.manipulation_severity_threshold:.2f})"
             logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return
 
         # 4. Multi-Scale HTF Directional Bias check
@@ -1083,8 +1295,7 @@ class AutoGhostService:
         if confluence.get("veto"):
             reason = str(confluence.get("veto_reason") or "HTF Directional Bias Veto")
             logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
-            if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+            await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return
 
         # 5. Bayesian Win Probability floor check (51% - 56%) - fail-closed (C2 fix)
@@ -1094,14 +1305,12 @@ class AutoGhostService:
             if b_prob is None:
                 reason = "Bayesian win probability unavailable (fail-closed: filter enabled but no WP computed yet)"
                 logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
-                if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                    await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+                await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
                 return
             if float(b_prob) < calibrated_floor:
                 reason = f"Bayesian probability ({float(b_prob)*100:.1f}%) below floor ({calibrated_floor*100:.1f}%)"
                 logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)
-                if hasattr(self.trade_service, "sio") and self.trade_service.sio:
-                    await self.trade_service.sio.emit("ai_pulse_aborted", {"asset": asset, "reason": reason})
+                await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
                 return
 
         # Wait remaining time until EXACT T = 00.000s (New Candle Open)
@@ -1179,6 +1388,7 @@ class AutoGhostService:
 
         # Retrieve only high-confidence historical patterns (min sample N >= 20)
         kb_loader = KnowledgeBaseLoader.get_instance()
+        from shared.utc_time_blocks import utc_4h_block as _utc_4h_block
         matched_patterns = kb_loader.query_top_patterns(
             asset=asset,
             strategy_level=strategy_level,
@@ -1186,6 +1396,7 @@ class AutoGhostService:
             regime_label=regime_label,
             direction=direction,
             min_sample_size=20,
+            utc_4h_block=_utc_4h_block(unix_time()),
         )
         patterns_context = (
             format_patterns_for_prompt(matched_patterns)
@@ -1299,12 +1510,14 @@ class AutoGhostService:
             from .ai_review import KnowledgeBaseLoader
             kb_loader = KnowledgeBaseLoader.get_instance()
             regime_label = market_context.get("regime_label") or market_context.get("adx_regime", "unknown")
+            from shared.utc_time_blocks import utc_4h_block as _utc_4h_block
             matched_patterns = kb_loader.query_top_patterns(
                 asset=asset,
                 strategy_level=strategy_level,
                 oteo_score=oteo_score,
                 regime_label=regime_label,
                 direction=direction,
+                utc_4h_block=_utc_4h_block(unix_time()),
             )
             top_pattern_str = "No KB Match"
             if matched_patterns:
@@ -1313,7 +1526,7 @@ class AutoGhostService:
 
             msg = f"[AI Advisor] Trade Setup {direction} on {asset} reviewed. Decision: {response}. ({top_pattern_str})"
             if self.trade_service.sio:
-                await self.trade_service.sio.emit("notification", {
+                await self._emit_notification({
                     "type": "info" if confirmed else "warning",
                     "message": msg,
                     "timestamp": unix_time(),
@@ -1386,7 +1599,7 @@ class AutoGhostService:
             logger.info("AI Trade Count Suggestion generated: %s", ai_suggestion)
 
             if self.trade_service.sio:
-                await self.trade_service.sio.emit("notification", {
+                await self._emit_notification({
                     "type": "ai_advisory",
                     "message": ai_suggestion,
                     "timestamp": unix_time(),

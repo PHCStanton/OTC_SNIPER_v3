@@ -15,6 +15,7 @@ import MainLayout from './components/layout/MainLayout.jsx';
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx';
 import ComponentsPage from './components/dev/ComponentsPage.jsx';
 import { useNotificationStore } from './stores/useNotificationStore.js';
+import { useCalibrationStore } from './stores/useCalibrationStore.js';
 
 const VALID_TRADE_OUTCOMES = new Set(['win', 'loss', 'void']);
 
@@ -53,6 +54,35 @@ export default function App() {
       if (data.auto_ghost) {
         useRiskStore.getState().setAutoGhostMetrics(data.auto_ghost);
       }
+      if (data.calibration) {
+        useCalibrationStore.getState().applyStatus(data.calibration);
+      }
+    });
+
+    socket.on('calibration_status', (data) => {
+      useCalibrationStore.getState().applyStatus(data);
+    });
+
+    socket.on('calibration_milestone', (data) => {
+      useNotificationStore.getState().addNotification({
+        type: 'calibration_milestone',
+        message: data?.message || `Calibration milestone n=${data?.settled ?? '?'}`,
+        timestamp: data?.timestamp,
+        suggestions: data || null,
+      });
+    });
+
+    socket.on('calibration_final', (data) => {
+      if (data?.strictness_presets) {
+        useCalibrationStore.getState().setStrictnessPresets(data.strictness_presets);
+        useSettingsStore.getState().mergeGhostProtocols(data.strictness_presets);
+      }
+      useNotificationStore.getState().addNotification({
+        type: 'calibration_final',
+        message: data?.message || 'Calibration final report ready',
+        timestamp: data?.timestamp,
+        suggestions: data || null,
+      });
     });
 
     socket.on('trade_entry', (data) => {
@@ -111,9 +141,17 @@ export default function App() {
           });
 
           if (autoGhostCopyMode === 'execute') {
-            useTradingStore.getState().setDirection(data.direction);
-            useTradingStore.getState().setDuration(data.expiration_seconds);
-            useTradingStore.getState().executeTrade('pocket_option', data.asset);
+            if (useCalibrationStore.getState().locked) {
+              useToastStore.getState().addToast({
+                type: 'warning',
+                message: 'Copy & Execute is blocked while Calibration Mode is running.',
+                duration: 4000,
+              });
+            } else {
+              useTradingStore.getState().setDirection(data.direction);
+              useTradingStore.getState().setDuration(data.expiration_seconds);
+              useTradingStore.getState().executeTrade('pocket_option', data.asset);
+            }
           }
         } : undefined;
 
@@ -234,6 +272,9 @@ export default function App() {
       socket.off('trade_entry');
       socket.off('trade_result');
       socket.off('notification');
+      socket.off('calibration_status');
+      socket.off('calibration_milestone');
+      socket.off('calibration_final');
     };
   }, [setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType]);
 
@@ -241,6 +282,9 @@ export default function App() {
     let timer = null;
 
     const syncRuntimeConfig = async (state) => {
+      if (useCalibrationStore.getState().locked) {
+        return;
+      }
       try {
         await updateRuntimeStrategyConfig({
           oteo_level2_enabled: state.oteoLevel2Enabled,
@@ -289,6 +333,10 @@ export default function App() {
           ai_pulse_enabled: state.aiPulseEnabled,
           ai_pulse_interval_seconds: state.aiPulseIntervalSeconds,
           auto_ghost_auto_execute_ai_pulse: state.autoGhostAutoExecuteAiPulse,
+          auto_ghost_calibration_enabled: state.autoGhostCalibrationEnabled,
+          auto_ghost_calibration_duration_minutes: state.autoGhostCalibrationDurationMinutes,
+          auto_ghost_calibration_target_trades: state.autoGhostCalibrationTargetTrades,
+          auto_ghost_autonomy_tier: state.autoGhostCalibrationAutonomyTier,
         });
       } catch (err) {
         console.warn('[App] Failed to sync runtime strategy config:', err.message);

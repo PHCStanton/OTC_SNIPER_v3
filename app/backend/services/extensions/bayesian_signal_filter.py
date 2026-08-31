@@ -4,6 +4,7 @@ import math
 import logging
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 from collections import defaultdict
@@ -392,7 +393,8 @@ class BayesianSignalFilter(BaseExtension):
 
         try:
             committed = store.update_from_trades(
-                [{"won": won, "features": feature_keys}]
+                [{"won": won, "features": feature_keys}],
+                as_of_unix=time.time(),
             )
         except PriorStoreError as exc:
             logger.error("Failed to persist Bayesian trade outcome for %ds: %s", exp_int, exc)

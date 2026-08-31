@@ -23,7 +23,7 @@ export async function request(method, path, body) {
         })
         .join('; ');
     } else {
-      msg = data.detail || data.message || `HTTP ${res.status}`;
+      msg = data.detail || data.error || data.message || `HTTP ${res.status}`;
     }
     throw new Error(msg);
   }

@@ -108,6 +108,237 @@ def normalize_otc_asset_symbol(raw: str, allowed_assets: set[str] | list[str] | 
     return cleaned
 
 
+# ============================================================================
+# Phase 0 (Auto-Ghost Calibration Mode Plan 26-08-26): AI Pulse prompt
+# enrichment builders. Extracted as module-level pure functions so the prompt
+# contract is unit-testable without instantiating StreamingService.
+# ============================================================================
+
+def _fmt_or_unavailable(value: Any, fmt: str = "{:.1f}") -> str:
+    """Render a numeric value, or an explicit UNAVAILABLE marker when missing."""
+    if value is None:
+        return "UNAVAILABLE"
+    try:
+        return fmt.format(float(value))
+    except (TypeError, ValueError):
+        return "UNAVAILABLE"
+
+
+def _build_ai_pulse_system_msg() -> str:
+    """Build the AI Pulse system prompt.
+
+    P0-6 (M7): the fabricated `"confidence": 85` example line is removed — the
+    model must never be instructed to emit a made-up confidence; missing
+    confidence is treated as unspecified by the scheduler.
+    P0 contract (C2): `min_payout_pct` suggestions are expressed in PERCENT
+    (85.0-form) to match AutoGhostConfig.minimum_payout_pct, never 0-1.
+    """
+    return (
+        "You are OTC SNIPER's real-time AI market pulse and calibration assistant.\n"
+        "Your job is to write a highly informative, structured market insight and recommend trade setups and Ghost Controller gate settings.\n\n"
+        "CRITICAL INSTRUCTIONS:\n"
+        "1. Output a user-facing text insight message with structured formatting and emojis:\n"
+        "   - Emojis/Colors for Directions: Use 🟢 CALL for buy setups and 🔴 PUT for sell setups.\n"
+        "   - Format suggestion entries like: '🟢 CALL: EURUSD_otc | Target: 1.0850 | Wait: 2m'\n"
+        "   - Explicitly list '🔥 FOCUS:' (assets/regimes with high win rates/low risk) and '⚠️ AVOID:' (assets/regimes with high manipulation severity or choppiness).\n"
+        "   - Keep the total message under 120 words. Format with clean line breaks and section markers.\n"
+        "   - Tone must be professional, alert, and highly actionable.\n"
+        "2. If you identify a high-conviction trade setup or controller calibration, output it inside a strict JSON code block:\n"
+        "```json\n"
+        "{\n"
+        "  \"signal\": {\n"
+        "    \"asset\": \"EURUSD_otc\",\n"
+        "    \"direction\": \"CALL\",\n"
+        "    \"target_price\": 1.0850,\n"
+        "    \"wait_minutes\": 2,\n"
+        "    \"target_expiry_seconds\": 60\n"
+        "  },\n"
+        "  \"ghostAllowedRegimes\": [\"RANGE_BOUND\", \"TREND_PULLBACK\"],\n"
+        "  \"whitelistAssets\": [\"EURUSD_otc\"],\n"
+        "  \"blacklistAssets\": [\"AUDNZD_otc\"],\n"
+        "  \"min_payout_pct\": 87.0\n"
+        "}\n"
+        "```\n"
+        "If there is no clear actionable trade, omit the 'signal' key. Only suggest settings that need changing.\n"
+        "3. If there is insufficient data to make reliable gate suggestions, state in the message text that you are waiting for more trade results to calibrate.\n"
+        "4. Units and honesty contract:\n"
+        "   - 'min_payout_pct' MUST be expressed in PERCENT (e.g. 87.0 means an 87% payout floor), never as a 0-1 fraction.\n"
+        "   - NEVER emit a signal for an asset whose Payout is UNAVAILABLE or below the Minimum Payout Gate.\n"
+        "   - NEVER fabricate a 'confidence' value. Omit the 'confidence' key entirely unless the supplied data clearly supports an estimate; a missing confidence is treated as unspecified."
+    )
+
+
+def _build_pulse_asset_summary(
+    asset: str,
+    price: Any,
+    regime: str,
+    manip_severity: float,
+    cached_context: Dict[str, Any],
+    payout_pct: float | None,
+    bayesian_wp: Dict[str, Any] | None,
+    htf_summary: Dict[str, Any] | None,
+) -> str:
+    """Build one enriched per-asset summary line for the AI Pulse prompt.
+
+    P0-1 payout surfacing, P0-2 Bayesian WP, P0-3 HTF verdict, P0-4
+    volatility/liquidity readings. Every enriched field degrades to an explicit
+    UNAVAILABLE marker (fail loud in the prompt rather than silently omitting).
+    """
+    payout_str = (
+        f"Payout={payout_pct:.1f}%" if payout_pct is not None else "Payout=UNAVAILABLE"
+    )
+
+    if bayesian_wp:
+        wp60_str = _fmt_or_unavailable(bayesian_wp.get("bayesian_win_probability_60s"), "{:.3f}")
+        wp300_str = _fmt_or_unavailable(bayesian_wp.get("bayesian_win_probability_300s"), "{:.3f}")
+    else:
+        wp60_str = wp300_str = "UNAVAILABLE"
+
+    if htf_summary:
+        htf_str = (
+            f"HTF={htf_summary.get('htf_trend', 'UNAVAILABLE')} "
+            f"(5m:{htf_summary.get('trend_5m', 'UNAVAILABLE')}/15m:{htf_summary.get('trend_15m', 'UNAVAILABLE')}), "
+            f"TickFlow60={htf_summary.get('tick_flow_60s', 'UNAVAILABLE')}%, "
+            f"TickFlow300={htf_summary.get('tick_flow_300s', 'UNAVAILABLE')}%"
+        )
+    else:
+        htf_str = "HTF=UNAVAILABLE, TickFlow60=UNAVAILABLE, TickFlow300=UNAVAILABLE"
+
+    return (
+        f"- {asset}: Price={price}, Regime={regime}, Manipulation Severity={manip_severity:.2f}, "
+        f"{payout_str}, WP60={wp60_str}, WP300={wp300_str}, {htf_str}, "
+        f"Volatility={_fmt_or_unavailable(cached_context.get('volatility_score'))}, "
+        f"Liquidity={_fmt_or_unavailable(cached_context.get('liquidity_score'))}, "
+        f"ADX={cached_context.get('adx', 'N/A')}, CCI={cached_context.get('cci', 'N/A')} ({cached_context.get('cci_state', 'N/A')})"
+    )
+
+
+def _build_pulse_user_msg(
+    config,
+    summaries_str: str,
+    recent_trades_str: str,
+    is_insufficient: bool,
+    session_trade_count: int,
+    session_wins: int,
+    session_losses: int,
+    session_pnl: float,
+    rolling_stats: Dict[str, Any],
+    trajectory_analytics: Dict[str, Any],
+    lookback_seconds: int,
+) -> str:
+    """Build the AI Pulse user message with all Phase 0 enriched sections.
+
+    Adds: Minimum Payout Gate in percent units (C2), Bayesian floor, vol/liq
+    gate bands (P0-4), rolling last-N win rate + sample-size rule (P0-7), and
+    trajectory attribution distribution (P0-5).
+    """
+    allowed_regimes = config.allowed_regimes or []
+    min_z = config.min_zscore if config.min_zscore_enabled else "Disabled"
+    max_z = config.max_zscore if config.max_zscore_enabled else "Disabled"
+    manip_threshold = config.manipulation_severity_threshold if config.block_on_manipulation else "Disabled"
+    min_conf = config.min_confidence if config.min_confidence_enabled else "Disabled"
+    max_conf = config.max_confidence if config.max_confidence_enabled else "Disabled"
+    bayesian_floor = (
+        f"{float(config.bayesian_min_probability):.3f}" if config.bayesian_filter_enabled else "Disabled"
+    )
+    min_vol = config.min_volatility if config.volatility_gate_enabled else "Disabled"
+    max_vol = config.max_volatility if config.volatility_gate_enabled else "Disabled"
+    min_liq = config.min_liquidity if config.liquidity_gate_enabled else "Disabled"
+    max_liq = config.max_liquidity if config.liquidity_gate_enabled else "Disabled"
+
+    rolling_window = int(rolling_stats.get("window", 20))
+    rolling_wr = rolling_stats.get("win_rate")
+    rolling_wr_str = f"{float(rolling_wr):.1f}%" if rolling_wr is not None else "N/A"
+
+    total_traj = int(trajectory_analytics.get("total_trades", 0) or 0)
+    if total_traj:
+        trajectory_str = (
+            f"- Pulse Trajectory Attributions (last {total_traj} settled AI Pulse trades): "
+            f"CLEAN_WIN={trajectory_analytics.get('clean_wins', 0)}, "
+            f"PREMATURE_EXPIRATION={trajectory_analytics.get('premature_expirations', 0)}, "
+            f"MOMENTUM_EXHAUSTION={trajectory_analytics.get('momentum_exhaustions', 0)}, "
+            f"STRUCTURAL_TRAP={trajectory_analytics.get('structural_traps', 0)}, "
+            f"DIRECTIONAL_FAIL={trajectory_analytics.get('directional_fails', 0)}, "
+            f"Pulse WR={float(trajectory_analytics.get('win_rate', 0.0)):.1f}%"
+        )
+    else:
+        trajectory_str = "- Pulse Trajectory Attributions: UNAVAILABLE (no settled AI Pulse trajectories yet)"
+
+    return (
+        f"Active OTC Asset Data Summaries:\n"
+        f"{summaries_str}\n\n"
+        f"Current Controller Gates:\n"
+        f"- Allowed Regimes: {allowed_regimes} (Regime Gate Enabled: {config.regime_gate_enabled}, Require Regime Stable: {config.require_regime_stable})\n"
+        f"- Min Z-Score: {min_z}, Max Z-Score: {max_z}\n"
+        f"- Manipulation Gate Enabled: {config.block_on_manipulation} (Threshold: {manip_threshold})\n"
+        f"- Confidence Bounds: Min={min_conf}, Max={max_conf}\n"
+        f"- Bayesian Filter Enabled: {config.bayesian_filter_enabled} (Min Win Probability Floor: {bayesian_floor})\n"
+        f"- Volatility Gate: [{min_vol} .. {max_vol}] (Enabled: {config.volatility_gate_enabled})\n"
+        f"- Liquidity Gate: [{min_liq} .. {max_liq}] (Enabled: {config.liquidity_gate_enabled})\n"
+        f"- Minimum Payout Gate: {float(config.minimum_payout_pct):.1f}% (percent units; assets below this gate or with Payout=UNAVAILABLE must NOT receive signals)\n\n"
+        f"Active Session Performance:\n"
+        f"- Total Session Trades: {session_trade_count}\n"
+        f"- Win/Loss/PnL: Wins={session_wins}, Losses={session_losses}, PnL=${session_pnl:.2f}\n"
+        f"- Rolling Last-{rolling_window}-Trade Win Rate: {rolling_wr_str} (wins={rolling_stats.get('wins', 0)}, losses={rolling_stats.get('losses', 0)})\n"
+        f"- Sample-size rule: reliable gate suggestions require N>=20 settled outcomes per condition bucket; below that threshold treat evidence as directional hints only and prefer proposals over assertions.\n"
+        f"- Data Sufficiency Flag: {'INSUFFICIENT (Waiting for more trades)' if is_insufficient else 'SUFFICIENT'}\n\n"
+        f"{trajectory_str}\n\n"
+        f"Recent Session Trades under observation (Last {lookback_seconds}s lookback window):\n"
+        f"{recent_trades_str}\n\n"
+        f"Formulate a brief market pulse update, identifying actionable trade setups and calibration recommendations."
+    )
+
+
+def _extract_pulse_signal_from_text(
+    pulse_insight: str, allowed_assets: set[str] | list[str] | None = None
+) -> Dict[str, Any] | None:
+    """P0-6 (M7): regex fallback extraction when the JSON block omits 'signal'.
+
+    The previously fabricated `confidence: 85` is replaced with None — missing
+    confidence is treated as 'unspecified' by the scheduler, never as a made-up
+    value.
+    """
+    call_match = re.search(r'(?:🟢\s*(?:CALL|BUY)?[:\s]+|(?<!\w)CALL[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
+    put_match = re.search(r'(?:🔴\s*(?:PUT|SELL)?[:\s]+|(?<!\w)PUT[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
+
+    if call_match:
+        candidate = normalize_otc_asset_symbol(call_match.group(1), allowed_assets)
+        if candidate:
+            return {
+                "asset": candidate,
+                "direction": "CALL",
+                "target_price": float(call_match.group(2)) if call_match.group(2) else None,
+                "wait_minutes": int(call_match.group(3)) if call_match.group(3) else 1,
+                "target_expiry_seconds": 60,
+                "confidence": None,
+            }
+        return None
+    if put_match:
+        candidate = normalize_otc_asset_symbol(put_match.group(1), allowed_assets)
+        if candidate:
+            # M4 fix preserved: wait minutes captured within the PUT match span.
+            return {
+                "asset": candidate,
+                "direction": "PUT",
+                "target_price": float(put_match.group(2)) if put_match.group(2) else None,
+                "wait_minutes": int(put_match.group(3)) if put_match.group(3) else 1,
+                "target_expiry_seconds": 60,
+                "confidence": None,
+            }
+    return None
+
+
+def _pulse_notification_event_name(mode: str) -> str:
+    """C1/C5 (Phase 1): the AI Pulse notification surface during calibration.
+
+    Live UI pulse cards ride the `notification` event; during calibration the
+    same payload is remapped to `calibration_notification` so the live UI hears
+    nothing (milestone/final reports use dedicated calibration_* events in
+    Phase 3 — never `notification type=ai_pulse`).
+    """
+    return "calibration_notification" if mode == "calibration" else "notification"
+
+
 class StreamingService:
     """
     Manages per-asset analysis engines and routes data to Socket.IO.
@@ -130,6 +361,16 @@ class StreamingService:
         self.trade_service._get_market_context = self._get_asset_market_context_snapshot
         self.auto_ghost = AutoGhostService(self.trade_service)
         self.trade_service.set_auto_ghost(self.auto_ghost)
+        # Phase 1 (Calibration Mode): bind the CalibrationService singleton to
+        # this pipeline's AutoGhostService + Socket.IO server (single owner).
+        from .calibration_service import get_calibration_service
+        self.calibration_service = get_calibration_service(auto_ghost=self.auto_ghost, sio=sio_server)
+        self._calibration_prefs: Dict[str, Any] = {
+            "auto_ghost_calibration_enabled": False,
+            "auto_ghost_calibration_duration_minutes": 25,
+            "auto_ghost_calibration_target_trades": 24,
+            "auto_ghost_autonomy_tier": "tiered",
+        }
         self.extension_manager = ExtensionManager(on_reload=self.auto_ghost.clear_plugin_cache)
         self.auto_ghost.extension_manager = self.extension_manager
         self.auto_ghost.clear_plugin_cache()
@@ -231,7 +472,26 @@ class StreamingService:
         cci_gate_enabled: bool | None = None,
         bayesian_filter_enabled: bool | None = None,
         bayesian_min_probability: float | None = None,
+        # Phase 1: calibration preferences (inert config intents; Phase 2 UI consumes).
+        auto_ghost_calibration_enabled: bool | None = None,
+        auto_ghost_calibration_duration_minutes: int | None = None,
+        auto_ghost_calibration_target_trades: int | None = None,
+        auto_ghost_autonomy_tier: str | None = None,
     ) -> dict[str, Any]:
+        # C3 (Phase 1): runtime-config lock — while calibration is RUNNING/
+        # ANALYZING/PROPOSING, external writes are refused with 409 BEFORE any
+        # state mutation (the App.jsx 400ms debounced sync would otherwise
+        # overwrite the frozen preset mid-run and can wipe the sample).
+        from .calibration_service import CalibrationLockError
+        cal = getattr(self, "calibration_service", None)
+        if cal is not None and cal.is_locked():
+            logger.warning(
+                "update_runtime_settings refused: calibration %s is active (C3 lock).",
+                cal.calibration_id,
+            )
+            raise CalibrationLockError(
+                "Runtime configuration is locked while Calibration Mode is active."
+            )
 
         previous_level3_enabled = self.level3_enabled
         if level2_enabled is not None:
@@ -303,6 +563,15 @@ class StreamingService:
         # Always forwarded from local service state (unconditional, as before).
         ghost_updates["oteo_ai_enabled"] = self.oteo_ai_enabled
         ghost_updates["oteo_ai_execution_mode"] = self.oteo_ai_execution_mode
+
+        # Phase 1: store calibration preference intents (never applied here —
+        # calibration is started exclusively via POST /api/strategy/calibration/start).
+        self._calibration_prefs = {
+            "auto_ghost_calibration_enabled": bool(auto_ghost_calibration_enabled) if auto_ghost_calibration_enabled is not None else self._calibration_prefs.get("auto_ghost_calibration_enabled", False),
+            "auto_ghost_calibration_duration_minutes": int(auto_ghost_calibration_duration_minutes) if auto_ghost_calibration_duration_minutes is not None else self._calibration_prefs.get("auto_ghost_calibration_duration_minutes", 25),
+            "auto_ghost_calibration_target_trades": int(auto_ghost_calibration_target_trades) if auto_ghost_calibration_target_trades is not None else self._calibration_prefs.get("auto_ghost_calibration_target_trades", 24),
+            "auto_ghost_autonomy_tier": str(auto_ghost_autonomy_tier) if auto_ghost_autonomy_tier is not None else self._calibration_prefs.get("auto_ghost_autonomy_tier", "tiered"),
+        }
 
         auto_ghost_status = self.auto_ghost.update_config(**ghost_updates)
 
@@ -485,11 +754,14 @@ class StreamingService:
             )
             if fail_count >= 3 and self.sio:
                 try:
-                    await self.sio.emit("notification", {
-                        "type": "warning",
-                        "message": f"⚠ Payout unavailable for {asset} — ghost trades blocked until broker reconnects ({fail_count} consecutive failures)",
-                        "timestamp": now,
-                    })
+                    await self.sio.emit(
+                        _pulse_notification_event_name(getattr(self.auto_ghost.config, "mode", "standard")),
+                        {
+                            "type": "warning",
+                            "message": f"⚠ Payout unavailable for {asset} — ghost trades blocked until broker reconnects ({fail_count} consecutive failures)",
+                            "timestamp": now,
+                        },
+                    )
                 except Exception as sio_err:
                     logger.error("Failed to emit payout warning notification: %s", sio_err)
             return None
@@ -837,6 +1109,37 @@ class StreamingService:
         ctx["liquidity_score"] = ctx.get("liquidity_score", 50.0)
         return ctx
 
+    def _compute_pulse_htf_summary(self, asset: str) -> Dict[str, Any] | None:
+        """P0-3 (M5): direction-agnostic HTF trend + tick-flow summary for the pulse prompt.
+
+        No persistent HTF cache exists in streaming — directional confluence is
+        computed only at T-5s inside
+        AutoGhostService.schedule_candle_open_pulse_execution. The pulse prompt
+        therefore computes the verdict on demand from the live closed-candle and
+        recent-tick buffers. Returns None when the asset has no context engine
+        or computation fails (rendered as UNAVAILABLE in the prompt).
+        """
+        mc_engine = self._market_context_engines.get(asset)
+        if mc_engine is None:
+            return None
+        try:
+            from .htf_directional_bias import HTFDirectionalBiasEngine
+
+            htf_engine = HTFDirectionalBiasEngine.get_instance()
+            candles = list(getattr(mc_engine, "_closed_candles", None) or [])
+            ticks = list(self._recent_ticks.get(asset, ()) or ())
+            htf = htf_engine.compute_htf_trend(candles)
+            return {
+                "htf_trend": htf.get("htf_trend", "NEUTRAL"),
+                "trend_5m": htf.get("trend_5m", "NEUTRAL"),
+                "trend_15m": htf.get("trend_15m", "NEUTRAL"),
+                "tick_flow_60s": htf_engine.compute_tick_flow_ratio(ticks, window_seconds=60.0),
+                "tick_flow_300s": htf_engine.compute_tick_flow_ratio(ticks, window_seconds=300.0),
+            }
+        except Exception as exc:
+            logger.warning("HTF summary computation failed for %s: %s", asset, exc)
+            return None
+
     def clear_detector_buffers(self, asset: str) -> None:
         """Clear manipulation detector buffers (used on focus switch)."""
         if asset in self._manip_engines:
@@ -901,11 +1204,16 @@ class StreamingService:
             market_ctx = entry_ctx.get("market_context") or {}
             manip = entry_ctx.get("manipulation") or {}
             max_sev = max(manip.values()) if manip and manip.values() else 0.0
-            
+            # P0-1: surface the payout actually recorded at entry (may be None — M5).
+            trade_payout = entry_ctx.get("payout_pct")
+            trade_payout_str = (
+                f"{float(trade_payout):.1f}%" if trade_payout is not None else "UNAVAILABLE"
+            )
+
             trades_str_list.append(
                 f"- Trade {idx+1}: Asset={t.get('asset')}, Direction={t.get('direction')}, Outcome={t.get('outcome')}, "
                 f"PnL={t.get('pnl')}, Regime={t.get('regime_label', 'UNKNOWN')}, Z-Score={market_ctx.get('z_score', 'N/A')}, "
-                f"Manipulation Severity={max_sev:.2f}"
+                f"Payout={trade_payout_str}, Manipulation Severity={max_sev:.2f}"
             )
         recent_trades_str = "\n".join(trades_str_list) if trades_str_list else "No trades recorded."
 
@@ -922,10 +1230,18 @@ class StreamingService:
                 # Fetch recent manipulation
                 manip = self._last_manip_flags.get(asset, {})
                 max_sev = max(manip.values()) if manip and manip.values() else 0.0
-                
+
+                # P0-1: resolve payout via the existing TTL cache (async, off-loop adapter check).
+                payout_pct = await self._resolve_asset_payout_pct(asset)
+                # P0-2: latest Bayesian win probabilities (C2 remediation cache).
+                bayesian_wp = self._latest_bayesian_wp.get(asset)
+                # P0-3 (M5): no persistent HTF cache exists — compute on demand.
+                htf_summary = self._compute_pulse_htf_summary(asset)
+
                 asset_summaries.append(
-                    f"- {asset}: Price={price}, Regime={regime}, Manipulation Severity={max_sev:.2f}, "
-                    f"ADX={c.get('adx', 'N/A')}, CCI={c.get('cci', 'N/A')} ({c.get('cci_state', 'N/A')})"
+                    _build_pulse_asset_summary(
+                        asset, price, regime, max_sev, c, payout_pct, bayesian_wp, htf_summary
+                    )
                 )
 
         if not asset_summaries:
@@ -933,60 +1249,47 @@ class StreamingService:
 
         summaries_str = "\n".join(asset_summaries)
 
+        # P0-7: rolling last-20 settled-outcome win rate alongside session-lifetime stats.
+        settled_recent = [
+            t for t in trades if t.get("outcome") in {"win", "loss"}
+        ][-20:]
+        rolling_wins = sum(1 for t in settled_recent if t.get("outcome") == "win")
+        rolling_losses = len(settled_recent) - rolling_wins
+        rolling_stats = {
+            "window": 20,
+            "wins": rolling_wins,
+            "losses": rolling_losses,
+            "win_rate": (
+                round(rolling_wins / len(settled_recent) * 100.0, 1) if settled_recent else None
+            ),
+        }
+
+        # P0-5: pulse trajectory attribution distribution (fail soft to empty analytics).
+        try:
+            trajectory_analytics = PulseTrajectoryEngine.get_instance().get_trajectory_analytics()
+        except Exception as traj_err:
+            logger.warning("Trajectory analytics unavailable for AI Pulse prompt: %s", traj_err)
+            trajectory_analytics = {}
+
         # Retrieve current configuration
         config = self.auto_ghost.config
-        allowed_regimes = config.allowed_regimes or []
-        min_z = config.min_zscore if config.min_zscore_enabled else "Disabled"
-        max_z = config.max_zscore if config.max_zscore_enabled else "Disabled"
-        manip_threshold = config.manipulation_severity_threshold if config.block_on_manipulation else "Disabled"
-        min_conf = config.min_confidence if config.min_confidence_enabled else "Disabled"
-        max_conf = config.max_confidence if config.max_confidence_enabled else "Disabled"
 
-        system_msg = (
-            "You are OTC SNIPER's real-time AI market pulse and calibration assistant.\n"
-            "Your job is to write a highly informative, structured market insight and recommend trade setups and Ghost Controller gate settings.\n\n"
-            "CRITICAL INSTRUCTIONS:\n"
-            "1. Output a user-facing text insight message with structured formatting and emojis:\n"
-            "   - Emojis/Colors for Directions: Use 🟢 CALL for buy setups and 🔴 PUT for sell setups.\n"
-            "   - Format suggestion entries like: '🟢 CALL: EURUSD_otc | Target: 1.0850 | Wait: 2m'\n"
-            "   - Explicitly list '🔥 FOCUS:' (assets/regimes with high win rates/low risk) and '⚠️ AVOID:' (assets/regimes with high manipulation severity or choppiness).\n"
-            "   - Keep the total message under 120 words. Format with clean line breaks and section markers.\n"
-            "   - Tone must be professional, alert, and highly actionable.\n"
-            "2. If you identify a high-conviction trade setup or controller calibration, output it inside a strict JSON code block:\n"
-            "```json\n"
-            "{\n"
-            "  \"signal\": {\n"
-            "    \"asset\": \"EURUSD_otc\",\n"
-            "    \"direction\": \"CALL\",\n"
-            "    \"target_price\": 1.0850,\n"
-            "    \"wait_minutes\": 2,\n"
-            "    \"target_expiry_seconds\": 60,\n"
-            "    \"confidence\": 85\n"
-            "  },\n"
-            "  \"ghostAllowedRegimes\": [\"RANGE_BOUND\", \"TREND_PULLBACK\"],\n"
-            "  \"whitelistAssets\": [\"EURUSD_otc\"],\n"
-            "  \"blacklistAssets\": [\"AUDNZD_otc\"]\n"
-            "}\n"
-            "```\n"
-            "If there is no clear actionable trade, omit the 'signal' key. Only suggest settings that need changing.\n"
-            "3. If there is insufficient data to make reliable gate suggestions, state in the message text that you are waiting for more trade results to calibrate."
-        )
+        # Phase 0: enriched prompt contract builders (payout/WP/HTF/vol/liq/
+        # trajectory/rolling-WR; no fabricated confidence; percent-unit payout gate).
+        system_msg = _build_ai_pulse_system_msg()
 
-        user_msg = (
-            f"Active OTC Asset Data Summaries:\n"
-            f"{summaries_str}\n\n"
-            f"Current Controller Gates:\n"
-            f"- Allowed Regimes: {allowed_regimes} (Regime Gate Enabled: {config.regime_gate_enabled}, Require Regime Stable: {config.require_regime_stable})\n"
-            f"- Min Z-Score: {min_z}, Max Z-Score: {max_z}\n"
-            f"- Manipulation Gate Enabled: {config.block_on_manipulation} (Threshold: {manip_threshold})\n"
-            f"- Confidence Bounds: Min={min_conf}, Max={max_conf}\n\n"
-            f"Active Session Performance:\n"
-            f"- Total Session Trades: {self.auto_ghost._session_trade_count}\n"
-            f"- Win/Loss/PnL: Wins={self.auto_ghost._session_wins}, Losses={self.auto_ghost._session_losses}, PnL=${self.auto_ghost._session_pnl:.2f}\n"
-            f"- Data Sufficiency Flag: {'INSUFFICIENT (Waiting for more trades)' if is_insufficient else 'SUFFICIENT'}\n\n"
-            f"Recent Session Trades under observation (Last {interval}s lookback window):\n"
-            f"{recent_trades_str}\n\n"
-            f"Formulate a brief market pulse update, identifying actionable trade setups and calibration recommendations."
+        user_msg = _build_pulse_user_msg(
+            config=config,
+            summaries_str=summaries_str,
+            recent_trades_str=recent_trades_str,
+            is_insufficient=is_insufficient,
+            session_trade_count=self.auto_ghost._session_trade_count,
+            session_wins=self.auto_ghost._session_wins,
+            session_losses=self.auto_ghost._session_losses,
+            session_pnl=self.auto_ghost._session_pnl,
+            rolling_stats=rolling_stats,
+            trajectory_analytics=trajectory_analytics,
+            lookback_seconds=interval,
         )
 
         chat_req = AIChatRequest(
@@ -1021,37 +1324,11 @@ class StreamingService:
         # Text Regex Fallback if 'signal' object was omitted from JSON block
         extracted_signal = suggestions.get("signal") if isinstance(suggestions.get("signal"), dict) else None
         if not extracted_signal:
-            call_match = re.search(r'(?:🟢\s*(?:CALL|BUY)?[:\s]+|(?<!\w)CALL[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
-            put_match = re.search(r'(?:🔴\s*(?:PUT|SELL)?[:\s]+|(?<!\w)PUT[:\s]+)\s*([A-Za-z0-9_]+(?:\.otc|_otc)?)(?:.*?Target:\s*([\d.]+))?(?:.*?Wait:\s*(\d+)m?)?', pulse_insight, re.IGNORECASE)
-
-            if call_match:
-                candidate = normalize_otc_asset_symbol(call_match.group(1), getattr(self, "_allowed_assets", None))
-                if candidate:
-                    t_price = float(call_match.group(2)) if call_match.group(2) else None
-                    w_mins = int(call_match.group(3)) if call_match.group(3) else 1
-                    extracted_signal = {
-                        "asset": candidate,
-                        "direction": "CALL",
-                        "target_price": t_price,
-                        "wait_minutes": w_mins,
-                        "target_expiry_seconds": 60,
-                        "confidence": 85,
-                    }
-            elif put_match:
-                candidate = normalize_otc_asset_symbol(put_match.group(1), getattr(self, "_allowed_assets", None))
-                if candidate:
-                    t_price = float(put_match.group(2)) if put_match.group(2) else None
-                    # M4 fix: wait minutes captured within the PUT match span — the old
-                    # whole-text search could bleed a Wait value from a CALL line into PUT signals.
-                    w_mins = int(put_match.group(3)) if put_match.group(3) else 1
-                    extracted_signal = {
-                        "asset": candidate,
-                        "direction": "PUT",
-                        "target_price": t_price,
-                        "wait_minutes": w_mins,
-                        "target_expiry_seconds": 60,
-                        "confidence": 85,
-                    }
+            # P0-6 (M7): the fallback no longer fabricates confidence — missing
+            # confidence is treated as 'unspecified' by the scheduler.
+            extracted_signal = _extract_pulse_signal_from_text(
+                pulse_insight, getattr(self, "_allowed_assets", None)
+            )
         else:
             # Normalize and sanitize asset if signal was in JSON
             if extracted_signal.get("asset"):
@@ -1065,12 +1342,17 @@ class StreamingService:
             suggestions["signal"] = extracted_signal
 
         if self.sio:
-            await self.sio.emit("notification", {
-                "type": "ai_pulse",
-                "message": clean_insight,
-                "timestamp": time.time(),
-                "suggestions": suggestions or None,
-            })
+            # C1/C5 (Phase 1): route the pulse notification through the channel
+            # mapping — silent on live surfaces during calibration.
+            await self.sio.emit(
+                _pulse_notification_event_name(getattr(self.auto_ghost.config, "mode", "standard")),
+                {
+                    "type": "ai_pulse",
+                    "message": clean_insight,
+                    "timestamp": time.time(),
+                    "suggestions": suggestions or None,
+                },
+            )
 
         # Precision Auto-Execute on upcoming Candle Open (with T-5s Pre-Flight Validation)
         if self.auto_ghost.config.auto_execute_ai_pulse and extracted_signal:

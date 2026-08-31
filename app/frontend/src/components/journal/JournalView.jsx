@@ -29,6 +29,7 @@ import AdaptiveExpiriesCard from './AdaptiveExpiriesCard.jsx';
 import AIPulseTrajectoryCard from './AIPulseTrajectoryCard.jsx';
 import AISessionBriefingCard from './AISessionBriefingCard.jsx';
 import KnowledgeBaseStagingModal from './KnowledgeBaseStagingModal.jsx';
+import { isCalibrationSessionId } from '../../stores/useCalibrationStore.js';
 
 export default function JournalView() {
   const ghostTrades = useRiskStore((s) => s.ghostTrades);
@@ -45,6 +46,7 @@ export default function JournalView() {
   const [isStagingModalOpen, setIsStagingModalOpen] = useState(false);
   const [dateFrom, setDateFrom] = useState(null);
   const [dateTo, setDateTo] = useState(null);
+  const [showCalibrationSessions, setShowCalibrationSessions] = useState(false);
 
   // Fetch available sessions
   const loadSessions = async () => {
@@ -60,10 +62,12 @@ export default function JournalView() {
   };
 
   // Fetch quantitative journal stats for the chosen session / date range
-  const fetchJournalStats = async (sessionId, from, to) => {
+  const fetchJournalStats = async (sessionId, from, to, includeCalibration) => {
     setStatsLoading(true);
     try {
       let url = `/api/analysis/journal-stats?kind=ghost`;
+      const includeCalib = Boolean(includeCalibration);
+      url += `&include_calibration=${includeCalib ? 'true' : 'false'}`;
       // Date range takes precedence over session ID
       if (from || to) {
         if (from) url += `&date_from=${from}`;
@@ -82,10 +86,14 @@ export default function JournalView() {
     }
   };
 
+  const visibleSessions = showCalibrationSessions
+    ? sessionList
+    : sessionList.filter((s) => !isCalibrationSessionId(s.session_id));
+
   useEffect(() => {
     loadSessions();
-    fetchJournalStats(selectedSessionId, dateFrom, dateTo);
-  }, [selectedSessionId, dateFrom, dateTo]);
+    fetchJournalStats(selectedSessionId, dateFrom, dateTo, showCalibrationSessions);
+  }, [selectedSessionId, dateFrom, dateTo, showCalibrationSessions]);
 
   // Use real backend autoGhostMetrics for streaks and recovery time
   const currentStreakCount = autoGhostMetrics?.auto_ghost_current_streak_count || 0;
@@ -148,9 +156,9 @@ export default function JournalView() {
                 <option value="ALL" className="bg-[#21242c] text-amber-400">
                   ⭐ Multi-Session Aggregate (All Data)
                 </option>
-                {sessionList.map((s) => (
+                {visibleSessions.map((s) => (
                   <option key={s.session_id} value={s.session_id} className="bg-[#21242c] text-gray-200">
-                    {s.session_id} ({s.total_trades} trades, {s.win_rate.toFixed(0)}% WR)
+                    {isCalibrationSessionId(s.session_id) ? 'CALIB ' : ''}{s.session_id} ({s.total_trades} trades, {s.win_rate.toFixed(0)}% WR)
                   </option>
                 ))}
               </select>
@@ -158,7 +166,28 @@ export default function JournalView() {
           )}
 
           <button
-            onClick={() => fetchJournalStats(selectedSessionId, dateFrom, dateTo)}
+            type="button"
+            onClick={() => {
+              setShowCalibrationSessions((prev) => {
+                const next = !prev;
+                if (!next && isCalibrationSessionId(selectedSessionId)) {
+                  setSelectedSessionId('ALL');
+                }
+                return next;
+              });
+            }}
+            className={`px-3 py-1.5 rounded-lg border text-[10px] font-black uppercase tracking-wider transition-all ${
+              showCalibrationSessions
+                ? 'bg-cyan-500/20 border-cyan-400/40 text-cyan-200'
+                : 'bg-[#25282f] border-white/5 text-gray-400 hover:text-white'
+            }`}
+            title="Show Auto-Ghost calibration sessions in the journal"
+          >
+            Calibration
+          </button>
+
+          <button
+            onClick={() => fetchJournalStats(selectedSessionId, dateFrom, dateTo, showCalibrationSessions)}
             className="p-2 rounded-lg bg-[#25282f] border border-white/5 text-gray-400 hover:text-white hover:bg-[#2d3139] transition-all"
             title="Refresh Analytics"
           >

@@ -63,6 +63,10 @@ class ActivateProtocolRequest(BaseModel):
 class ImportProtocolRequest(BaseModel):
     content: str  # raw JSON string
 
+class KbBackfillRequest(BaseModel):
+    lookback_days: int = Field(default=56, ge=1, le=365)
+    half_life_days: float = Field(default=21.0, gt=0, le=120)
+
 @router.get("/sessions")
 async def get_sessions():
     """Load session list and daily statistical charts data."""
@@ -80,6 +84,7 @@ async def get_journal_stats(
     min_trades: int = Query(0, description="Minimum trades per session filter for aggregate"),
     date_from: str | None = Query(None, description="ISO date filter start (YYYY-MM-DD), inclusive"),
     date_to: str | None = Query(None, description="ISO date filter end (YYYY-MM-DD), inclusive"),
+    include_calibration: bool = Query(False, description="Include auto_ghost_calib_* sessions in ALL aggregates"),
 ):
     """
     Get deep quantitative metrics for the journal:
@@ -98,6 +103,7 @@ async def get_journal_stats(
             min_trades=min_trades,
             date_from=date_from,
             date_to=date_to,
+            include_calibration=include_calibration,
         )
     except Exception as e:
         logger.error("Failed to compute journal stats: %s", e, exc_info=True)
@@ -150,6 +156,78 @@ async def delete_staged_report(staged_id: str):
         raise
     except Exception as e:
         logger.error("Failed to delete staged report: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/kb-health")
+async def get_kb_health():
+    """Phase 4: pattern coverage, prior freshness, horizon-isolation integrity."""
+    try:
+        from ..services.kb_health import audit_kb_health, default_paths_from_settings
+        from ..config import get_settings
+        paths = default_paths_from_settings(get_settings())
+        return audit_kb_health(
+            kb_path=paths["kb_path"],
+            priors_60_path=paths["priors_60_path"],
+            priors_300_path=paths["priors_300_path"],
+            sessions_dir=paths["sessions_dir"],
+        )
+    except Exception as e:
+        logger.error("KB health audit failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/kb-backfill")
+async def post_kb_backfill(request: KbBackfillRequest):
+    """Phase 4: recency-weighted backfill. Staging-only — never writes master KB."""
+    try:
+        from ..services.kb_health import KbHealthError, default_paths_from_settings, stage_historical_backfill
+        from ..config import get_settings
+        paths = default_paths_from_settings(get_settings())
+        result = stage_historical_backfill(
+            sessions_dir=paths["sessions_dir"],
+            staged_path=paths["staged_path"],
+            warm_start_path=paths["warm_start_path"],
+            kb_path=paths["kb_path"],
+            priors_60_path=paths["priors_60_path"],
+            priors_300_path=paths["priors_300_path"],
+            lookback_days=request.lookback_days,
+            half_life_days=request.half_life_days,
+        )
+        return {
+            "staged_id": result["staged"]["staged_id"],
+            "status": result["staged"]["status"],
+            "source": result["staged"]["source"],
+            "window_trades": result["window_trades"],
+            "patterns_staged": len(result["staged"]["candidate_patterns"]),
+            "master_kb_written": result["master_kb_written"],
+            "master_priors_written": result["master_priors_written"],
+            "warm_start_expected_wr": result["warm_start"].get("expected_wr"),
+            "warm_start_path": result["staged"]["warm_start_path"],
+            "audit": result["audit"],
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        from ..services.kb_health import KbHealthError
+        if isinstance(e, KbHealthError):
+            raise HTTPException(status_code=400, detail=str(e))
+        logger.error("KB backfill failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/warm-start")
+async def get_warm_start():
+    """Phase 4 D7: Guardian warm-start baseline (recency-weighted expectation)."""
+    try:
+        from ..services.kb_health import default_paths_from_settings, load_warm_start_baseline
+        from ..config import get_settings
+        paths = default_paths_from_settings(get_settings())
+        baseline = load_warm_start_baseline(paths["warm_start_path"])
+        if baseline is None:
+            raise HTTPException(status_code=404, detail="Warm-start baseline has not been generated. Run KB backfill first.")
+        return baseline
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to load warm-start baseline: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/commit-staged-to-knowledge-base")

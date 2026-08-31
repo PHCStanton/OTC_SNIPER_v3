@@ -8,6 +8,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import logging
 
+from ..services.calibration_service import (
+    CalibrationError,
+    CalibrationStateError,
+    get_calibration_service,
+)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/strategy", tags=["strategy"])
@@ -61,6 +67,14 @@ class RuntimeStrategyConfigRequest(BaseModel):
     ai_pulse_enabled: bool = Field(default=False)
     ai_pulse_interval_seconds: int = Field(default=120, ge=10, le=3600)
     auto_ghost_auto_execute_ai_pulse: bool = Field(default=False)
+
+    # Phase 1 (Calibration Mode): preference intents forwarded through the
+    # runtime-settings pipeline. Starting/stopping is done exclusively via
+    # POST /api/strategy/calibration/start|stop.
+    auto_ghost_calibration_enabled: bool = Field(default=False)
+    auto_ghost_calibration_duration_minutes: int = Field(default=25, ge=1, le=240)
+    auto_ghost_calibration_target_trades: int = Field(default=24, ge=4, le=200)
+    auto_ghost_autonomy_tier: str = Field(default="tiered")
 
 
 @router.get("/runtime-config")
@@ -129,11 +143,82 @@ async def update_runtime_config(body: RuntimeStrategyConfigRequest, request: Req
             cci_gate_enabled=body.auto_ghost_cci_gate_enabled,
             bayesian_filter_enabled=body.auto_ghost_bayesian_filter_enabled,
             bayesian_min_probability=body.auto_ghost_bayesian_min_probability,
+            auto_ghost_calibration_enabled=body.auto_ghost_calibration_enabled,
+            auto_ghost_calibration_duration_minutes=body.auto_ghost_calibration_duration_minutes,
+            auto_ghost_calibration_target_trades=body.auto_ghost_calibration_target_trades,
+            auto_ghost_autonomy_tier=body.auto_ghost_autonomy_tier,
         )
-
         return JSONResponse(content={"ok": True, **config})
+    except CalibrationError as cal_exc:
+        logger.warning("Runtime config update refused by Calibration Mode: %s", cal_exc)
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(cal_exc), "reason": "calibration_locked"})
     except Exception as exc:
         logger.error("Failed to update runtime config: %s", exc)
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+
+
+# ── Calibration Mode (Phase 1 — Auto_Ghost_Calibration_Mode_Plan_26-08-26) ────
+
+class CalibrationStartRequest(BaseModel):
+    duration_minutes: int = Field(default=25, ge=1, le=240)
+    target_trades: int = Field(default=24, ge=4, le=200)
+    autonomy_tier: str = Field(default="tiered")
+
+
+@router.post("/calibration/start")
+async def start_calibration(body: CalibrationStartRequest | None, request: Request) -> JSONResponse:
+    try:
+        streaming_service = request.app.state.streaming_service
+        cal = get_calibration_service(
+            auto_ghost=getattr(streaming_service, "auto_ghost", None),
+            sio=getattr(streaming_service, "sio", None),
+        )
+        payload = body or CalibrationStartRequest()
+        status = await cal.start(
+            duration_minutes=payload.duration_minutes,
+            target_trades=payload.target_trades,
+            autonomy_tier=payload.autonomy_tier,
+        )
+        return JSONResponse(content={"ok": True, "calibration": status})
+    except CalibrationStateError as state_exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(state_exc), "reason": "invalid_state"})
+    except CalibrationError as cal_exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(cal_exc), "reason": "calibration_locked"})
+    except Exception as exc:
+        logger.error("Failed to start calibration: %s", exc)
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+
+
+@router.post("/calibration/stop")
+async def stop_calibration(request: Request) -> JSONResponse:
+    try:
+        streaming_service = request.app.state.streaming_service
+        cal = get_calibration_service(
+            auto_ghost=getattr(streaming_service, "auto_ghost", None),
+            sio=getattr(streaming_service, "sio", None),
+        )
+        status = await cal.stop(reason="user_requested")
+        return JSONResponse(content={"ok": True, "calibration": status})
+    except CalibrationStateError as state_exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(state_exc), "reason": "invalid_state"})
+    except CalibrationError as cal_exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(cal_exc), "reason": "calibration_locked"})
+    except Exception as exc:
+        logger.error("Failed to stop calibration: %s", exc)
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
+
+
+@router.get("/calibration/status")
+async def calibration_status(request: Request) -> JSONResponse:
+    try:
+        streaming_service = request.app.state.streaming_service
+        cal = get_calibration_service(
+            auto_ghost=getattr(streaming_service, "auto_ghost", None),
+            sio=getattr(streaming_service, "sio", None),
+        )
+        return JSONResponse(content={"ok": True, "calibration": cal.public_status()})
+    except Exception as exc:
+        logger.error("Failed to read calibration status: %s", exc)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
 
 

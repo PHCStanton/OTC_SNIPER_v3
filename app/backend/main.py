@@ -202,7 +202,11 @@ async def check_status(sid, _data=None):
             "session_id": snap.session_id,
             "balance": snap.balance,
         },
-        "auto_ghost": streaming_service.auto_ghost.status,
+        "auto_ghost": streaming_service.auto_ghost.status_for_live_poll(),
+        # Phase 1 (Calibration Mode): calibration metrics namespaced under their
+        # own key — the 5s poll response is client-scoped, and the widget (Phase 2)
+        # reads the frozen snapshot from here instead of editable gate values (C3).
+        "calibration": streaming_service.calibration_service.public_status(),
         "observed_at": datetime.now(timezone.utc).isoformat(),
     }
     await sio.emit("status_update", payload, to=sid)

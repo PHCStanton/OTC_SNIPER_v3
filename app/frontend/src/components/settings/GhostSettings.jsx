@@ -6,6 +6,7 @@ import {
   Ghost, Target, ShieldAlert, Activity, RefreshCcw, Save, Trash2, Plus, Zap, AlertTriangle, Play, Pause, Award, ChevronDown
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useCalibrationStore } from '../../stores/useCalibrationStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { useNotificationStore } from '../../stores/useNotificationStore.js';
@@ -13,7 +14,9 @@ import { SectionCard, InputGroup, NumberInput, Tooltip } from '../shared/StitchC
 import AdaptiveExpirySettings from '../shared/AdaptiveExpirySettings.jsx';
 
 export default function GhostSettings() {
+  const calibrationLocked = useCalibrationStore((s) => s.locked);
   const {
+
     ghostAmount,
     autoGhostEnabled,
     autoGhostCopyMode,
@@ -122,6 +125,12 @@ export default function GhostSettings() {
 
   return (
     <div className="max-w-[1400px] mx-auto p-8 space-y-8">
+      {calibrationLocked && (
+        <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/30 px-4 py-3 text-[11px] font-black uppercase tracking-wider text-cyan-200">
+          Calibration Mode is running — Ghost protocol edits and Copy & Execute are locked. Your saved protocol is restored when calibration ends.
+        </div>
+      )}
+      <div className={calibrationLocked ? 'pointer-events-none opacity-50' : undefined}>
       {/* Header Section */}
       <div className="flex items-end justify-between border-b border-white/5 pb-8">
         <div>
@@ -212,17 +221,19 @@ export default function GhostSettings() {
                   >
                     Only Copy
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutoGhostCopyMode('execute')}
-                    className={`flex-1 rounded-md py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
-                      autoGhostCopyMode === 'execute'
-                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Copy & Execute
-                  </button>
+                  {!calibrationLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setAutoGhostCopyMode('execute')}
+                      className={`flex-1 rounded-md py-3 text-[10px] font-black uppercase tracking-widest transition-all ${
+                        autoGhostCopyMode === 'execute'
+                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                          : 'text-gray-500 hover:text-white'
+                      }`}
+                    >
+                      Copy & Execute
+                    </button>
+                  )}
                 </div>
               </InputGroup>
 
@@ -813,6 +824,7 @@ export default function GhostSettings() {
 
 
         </div>
+      </div>
       </div>
     </div>
   );

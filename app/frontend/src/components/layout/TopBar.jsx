@@ -31,6 +31,7 @@ import { useOpsStore } from '../../stores/useOpsStore.js';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
+import { useCalibrationStore } from '../../stores/useCalibrationStore.js';
 import { useAIStore } from '../../stores/useAIStore.js';
 import { useNotificationStore } from '../../stores/useNotificationStore.js';
 import { chromeStart, chromeStop } from '../../api/opsApi.js';
@@ -70,6 +71,19 @@ export default function TopBar() {
 
   const { notifications, markAllAsRead, clearAll } = useNotificationStore();
   const unreadCount = notifications.filter((n) => n.unread).length;
+  const calibrationLocked = useCalibrationStore((s) => s.locked);
+
+  const toggleAutoGhost = () => {
+    if (useCalibrationStore.getState().locked) {
+      useToastStore.getState().addToast({
+        type: 'warning',
+        message: 'Ghost Protocol is locked while Calibration Mode is running.',
+        duration: 4000,
+      });
+      return;
+    }
+    setAutoGhostEnabled(!autoGhostEnabled);
+  };
   const [showNotifications, setShowNotifications] = useState(false);
   const [playingNotifId, setPlayingNotifId] = useState(null);
   const currentNotifAudioRef = useRef(null);
@@ -265,11 +279,13 @@ export default function TopBar() {
 
                   <button
                     onClick={() => {
-                      setAutoGhostEnabled(!autoGhostEnabled);
+                      toggleAutoGhost();
                       setShowGhostDropdown(false);
                     }}
                     className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-bold transition duration-300 ${
-                      autoGhostEnabled
+                      calibrationLocked
+                        ? 'opacity-50 cursor-not-allowed text-gray-500 border border-transparent'
+                        : autoGhostEnabled
                         ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/25'
                         : 'text-gray-300 hover:bg-[#ffb800]/10 hover:text-[#ffb800] border border-transparent'
                     }`}
@@ -785,11 +801,13 @@ export default function TopBar() {
 
                     <button
                       onClick={() => {
-                        setAutoGhostEnabled(!autoGhostEnabled);
+                        toggleAutoGhost();
                         setShowMobileMenu(false);
                       }}
                       className={`flex w-full items-center justify-between rounded-xl p-2.5 text-xs font-bold transition duration-300 ${
-                        autoGhostEnabled
+                        calibrationLocked
+                          ? 'opacity-50 cursor-not-allowed text-gray-500 border border-white/5'
+                          : autoGhostEnabled
                           ? 'bg-[#ffb800]/15 text-[#ffb800] border border-[#ffb800]/30'
                           : 'bg-[#1a1c22] text-gray-300 hover:bg-[#25282f] border border-white/5'
                       }`}

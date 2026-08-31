@@ -5,6 +5,95 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export const GHOST_STRICTNESS_PRESETS = {
+  relaxed: {
+    name: 'Relaxed',
+    gates: {
+      ghostMinZScore: -2.5,
+      ghostMinZScoreEnabled: true,
+      ghostMaxZScore: 2.5,
+      ghostMaxZScoreEnabled: true,
+      ghostRegimeGateEnabled: false,
+      ghostAllowedRegimes: [],
+      autoGhostVolatilityGateEnabled: false,
+      minVolatilityScore: 0,
+      maxVolatilityScore: 100,
+      autoGhostLiquidityGateEnabled: false,
+      minLiquidityScore: 0,
+      maxLiquidityScore: 100,
+      autoGhostBayesianFilterEnabled: true,
+      autoGhostBayesianMinProbability: 50,
+      autoGhostMinimumPayout: 85,
+      ghostAmount: 1,
+      autoGhostMaxConcurrentTrades: 3,
+      ghostMinConfidence: 70,
+      ghostMinConfidenceEnabled: true,
+      autoGhostManipulationSeverityThreshold: 0.35,
+    },
+  },
+  conservative: {
+    name: 'Conservative',
+    gates: {
+      ghostMinZScore: -1.5,
+      ghostMinZScoreEnabled: true,
+      ghostMaxZScore: 1.5,
+      ghostMaxZScoreEnabled: true,
+      ghostRegimeGateEnabled: false,
+      ghostAllowedRegimes: [],
+      autoGhostVolatilityGateEnabled: true,
+      minVolatilityScore: 20,
+      maxVolatilityScore: 80,
+      autoGhostLiquidityGateEnabled: true,
+      minLiquidityScore: 20,
+      maxLiquidityScore: 80,
+      autoGhostBayesianFilterEnabled: true,
+      autoGhostBayesianMinProbability: 53.5,
+      autoGhostMinimumPayout: 88,
+      ghostAmount: 1,
+      autoGhostMaxConcurrentTrades: 2,
+      ghostMinConfidence: 75,
+      ghostMinConfidenceEnabled: true,
+      autoGhostManipulationSeverityThreshold: 0.35,
+    },
+  },
+  strict: {
+    name: 'Strict',
+    gates: {
+      ghostMinZScore: -1.0,
+      ghostMinZScoreEnabled: true,
+      ghostMaxZScore: 1.0,
+      ghostMaxZScoreEnabled: true,
+      ghostRegimeGateEnabled: true,
+      ghostAllowedRegimes: ['RANGE_BOUND', 'TREND_REVERSAL'],
+      autoGhostVolatilityGateEnabled: true,
+      minVolatilityScore: 30,
+      maxVolatilityScore: 70,
+      autoGhostLiquidityGateEnabled: true,
+      minLiquidityScore: 40,
+      maxLiquidityScore: 100,
+      autoGhostBayesianFilterEnabled: true,
+      autoGhostBayesianMinProbability: 58,
+      autoGhostMinimumPayout: 90,
+      ghostAmount: 1,
+      autoGhostMaxConcurrentTrades: 1,
+      ghostMinConfidence: 80,
+      ghostMinConfidenceEnabled: true,
+      autoGhostManipulationSeverityThreshold: 0.45,
+    },
+  },
+};
+
+export const GHOST_PROTOCOL_GATE_KEYS = [
+  'ghostMinZScore', 'ghostMinZScoreEnabled', 'ghostMaxZScore', 'ghostMaxZScoreEnabled',
+  'ghostRegimeGateEnabled', 'ghostAllowedRegimes',
+  'autoGhostVolatilityGateEnabled', 'minVolatilityScore', 'maxVolatilityScore',
+  'autoGhostLiquidityGateEnabled', 'minLiquidityScore', 'maxLiquidityScore',
+  'autoGhostBayesianFilterEnabled', 'autoGhostBayesianMinProbability',
+  'autoGhostMinimumPayout', 'ghostAmount', 'autoGhostMaxConcurrentTrades',
+  'ghostMinConfidence', 'ghostMinConfidenceEnabled',
+  'autoGhostManipulationSeverityThreshold',
+];
+
 export const SETTINGS_DEFAULTS = {
   // OTEO configuration
   oteoEnabled: true,
@@ -63,6 +152,10 @@ export const SETTINGS_DEFAULTS = {
   autoGhostBayesianFilterEnabled: false,
   autoGhostBayesianMinProbability: 53.5,
   autoGhostAutoExecuteAiPulse: false,
+  autoGhostCalibrationEnabled: false,
+  autoGhostCalibrationDurationMinutes: 25,
+  autoGhostCalibrationTargetTrades: 24,
+  autoGhostCalibrationAutonomyTier: 'tiered',
 
 
   // Trade Markers
@@ -220,6 +313,12 @@ export function validateSettings(input = {}) {
     autoGhostBayesianFilterEnabled: toBoolean(input.autoGhostBayesianFilterEnabled, SETTINGS_DEFAULTS.autoGhostBayesianFilterEnabled),
     autoGhostBayesianMinProbability: toNumber(input.autoGhostBayesianMinProbability, SETTINGS_DEFAULTS.autoGhostBayesianMinProbability, { min: 50, max: 90, integer: true }),
     autoGhostAutoExecuteAiPulse: toBoolean(input.autoGhostAutoExecuteAiPulse, SETTINGS_DEFAULTS.autoGhostAutoExecuteAiPulse),
+    autoGhostCalibrationEnabled: toBoolean(input.autoGhostCalibrationEnabled, SETTINGS_DEFAULTS.autoGhostCalibrationEnabled),
+    autoGhostCalibrationDurationMinutes: toNumber(input.autoGhostCalibrationDurationMinutes, SETTINGS_DEFAULTS.autoGhostCalibrationDurationMinutes, { min: 1, max: 240, integer: true }),
+    autoGhostCalibrationTargetTrades: toNumber(input.autoGhostCalibrationTargetTrades, SETTINGS_DEFAULTS.autoGhostCalibrationTargetTrades, { min: 4, max: 200, integer: true }),
+    autoGhostCalibrationAutonomyTier: ['tiered', 'propose', 'locked'].includes(input.autoGhostCalibrationAutonomyTier)
+      ? input.autoGhostCalibrationAutonomyTier
+      : SETTINGS_DEFAULTS.autoGhostCalibrationAutonomyTier,
 
 
 
@@ -408,44 +507,82 @@ export const useSettingsStore = create()(
       setAutoGhostBayesianFilterEnabled: (val) => commitSettingsPatch(set, { autoGhostBayesianFilterEnabled: val }),
       setAutoGhostBayesianMinProbability: (val) => commitSettingsPatch(set, { autoGhostBayesianMinProbability: val }),
       setAutoGhostAutoExecuteAiPulse: (val) => commitSettingsPatch(set, { autoGhostAutoExecuteAiPulse: val }),
+      setAutoGhostCalibrationEnabled: (val) => commitSettingsPatch(set, { autoGhostCalibrationEnabled: val }),
+      setAutoGhostCalibrationDurationMinutes: (val) => commitSettingsPatch(set, { autoGhostCalibrationDurationMinutes: val }),
+      setAutoGhostCalibrationTargetTrades: (val) => commitSettingsPatch(set, { autoGhostCalibrationTargetTrades: val }),
+      setAutoGhostCalibrationAutonomyTier: (val) => commitSettingsPatch(set, { autoGhostCalibrationAutonomyTier: val }),
+
+      applyGhostProtocolGates: (gates, protocolKey) => {
+        set((state) => {
+          const g = gates && typeof gates === 'object' ? gates : {};
+          const patch = {
+            ...state,
+            activeGhostProtocol: protocolKey || state.activeGhostProtocol,
+            ghostMinZScoreEnabled: g.ghostMinZScoreEnabled ?? g.minZScoreEnabled ?? state.ghostMinZScoreEnabled,
+            ghostMinZScore: g.ghostMinZScore ?? g.minZScore ?? state.ghostMinZScore,
+            ghostMaxZScoreEnabled: g.ghostMaxZScoreEnabled ?? g.maxZScoreEnabled ?? state.ghostMaxZScoreEnabled,
+            ghostMaxZScore: g.ghostMaxZScore ?? g.maxZScore ?? state.ghostMaxZScore,
+            ghostRegimeGateEnabled: g.ghostRegimeGateEnabled ?? g.regimeGateEnabled ?? state.ghostRegimeGateEnabled,
+            ghostAllowedRegimes: g.ghostAllowedRegimes ?? g.allowedRegimes ?? state.ghostAllowedRegimes,
+            ghostRequireRegimeStable: g.ghostRequireRegimeStable ?? g.requireRegimeStable ?? state.ghostRequireRegimeStable,
+            autoGhostVolatilityGateEnabled: g.autoGhostVolatilityGateEnabled ?? state.autoGhostVolatilityGateEnabled,
+            minVolatilityScore: g.minVolatilityScore ?? state.minVolatilityScore,
+            maxVolatilityScore: g.maxVolatilityScore ?? state.maxVolatilityScore,
+            autoGhostLiquidityGateEnabled: g.autoGhostLiquidityGateEnabled ?? state.autoGhostLiquidityGateEnabled,
+            minLiquidityScore: g.minLiquidityScore ?? state.minLiquidityScore,
+            maxLiquidityScore: g.maxLiquidityScore ?? state.maxLiquidityScore,
+            autoGhostBayesianFilterEnabled: g.autoGhostBayesianFilterEnabled ?? state.autoGhostBayesianFilterEnabled,
+            autoGhostBayesianMinProbability: g.autoGhostBayesianMinProbability ?? state.autoGhostBayesianMinProbability,
+            autoGhostMinimumPayout: g.autoGhostMinimumPayout ?? state.autoGhostMinimumPayout,
+            ghostAmount: g.ghostAmount ?? state.ghostAmount,
+            autoGhostMaxConcurrentTrades: g.autoGhostMaxConcurrentTrades ?? state.autoGhostMaxConcurrentTrades,
+            ghostMinConfidence: g.ghostMinConfidence ?? state.ghostMinConfidence,
+            ghostMinConfidenceEnabled: g.ghostMinConfidenceEnabled ?? state.ghostMinConfidenceEnabled,
+            autoGhostManipulationSeverityThreshold: g.autoGhostManipulationSeverityThreshold ?? state.autoGhostManipulationSeverityThreshold,
+          };
+          return { ...state, ...validateSettings(patch) };
+        });
+      },
+
+      mergeGhostProtocols: (incoming) => {
+        set((state) => {
+          const next = { ...(state.ghostProtocols || {}) };
+          const source = incoming && typeof incoming === 'object' ? incoming : {};
+          Object.entries(source).forEach(([key, proto]) => {
+            if (!proto || typeof proto !== 'object') return;
+            next[key] = {
+              name: proto.name || proto.label || key,
+              gates: proto.gates || proto,
+            };
+          });
+          return { ...state, ghostProtocols: next };
+        });
+      },
 
       loadGhostProtocol: (key) => {
-        set((state) => {
-          const protocols = state.ghostProtocols || {};
-          const proto = protocols[key];
-          if (!proto) {
-            if (key === 'default') {
-              return {
-                ...state,
-                ...validateSettings({
-                  ...state,
-                  activeGhostProtocol: 'default',
-                  ghostMinZScoreEnabled: false,
-                  ghostMaxZScoreEnabled: false,
-                  ghostRegimeGateEnabled: false,
-                  ghostAllowedRegimes: [],
-                  ghostRequireRegimeStable: false,
-                })
-              };
-            }
-            return state;
+        const state = useSettingsStore.getState();
+        const builtin = GHOST_STRICTNESS_PRESETS[key];
+        const stored = (state.ghostProtocols || {})[key];
+        if (!stored && !builtin) {
+          if (key === 'default') {
+            set((prev) => ({
+              ...prev,
+              ...validateSettings({
+                ...prev,
+                activeGhostProtocol: 'default',
+                ghostMinZScoreEnabled: false,
+                ghostMaxZScoreEnabled: false,
+                ghostRegimeGateEnabled: false,
+                ghostAllowedRegimes: [],
+                ghostRequireRegimeStable: false,
+              }),
+            }));
           }
-          const gates = proto.gates || {};
-          return {
-            ...state,
-            ...validateSettings({
-              ...state,
-              activeGhostProtocol: key,
-              ghostMinZScoreEnabled: gates.minZScoreEnabled ?? false,
-              ghostMinZScore: gates.minZScore ?? -0.5,
-              ghostMaxZScoreEnabled: gates.maxZScoreEnabled ?? false,
-              ghostMaxZScore: gates.maxZScore ?? 1.5,
-              ghostRegimeGateEnabled: gates.regimeGateEnabled ?? false,
-              ghostAllowedRegimes: gates.allowedRegimes ?? [],
-              ghostRequireRegimeStable: gates.requireRegimeStable ?? false,
-            })
-          };
-        });
+          return;
+        }
+        const proto = stored || builtin;
+        const gates = proto.gates || proto;
+        useSettingsStore.getState().applyGhostProtocolGates(gates, key);
       },
 
       setShowGhostEntryMarkers: (val) => commitSettingsPatch(set, { showGhostEntryMarkers: val }),

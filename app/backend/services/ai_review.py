@@ -406,6 +406,7 @@ class KnowledgeBaseLoader:
         direction: str | None = None,
         top_n: int = 5,
         min_sample_size: int = 5,
+        utc_4h_block: int | None = None,
     ) -> list[dict[str, Any]]:
         if not self.loaded:
             self.lazy_load()
@@ -417,6 +418,7 @@ class KnowledgeBaseLoader:
         target_level = strategy_level.strip().lower() if strategy_level else None
         target_regime = regime_label.strip().upper() if regime_label else None
         target_direction = direction.strip().upper() if direction else None
+        target_block = int(utc_4h_block) if utc_4h_block is not None else None
 
         scored_patterns = []
         for p in self.patterns:
@@ -428,6 +430,14 @@ class KnowledgeBaseLoader:
             p_regime = p.get("regime_label", "").strip().upper()
             p_band = p.get("oteo_score_band", "").strip()
             p_dir = p.get("direction", "").strip().upper()
+            p_block = p.get("utc_4h_block")
+            if p_block is None:
+                key = str(p.get("pattern_key") or "")
+                if "utc4h:" in key:
+                    try:
+                        p_block = int(key.rsplit("utc4h:", 1)[-1])
+                    except ValueError:
+                        p_block = None
 
             if clean_asset:
                 if p_asset == clean_asset:
@@ -448,6 +458,13 @@ class KnowledgeBaseLoader:
             if target_direction:
                 if p_dir == target_direction:
                     similarity += 2
+
+            if target_block is not None and p_block is not None:
+                try:
+                    if int(p_block) == target_block:
+                        similarity += 4
+                except (TypeError, ValueError):
+                    pass
 
             min_required = 0
             if clean_asset:
@@ -489,7 +506,9 @@ def format_patterns_for_prompt(patterns: list[dict[str, Any]]) -> str:
         exp = p.get("expectancy", 0.0)
         boost = "YES" if p.get("boost_candidate") else "NO"
         suppress = "YES" if p.get("suppression_candidate") else "NO"
+        utc_label = p.get("utc_4h_label")
+        utc_bit = f", UTC4h={utc_label}" if utc_label else ""
         lines.append(
-            f"- {key}: N={n}, WinRate={wr:.1f}%, Expectancy={exp:.2f} (Boost: {boost}, Suppress: {suppress})"
+            f"- {key}: N={n}, WinRate={wr:.1f}%, Expectancy={exp:.2f}{utc_bit} (Boost: {boost}, Suppress: {suppress})"
         )
     return "\n".join(lines)

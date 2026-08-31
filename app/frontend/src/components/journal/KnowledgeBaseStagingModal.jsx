@@ -443,6 +443,13 @@ export default function KnowledgeBaseStagingModal({ isOpen, onClose }) {
                             {r.status}
                           </span>
                         </div>
+                        {r.source === 'kb_backfill' && (
+                          <div className="mb-1">
+                            <span className="px-1.5 py-0.2 rounded text-[7px] font-black uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                              Recency backfill
+                            </span>
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-between text-[9px] font-mono text-gray-400">
                           <span>{r.total_trades} trades</span>
@@ -641,6 +648,7 @@ export default function KnowledgeBaseStagingModal({ isOpen, onClose }) {
                         <tr>
                           <th className="py-2 px-3 w-8"></th>
                           <th className="py-2">Pattern Key</th>
+                          <th className="py-2">UTC 4h</th>
                           <th className="py-2">Sample</th>
                           <th className="py-2">Win Rate</th>
                           <th className="py-2">Expectancy</th>
@@ -668,6 +676,9 @@ export default function KnowledgeBaseStagingModal({ isOpen, onClose }) {
                                 />
                               </td>
                               <td className="py-1.5 text-white font-sans font-bold">{p.pattern_key}</td>
+                              <td className="py-1.5 text-cyan-300 font-mono">
+                                {p.utc_4h_label || (p.utc_4h_block != null ? `B${p.utc_4h_block}` : '—')}
+                              </td>
                               <td className="py-1.5 text-gray-400">{p.sample_size}</td>
                               <td className="py-1.5 font-bold">
                                 <span className={p.win_rate_pct >= 50 ? 'text-emerald-400' : 'text-rose-400'}>

@@ -11,6 +11,8 @@ import { useAIStore } from '../../stores/useAIStore.js';
 import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award, ChevronDown, RotateCcw } from 'lucide-react';
 import { Tooltip } from './StitchComponents.jsx';
 import { getSocket } from '../../api/socketClient.js';
+import CalibrationPanel from './CalibrationPanel.jsx';
+import { useCalibrationStore } from '../../stores/useCalibrationStore.js';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
 import bobble from '../../../assets/bobble.gif';
@@ -194,6 +196,19 @@ export default function GhostTradingWidget() {
     }
   }, []);
 
+  useEffect(() => {
+    let socket;
+    try {
+      socket = getSocket();
+    } catch {
+      return undefined;
+    }
+    if (!socket) return undefined;
+    const onStatus = (data) => useCalibrationStore.getState().applyStatus(data);
+    socket.on('calibration_status', onStatus);
+    return () => socket.off('calibration_status', onStatus);
+  }, []);
+
   // Countdown timer for pending pulse setup (display only — never clears the card)
   useEffect(() => {
     if (!pendingPulseSignal) return;
@@ -251,26 +266,19 @@ export default function GhostTradingWidget() {
   };
 
   const handleUpdateGhostProtocol = (suggestions, selectedWhitelist = null, selectedBlacklist = null) => {
+    if (useCalibrationStore.getState().locked) {
+      useToastStore.getState().addToast({
+        type: 'warning',
+        message: 'Ghost Protocol is locked while Calibration Mode is running.',
+      });
+      return;
+    }
     if (!suggestions) return;
 
-    if (suggestions.ghostMinConfidence !== undefined) setGhostMinConfidence(suggestions.ghostMinConfidence);
-    if (suggestions.ghostMinConfidenceEnabled !== undefined) setGhostMinConfidenceEnabled(suggestions.ghostMinConfidenceEnabled);
+    useSettingsStore.getState().applyGhostProtocolGates(suggestions);
     if (suggestions.ghostMaxConfidence !== undefined) setGhostMaxConfidence(suggestions.ghostMaxConfidence);
     if (suggestions.ghostMaxConfidenceEnabled !== undefined) setGhostMaxConfidenceEnabled(suggestions.ghostMaxConfidenceEnabled);
-    
-    if (suggestions.autoGhostManipulationSeverityThreshold !== undefined) setAutoGhostManipulationSeverityThreshold(suggestions.autoGhostManipulationSeverityThreshold);
     if (suggestions.autoGhostBlockOnManipulation !== undefined) setAutoGhostBlockOnManipulation(suggestions.autoGhostBlockOnManipulation);
-    
-    if (suggestions.ghostMinZScore !== undefined) setGhostMinZScore(suggestions.ghostMinZScore);
-    if (suggestions.ghostMinZScoreEnabled !== undefined) setGhostMinZScoreEnabled(suggestions.ghostMinZScoreEnabled);
-    if (suggestions.ghostMaxZScore !== undefined) setGhostMaxZScore(suggestions.ghostMaxZScore);
-    if (suggestions.ghostMaxZScoreEnabled !== undefined) setGhostMaxZScoreEnabled(suggestions.ghostMaxZScoreEnabled);
-    
-    if (suggestions.ghostRegimeGateEnabled !== undefined) setGhostRegimeGateEnabled(suggestions.ghostRegimeGateEnabled);
-    if (suggestions.ghostRequireRegimeStable !== undefined) setGhostRequireRegimeStable(suggestions.ghostRequireRegimeStable);
-    if (suggestions.ghostAllowedRegimes !== undefined) setGhostAllowedRegimes(suggestions.ghostAllowedRegimes);
-    
-    if (suggestions.ghostAmount !== undefined) setGhostAmount(suggestions.ghostAmount);
     if (suggestions.autoGhostExpirationSeconds !== undefined) setAutoGhostExpirationSeconds(suggestions.autoGhostExpirationSeconds);
     if (suggestions.ghostMaxTradesPerTimeframe !== undefined) setGhostMaxTradesPerTimeframe(suggestions.ghostMaxTradesPerTimeframe);
     if (suggestions.ghostTimeframeSeconds !== undefined) setGhostTimeframeSeconds(suggestions.ghostTimeframeSeconds);
@@ -424,6 +432,14 @@ export default function GhostTradingWidget() {
     const duration = trade.expirationSeconds || autoGhostExpirationSeconds || 60;
 
     if (autoGhostCopyMode === 'execute') {
+      if (useCalibrationStore.getState().locked) {
+        useToastStore.getState().addToast({
+          type: 'warning',
+          message: 'Copy & Execute is blocked while Calibration Mode is running.',
+          duration: 4000,
+        });
+        return;
+      }
       useTradingStore.getState().setDirection(direction);
       useTradingStore.getState().setDuration(duration);
       useTradingStore.getState().executeTrade('pocket_option', trade.asset);
@@ -449,6 +465,8 @@ export default function GhostTradingWidget() {
   };
 
   const recentTrades = ghostTrades.slice(-5).reverse();
+  const calibrationLocked = useCalibrationStore((s) => s.locked);
+  const calibrationState = useCalibrationStore((s) => s.state);
 
   return (
     <div 
@@ -463,6 +481,11 @@ export default function GhostTradingWidget() {
             <div className="flex items-center gap-2 text-[#ffb800]">
               <Zap size={18} />
               <h3 className="text-sm font-black uppercase tracking-wider text-white">Auto Ghost Controller</h3>
+              {calibrationLocked && (
+                <span className="rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">
+                  {calibrationState === 'RUNNING' ? 'Calibrating' : calibrationState}
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => setDontDisturbEnabled(!dontDisturbEnabled)}
@@ -481,6 +504,13 @@ export default function GhostTradingWidget() {
               <button
                 type="button"
                 onClick={() => {
+                  if (useCalibrationStore.getState().locked) {
+                    useToastStore.getState().addToast({
+                      type: 'warning',
+                      message: 'Protocol reset is locked while Calibration Mode is running.',
+                    });
+                    return;
+                  }
                   useSettingsStore.getState().resetGhostControllerDefaults();
                   useNotificationStore.getState().clearAll();
                   setSelectedSuggestedWhitelist([]);
@@ -501,6 +531,8 @@ export default function GhostTradingWidget() {
               </button>
             </div>
           </div>
+
+          <CalibrationPanel />
 
           {/* Navigation Tabs */}
           <div className="flex bg-[#25282f]/50 border border-white/5 p-1 rounded-xl mb-4 select-none">
@@ -693,17 +725,19 @@ export default function GhostTradingWidget() {
                   >
                     Only Copy
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setAutoGhostCopyMode('execute')}
-                    className={`flex-1 rounded-md py-1.5 text-[8.5px] font-black uppercase tracking-widest transition-all ${
-                      autoGhostCopyMode === 'execute'
-                        ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
-                        : 'text-gray-500 hover:text-white'
-                    }`}
-                  >
-                    Copy & Execute
-                  </button>
+                  {!calibrationLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setAutoGhostCopyMode('execute')}
+                      className={`flex-1 rounded-md py-1.5 text-[8.5px] font-black uppercase tracking-widest transition-all ${
+                        autoGhostCopyMode === 'execute'
+                          ? 'bg-[#ffb800]/10 text-[#ffb800] border border-[#ffb800]/30'
+                          : 'text-gray-500 hover:text-white'
+                      }`}
+                    >
+                      Copy & Execute
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -711,7 +745,7 @@ export default function GhostTradingWidget() {
 
           {activeTab === 'settings' && (
             /* Settings Controls Tab */
-            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1 select-none scrollbar-thin">
+            <div className={`space-y-4 max-h-[350px] overflow-y-auto pr-1 select-none scrollbar-thin ${calibrationLocked ? 'pointer-events-none opacity-50' : ''}`}>
               {/* Simulated Amount & Expiry Times */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -1095,7 +1129,7 @@ export default function GhostTradingWidget() {
           )}
 
           {activeTab === 'ai' && (
-            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1 select-none scrollbar-thin">
+            <div className={`space-y-4 max-h-[350px] overflow-y-auto pr-1 select-none scrollbar-thin ${calibrationLocked ? 'pointer-events-none opacity-50' : ''}`}>
               {/* AI Pulse Enable/Disable */}
               <div className="space-y-2 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
                 <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
@@ -1338,7 +1372,7 @@ export default function GhostTradingWidget() {
           isDragging 
             ? 'cursor-grabbing scale-110 shadow-[#ffb800]/30' 
             : 'cursor-grab hover:scale-110 hover:shadow-[#ffb800]/25'
-        } ${isOpen ? 'border-[#ffb800]' : 'border-[#ffb800]/30 hover:border-[#ffb800]'}`}
+        } ${calibrationLocked ? 'border-cyan-400' : isOpen ? 'border-[#ffb800]' : 'border-[#ffb800]/30 hover:border-[#ffb800]'}`}
         aria-label="Toggle Ghost Stats"
         title="Drag to move, click for Ghost Stats"
       >

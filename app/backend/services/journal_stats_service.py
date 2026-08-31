@@ -39,6 +39,7 @@ try:
         ProtocolValidationError,
         compute_protocol_health,
     )
+    from shared.utc_time_blocks import utc_4h_block, utc_4h_label, trade_entry_unix
 except ImportError:
     import sys
     _root = Path(__file__).resolve().parents[3]
@@ -54,6 +55,7 @@ except ImportError:
         ProtocolValidationError,
         compute_protocol_health,
     )
+    from shared.utc_time_blocks import utc_4h_block, utc_4h_label, trade_entry_unix
 
 logger = logging.getLogger("otc_sniper.journal_stats_service")
 
@@ -106,6 +108,9 @@ class JournalStatsService:
         )
         self.bayesian_priors_path = (
             self.stats_dir / "bayesian_priors.json"
+        )
+        self.bayesian_priors_300s_path = (
+            self.stats_dir / "bayesian_priors_300s.json"
         )
         self.kb_path = self._find_kb_path()
         self._ensure_staging_file()
@@ -177,13 +182,14 @@ class JournalStatsService:
         min_trades: int = 0,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
+        include_calibration: bool = False,
     ) -> Dict[str, Any]:
         """
         Compute full statistical profile for a specific session or aggregated across all sessions.
         Optionally filters session files by date range (YYYY-MM-DD strings, inclusive).
         When date_from/date_to are provided the session_id filter is ignored (date range takes precedence).
         """
-        cache_key = f"{kind}:{session_id or 'ALL'}:{min_trades}:{date_from or ''}:{date_to or ''}"
+        cache_key = f"{kind}:{session_id or 'ALL'}:{min_trades}:{date_from or ''}:{date_to or ''}:calib={int(include_calibration)}"
         now = time.time()
         if cache_key in self._stats_cache:
             cached_time, cached_data = self._stats_cache[cache_key]
@@ -222,6 +228,8 @@ class JournalStatsService:
         if is_all:
             session_files = self.get_all_session_files(kind)
             for f in session_files:
+                if not include_calibration and str(f.stem).startswith("auto_ghost_calib_"):
+                    continue
                 if not _file_in_date_range(f):
                     continue
                 file_trades = self._load_trades_from_session_file(f)
@@ -838,6 +846,27 @@ class JournalStatsService:
                 pg["losses"] += 1
             pg["profit"] += profit
 
+            entry_unix = trade_entry_unix(t)
+            utc_block = utc_4h_block(entry_unix) if entry_unix is not None else None
+            utc_label = utc_4h_label(utc_block) if utc_block is not None else None
+            if utc_block is not None:
+                utc_key = f"{pkey}|utc4h:{utc_block}"
+                ug = pattern_groups[utc_key]
+                ug["pattern_key"] = utc_key
+                ug["asset"] = asset
+                ug["strategy_level"] = strategy_level
+                ug["oteo_score_band"] = score_band
+                ug["regime_label"] = regime
+                ug["direction"] = direction
+                ug["utc_4h_block"] = utc_block
+                ug["utc_4h_label"] = utc_label
+                ug["trades"] += 1
+                if is_win:
+                    ug["wins"] += 1
+                elif is_loss:
+                    ug["losses"] += 1
+                ug["profit"] += profit
+
             # 2. Bayesian Prior Deltas separated by horizon (60s and 300s)
             exp_sec = t.get("expiration_seconds")
             if exp_sec is None and isinstance(entry_ctx, dict):
@@ -862,6 +891,8 @@ class JournalStatsService:
                     bayesian_deltas[f"z_band={z_band}"][bucket] += 1
                     bayesian_deltas[f"has_manip={has_manip}"][bucket] += 1
                     bayesian_deltas[f"direction={direction}"][bucket] += 1
+                    if utc_block is not None:
+                        bayesian_deltas[f"utc_4h_block={utc_block}"][bucket] += 1
             elif exp_int == 300:
                 if is_win:
                     bayesian_total_wins_300 += 1
@@ -875,6 +906,8 @@ class JournalStatsService:
                     bayesian_deltas_300[f"z_band={z_band}"][bucket] += 1
                     bayesian_deltas_300[f"has_manip={has_manip}"][bucket] += 1
                     bayesian_deltas_300[f"direction={direction}"][bucket] += 1
+                    if utc_block is not None:
+                        bayesian_deltas_300[f"utc_4h_block={utc_block}"][bucket] += 1
 
         candidate_patterns = []
         for pkey, pg in pattern_groups.items():
@@ -894,7 +927,7 @@ class JournalStatsService:
             else:
                 tier = "VERY_LOW"
 
-            candidate_patterns.append({
+            candidate = {
                 "pattern_key": pkey,
                 "asset": pg["asset"],
                 "strategy_level": pg["strategy_level"],
@@ -908,7 +941,11 @@ class JournalStatsService:
                 "confidence_tier": tier,
                 "suppression_candidate": (wr < 48.0 and n >= 5),
                 "boost_candidate": (wr >= 60.0 and n >= 5),
-            })
+            }
+            if pg.get("utc_4h_block") is not None:
+                candidate["utc_4h_block"] = pg["utc_4h_block"]
+                candidate["utc_4h_label"] = pg.get("utc_4h_label")
+            candidate_patterns.append(candidate)
 
         candidate_patterns.sort(key=lambda p: (p["sample_size"], p["win_rate_pct"]), reverse=True)
 
@@ -1180,6 +1217,16 @@ Keep the language direct, authoritative, and concise (under 250 words total).
             logger.error("Failed to delete staged report %s: %s", staged_id, e)
             return False
 
+    def _write_recency_overlay(self, path: Path, overlay: Mapping[str, Any]) -> None:
+        store = BayesianPriorStore(path)
+
+        def _apply(current_priors: Dict[str, Any]) -> Dict[str, Any]:
+            out = dict(current_priors)
+            out["recency"] = overlay
+            return out
+
+        store.mutate(_apply)
+
     def commit_staged_to_knowledge_base(
         self,
         staged_id: str,
@@ -1222,6 +1269,15 @@ Keep the language direct, authoritative, and concise (under 250 words total).
             feature_deltas = b_deltas.get("feature_deltas", {})
             wins_delta = int(b_deltas.get("total_wins_delta", 0))
             losses_delta = int(b_deltas.get("total_losses_delta", 0))
+            recency_overlay = b_deltas.get("recency")
+            recency_300s = b_deltas.get("recency_300s")
+            commit_mode = str(b_deltas.get("commit_mode") or matched.get("commit_mode") or "")
+
+            if recency_300s and self.bayesian_priors_300s_path.exists():
+                bak_300 = self.bayesian_priors_300s_path.parent / f"bayesian_priors_300s_{timestamp_str}.json.bak"
+                shutil.copy2(self.bayesian_priors_300s_path, bak_300)
+                backup_files.append(str(bak_300.name))
+                logger.info("Created backup of bayesian_priors_300s.json at %s", bak_300)
 
             if wins_delta + losses_delta > 0:
                 store = BayesianPriorStore(self.bayesian_priors_path)
@@ -1236,16 +1292,32 @@ Keep the language direct, authoritative, and concise (under 250 words total).
                         fc[fkey]["win"] = fc[fkey].get("win", 0) + counts.get("win", 0)
                         fc[fkey]["loss"] = fc[fkey].get("loss", 0) + counts.get("loss", 0)
 
-                    return {
+                    out = {
                         "total_wins": cur_wins,
                         "total_losses": cur_losses,
                         "total_trades": cur_wins + cur_losses,
                         "feature_counts": fc,
                     }
+                    if current_priors.get("recency") is not None:
+                        out["recency"] = current_priors["recency"]
+                    return out
 
                 store.mutate(_apply_deltas)
                 bayesian_committed = True
                 logger.info("Committed %d wins and %d losses to Bayesian priors.", wins_delta, losses_delta)
+
+            if recency_overlay:
+                self._write_recency_overlay(self.bayesian_priors_path, recency_overlay)
+                bayesian_committed = True
+                logger.info(
+                    "Committed recency overlay to Bayesian priors (mode=%s).",
+                    commit_mode or "overlay",
+                )
+
+            if recency_300s:
+                self._write_recency_overlay(self.bayesian_priors_300s_path, recency_300s)
+                bayesian_committed = True
+                logger.info("Committed recency overlay to 300s Bayesian priors.")
 
         # 3. Apply Knowledge Base Condition Patterns Update
         if commit_kb:

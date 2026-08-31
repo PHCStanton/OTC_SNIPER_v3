@@ -192,7 +192,9 @@ class TradeService:
             
         entry_context = trade.entry_context or {}
         
-        await self.sio.emit(
+        # C1 (Phase 1): ALL live surfaces route through _emit_trade_channel —
+        # during calibration this lands on `calibration_trade_result` instead.
+        await self._emit_trade_channel(
             "trade_result",
             {
                 "trade_id": trade.trade_id,
@@ -229,7 +231,9 @@ class TradeService:
             
         entry_context = trade.entry_context or {}
         
-        await self.sio.emit(
+        # C1 (Phase 1): ALL live surfaces route through _emit_trade_channel —
+        # during calibration this lands on `calibration_trade_entry` instead.
+        await self._emit_trade_channel(
             "trade_entry",
             {
                 "trade_id": trade.trade_id,
@@ -248,10 +252,70 @@ class TradeService:
             },
         )
 
+    # ── Calibration Mode contracts (Phase 1) ─────────────────────────────────
+
+    def _is_calibration_active(self) -> bool:
+        """True while the bound AutoGhostService is in calibration mode."""
+        ag = self._auto_ghost
+        return bool(
+            ag is not None
+            and getattr(getattr(ag, "config", None), "mode", "standard") == "calibration"
+        )
+
+    async def _emit_trade_channel(self, event: str, payload: Dict[str, Any], *, calibration: bool | None = None) -> None:
+        """C1 (Phase 1): single routing helper for the live trade event surfaces.
+
+        When calibration is active, live event names are remapped to
+        `calibration_*` channels so the live UI hears nothing. Normal listeners
+        are never modified — silence comes from routing, not suppression.
+        """
+        if not self.sio:
+            return
+        if calibration is None:
+            calibration = self._is_calibration_active()
+        if calibration:
+            await self.sio.emit(f"calibration_{event}", payload)
+        else:
+            await self.sio.emit(event, payload)
+
+    def _stamp_calibration_context(self, request: TradeExecutionRequest) -> None:
+        """M1 (Phase 1): tag entry_context BEFORE repository.write_trade — the
+        persistent truth, not merely the in-memory session cache."""
+        if not self._is_calibration_active():
+            return
+        ag = self._auto_ghost
+        if not isinstance(request.entry_context, dict):
+            request.entry_context = {}
+        request.entry_context["is_calibration"] = True
+        request.entry_context["calibration_id"] = getattr(ag, "_session_id", None)
+
+    def _enforce_calibration_ghost_only(self, trade_kind: TradeKind) -> Dict[str, Any] | None:
+        """D1 (Phase 1): calibration routes TradeKind.GHOST ONLY — never live/demo
+        broker execution. Returns a non-success payload when blocked (fail loud)."""
+        if self._is_calibration_active() and trade_kind != TradeKind.GHOST:
+            logger.warning("Calibration mode blocks non-ghost trade execution (kind=%s).", trade_kind.value)
+            return {
+                "success": False,
+                "message": "Calibration mode permits GHOST trades only.",
+                "trade_id": None,
+                "entry_price": None,
+                "session_id": None,
+                "connection_status": None,
+                "trade_mode": trade_kind.value,
+            }
+        return None
+
     async def execute_trade(self, broker_type: BrokerType, request: TradeExecutionRequest) -> Dict[str, Any]:
         """Execute a trade securely mapping it to the broker adapter"""
         adapter = BrokerRegistry.get_adapter(broker_type, account_key=request.account_key)
         trade_kind = self._resolve_trade_kind(request)
+        # D1 (Phase 1): calibration routes GHOST trades ONLY — hard-block live/demo.
+        blocked = self._enforce_calibration_ghost_only(trade_kind)
+        if blocked is not None:
+            return blocked
+        # M1 (Phase 1): stamp calibration tags BEFORE TradeRecord construction so
+        # they persist via repository.write_trade on both execution paths.
+        self._stamp_calibration_context(request)
         session = adapter.session_manager.snapshot()
 
         if trade_kind == TradeKind.GHOST:
@@ -296,6 +360,8 @@ class TradeService:
                     entry_context=trade_record.entry_context,
                 )
             await self._emit_trade_entry(trade_record)
+            if self._auto_ghost is not None:
+                self._auto_ghost.note_in_flight_settlement()
             task = asyncio.create_task(self._track_ghost_trade_outcome(trade_record, request.expiration))
             task.add_done_callback(lambda t: self._log_task_failure(t, "_track_ghost_trade_outcome"))
             return {
@@ -442,6 +508,9 @@ class TradeService:
             )
         except Exception as exc:
             logger.error("Error checking ghost trade outcome for %s: %s", trade.trade_id, exc)
+        finally:
+            if self._auto_ghost is not None:
+                self._auto_ghost.release_in_flight_settlement()
 
     async def _track_trade_outcome(self, trade: TradeRecord, adapter, expiration: int):
         """Background coroutine to await expiration and query the trade result."""
