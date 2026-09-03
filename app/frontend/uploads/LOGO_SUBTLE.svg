@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1000 800"
+     width="1000"
+     height="800"
+     role="img"
+     aria-label="OTC SNIPER v3.0">
+  <title>OTC SNIPER v3.0</title>
+  <desc>Copper sniper-scope mark with range ticks, dual inner rings, broken crosshair and OTC SNIPER v3.0 wordmark.</desc>
+
+  <defs>
+    <!-- Solid copper. Matches the LOGO_NEW mark. -->
+    <style type="text/css"><![CDATA[
+      .mark { stroke: #c17a3e; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .word {
+        font-family: Rajdhani, 'Saira SemiCondensed', 'Barlow Condensed', 'Arial Narrow', sans-serif;
+        font-weight: 700;
+        font-size: 58px;
+        letter-spacing: 2.4px;
+        fill: #c17a3e;
+        text-anchor: middle;
+        dominant-baseline: middle;
+      }
+    ]]></style>
+  </defs>
+
+  <!-- Solid black field as in the source lockup. Delete this rect for a transparent asset. -->
+  <rect id="backdrop" width="1000" height="800" fill="#000000"/>
+
+  <g class="mark" transform="translate(500 400)">
+    <!--
+      Scope geometry (px from centre)
+        outer ring   r = 312
+        mid ring     r = 190
+        inner ring   r = 124
+        tick length  14 (cardinals 24, quarters 20)
+    -->
+
+    <circle r="312" stroke-width="3.1"/>
+    <circle r="190" stroke-width="2.5"/>
+    <circle r="124" stroke-width="2.5"/>
+
+    <!-- Range ticks around the outer ring -->
+    <g stroke-width="2.15">
+      <line x1="0" y1="-312" x2="0" y2="-288"/>
+      <line transform="rotate(10)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(20)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(30)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(40)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(45)"  x1="0" y1="-312" x2="0" y2="-292"/>
+      <line transform="rotate(50)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(60)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(70)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(80)"  x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(90)"  x1="0" y1="-312" x2="0" y2="-288"/>
+      <line transform="rotate(100)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(110)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(120)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(130)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(135)" x1="0" y1="-312" x2="0" y2="-292"/>
+      <line transform="rotate(140)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(150)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(160)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(170)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(180)" x1="0" y1="-312" x2="0" y2="-288"/>
+      <line transform="rotate(190)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(200)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(210)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(220)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(225)" x1="0" y1="-312" x2="0" y2="-292"/>
+      <line transform="rotate(230)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(240)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(250)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(260)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(270)" x1="0" y1="-312" x2="0" y2="-288"/>
+      <line transform="rotate(280)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(290)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(300)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(310)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(315)" x1="0" y1="-312" x2="0" y2="-292"/>
+      <line transform="rotate(320)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(330)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(340)" x1="0" y1="-312" x2="0" y2="-298"/>
+      <line transform="rotate(350)" x1="0" y1="-312" x2="0" y2="-298"/>
+    </g>
+
+    <!-- Vertical hair — broken across the wordmark band -->
+    <g stroke-width="2.7">
+      <line x1="0" y1="-310" x2="0" y2="-36"/>
+      <line x1="0" y1="36"   x2="0" y2="310"/>
+    </g>
+
+    <!-- Horizontal hair — stops short of the wordmark -->
+    <g stroke-width="2.7">
+      <line x1="-310" y1="0" x2="-204" y2="0"/>
+      <line x1="204"  y1="0" x2="310"  y2="0"/>
+    </g>
+  </g>
+
+  <text class="word" x="500" y="401">OTC SNIPER v3.0</text>
+</svg>

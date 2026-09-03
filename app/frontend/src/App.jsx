@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { initSocket } from './api/socketClient.js';
-import { updateRuntimeStrategyConfig } from './api/strategyApi.js';
+import { getCalibrationStatus, updateRuntimeStrategyConfig } from './api/strategyApi.js';
 import { useStreamConnection } from './hooks/useStreamConnection.js';
 import { useLayoutStore } from './stores/useLayoutStore.js';
 import { useAssetStore } from './stores/useAssetStore.js';
@@ -40,6 +40,15 @@ export default function App() {
     window.addEventListener('click', handleGlobalClick, { capture: true });
 
     const socket = initSocket();
+
+    // R2-2 (M-6): authoritative calibration status on mount — a reload during a
+    // locked state must show CALIBRATING/locked immediately, not after the next
+    // 5s status_update poll.
+    void getCalibrationStatus()
+      .then((res) => {
+        if (res?.calibration) useCalibrationStore.getState().applyStatus(res.calibration);
+      })
+      .catch((err) => console.warn('[App] getCalibrationStatus failed:', err?.message));
 
     socket.on('status_update', (data) => {
       if (data.chrome) {
@@ -354,8 +363,21 @@ export default function App() {
       }, 400);
     });
 
+    // R2-1 (M-2): when calibration unlocks, flush exactly ONE settings sync so the
+    // backend's D4-restored snapshot is re-affirmed against the authoritative
+    // frontend state (or the user's post-run edits are pushed). Never a silent write.
+    let wasLocked = useCalibrationStore.getState().locked;
+    const unsubCalib = useCalibrationStore.subscribe((s) => {
+      if (wasLocked && !s.locked) {
+        console.info('[App] Calibration unlocked — flushing settings sync.');
+        void syncRuntimeConfig(useSettingsStore.getState());
+      }
+      wasLocked = s.locked;
+    });
+
     return () => {
       unsubscribe();
+      unsubCalib();
       if (timer) clearTimeout(timer);
     };
   }, []);

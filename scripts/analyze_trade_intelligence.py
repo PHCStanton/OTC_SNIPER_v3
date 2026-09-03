@@ -20,6 +20,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+from shared.utc_time_blocks import utc_4h_block, utc_4h_label  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Custom Exceptions
 # ---------------------------------------------------------------------------
@@ -565,6 +570,8 @@ def run_phase1_join(
             ),
             "tick_file_verified": tick_file_verified,
             "tick_file_path": str(tick_file),
+            "utc_4h_block": utc_4h_block(entry_time),
+            "utc_4h_label": utc_4h_label(utc_4h_block(entry_time)),
         }
         joined_records.append(merged_row)
 
@@ -836,9 +843,28 @@ def run_phase3_optimization(joined_records: List[dict]) -> dict:
         for regime, bands in regime_band_crosstab.items()
     }
 
+    # 10. UTC 4-hour block table (REV2 A1 — 22:00 origin)
+    def _utc4h_key(r: dict) -> str:
+        block = utc_4h_block(r["entry_time_epoch"])
+        return f"{block}:{utc_4h_label(block)}"
+
+    utc4h_stats = _group_stats(joined_records, _utc4h_key)
+    utc_4h_table = sorted(
+        [
+            {
+                "utc_4h_block": int(k.split(":", 1)[0]),
+                "utc_4h_label": k.split(":", 1)[1],
+                **s,
+            }
+            for k, s in utc4h_stats.items()
+        ],
+        key=lambda x: x["utc_4h_block"],
+    )
+
     print(
         f"  Matrices built: {len(asset_table)} assets, {len(hourly_table)} UTC hours, "
-        f"{len(weekday_table)} weekdays, {len(score_band_table)} score bands, "
+        f"{len(utc_4h_table)} UTC 4h blocks, {len(weekday_table)} weekdays, "
+        f"{len(score_band_table)} score bands, "
         f"{len(level_table)} strategy level(s), {len(regime_band_stats)} regime(s)."
     )
 
@@ -847,6 +873,7 @@ def run_phase3_optimization(joined_records: List[dict]) -> dict:
         "best_assets": best_assets,
         "worst_assets": worst_assets,
         "hourly_table": hourly_table,
+        "utc_4h_table": utc_4h_table,
         "weekday_table": weekday_table,
         "score_band_table": score_band_table,
         "level_table": level_table,
@@ -886,24 +913,28 @@ def run_phase5_knowledge_base(
 
     patterns: List[dict] = []
 
-    # Build one pattern per asset × strategy_level × score_band × regime combination
+    # Build one pattern per asset × strategy_level × score_band × regime combination,
+    # plus a UTC-4h sliced copy (REV2 A1).
     for r in joined_records:
         asset = r["asset"]
         level = r["strategy_level"]
         band = _score_band(float(r.get("signal_oteo_score") or 0))
         regime = str(r.get("signal_regime_label") or "unknown")
         direction = r["direction"]
-        # Use these as the grouping key
         r["_pattern_key"] = f"{asset}|{level}|{band}|{regime}|{direction}"
+        block = int(r.get("utc_4h_block") if r.get("utc_4h_block") is not None else utc_4h_block(r["entry_time_epoch"]))
+        r["_pattern_key_utc"] = f"{r['_pattern_key']}|utc4h:{block}"
+        r["_utc_4h_block"] = block
+        r["_utc_4h_label"] = utc_4h_label(block)
 
     pattern_groups: Dict[str, List[dict]] = {}
     for r in joined_records:
-        key = r["_pattern_key"]
-        pattern_groups.setdefault(key, []).append(r)
+        pattern_groups.setdefault(r["_pattern_key"], []).append(r)
+        pattern_groups.setdefault(r["_pattern_key_utc"], []).append(r)
 
     for key, group in pattern_groups.items():
         parts = key.split("|")
-        asset, level, band, regime, direction = parts
+        asset, level, band, regime, direction = parts[0], parts[1], parts[2], parts[3], parts[4]
         stats = _calc_stats(group)
         pattern = {
             "pattern_key": key,
@@ -920,6 +951,10 @@ def run_phase5_knowledge_base(
             "suppression_candidate": stats["win_rate_pct"] < 45.0 and stats["total_trades"] >= 5,
             "boost_candidate": stats["win_rate_pct"] > 60.0 and stats["total_trades"] >= 5,
         }
+        if len(parts) >= 6 and parts[5].startswith("utc4h:"):
+            block = int(parts[5].split(":", 1)[1])
+            pattern["utc_4h_block"] = block
+            pattern["utc_4h_label"] = utc_4h_label(block)
         patterns.append(pattern)
 
     # Sort by expectancy descending for easy top-N retrieval
@@ -964,6 +999,7 @@ CSV_HEADERS = [
     "signal_level2_suppressed_reason", "signal_level3_enabled", "signal_level3_score_adjustment",
     "signal_level3_suppressed_reason", "signal_regime_label", "signal_regime_confidence",
     "signal_regime_stable", "tick_file_verified", "tick_file_path",
+    "utc_4h_block", "utc_4h_label",
 ]
 
 
@@ -1194,6 +1230,17 @@ def export_markdown_report(
             )
         f.write("\n")
 
+        f.write("### UTC 4-Hour Block Performance (origin 22:00 UTC)\n\n")
+        f.write("| Block | Window | Trades | Wins | Win Rate | Net Profit | Expectancy |\n")
+        f.write("| --- | --- | --- | --- | --- | --- | --- |\n")
+        for row in phase3.get("utc_4h_table") or []:
+            f.write(
+                f"| {row['utc_4h_block']} | {row['utc_4h_label']} | {row['total_trades']} | "
+                f"{row['wins']} | {row['win_rate_pct']}% | ${row['net_profit']:.2f} | "
+                f"{row['expectancy']:.4f} |\n"
+            )
+        f.write("\n")
+
         # Day-of-Week Table
         f.write("### UTC Day-of-Week Performance\n\n")
         f.write("| Weekday | Trades | Wins | Win Rate | Net Profit | Expectancy |\n")
@@ -1352,9 +1399,88 @@ def main() -> int:
         action="store_true",
         help="Skip Phase 5 knowledge base compression",
     )
+    parser.add_argument(
+        "--kb-health-audit",
+        action="store_true",
+        help="Phase 4: write a KB health audit JSON to --report-root and exit",
+    )
+    parser.add_argument(
+        "--kb-backfill",
+        action="store_true",
+        help="Phase 4: recency-weighted historical backfill (requires --stage-only)",
+    )
+    parser.add_argument(
+        "--stage-only",
+        action="store_true",
+        help="Refuse master KB/prior writes; emit staged_knowledge_updates.json only",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=56,
+        help="Backfill lookback window in days (default: 56 ≈ 8 weeks)",
+    )
+    parser.add_argument(
+        "--half-life-days",
+        type=float,
+        default=21.0,
+        help="Recency-decay half-life in days (default: 21)",
+    )
 
     args = parser.parse_args()
     fail_fast = not args.no_fail_fast
+
+    if args.kb_backfill and not args.stage_only:
+        print(
+            "Error: --kb-backfill refuses master KB writes. Re-run with --stage-only.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if args.kb_health_audit or args.kb_backfill:
+        from app.backend.services.kb_health import (
+            KbHealthError,
+            audit_kb_health,
+            stage_historical_backfill,
+        )
+        from app.backend.config import get_settings
+        from app.backend.services.kb_health import default_paths_from_settings
+
+        report_root = _resolve_report_root(args.report_root)
+        report_root.mkdir(parents=True, exist_ok=True)
+        paths = default_paths_from_settings(get_settings())
+        try:
+            if args.kb_health_audit:
+                audit = audit_kb_health(
+                    kb_path=paths["kb_path"],
+                    priors_60_path=paths["priors_60_path"],
+                    priors_300_path=paths["priors_300_path"],
+                    sessions_dir=paths["sessions_dir"],
+                )
+                out = report_root / "kb_health_audit.json"
+                out.write_text(json.dumps(audit, indent=2), encoding="utf-8")
+                print(f"KB health audit written to {out}")
+                if not args.kb_backfill:
+                    return 0
+            if args.kb_backfill:
+                result = stage_historical_backfill(
+                    sessions_dir=paths["sessions_dir"],
+                    staged_path=paths["staged_path"],
+                    warm_start_path=paths["warm_start_path"],
+                    kb_path=paths["kb_path"],
+                    priors_60_path=paths["priors_60_path"],
+                    priors_300_path=paths["priors_300_path"],
+                    lookback_days=args.lookback_days,
+                    half_life_days=args.half_life_days,
+                )
+                print(
+                    f"Backfill staged {result['staged']['staged_id']} "
+                    f"(N={result['window_trades']}, master_kb_written={result['master_kb_written']})"
+                )
+                return 0
+        except KbHealthError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
 
     signal_root = Path(args.signal_root)
     tick_root = Path(args.tick_root)

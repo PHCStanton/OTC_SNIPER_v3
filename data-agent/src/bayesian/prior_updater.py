@@ -11,6 +11,7 @@ Design:
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Union
 
@@ -69,6 +70,9 @@ class BayesianPriorUpdater:
     def update_priors_from_trades(
         self,
         new_trade_outcomes: List[Mapping[str, Any]],
+        *,
+        as_of_unix: Optional[float] = None,
+        half_life_days: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Incorporate a batch of trade outcomes into prior distributions.
@@ -79,9 +83,17 @@ class BayesianPriorUpdater:
              "features": ["oteo_band=85-92", "confidence=HIGH", ...]
           }
 
+        Optional recency fields on each trade (`weight`, `age_days`, `entry_time`)
+        update the recency overlay. Runtime calls pass ``as_of_unix=now`` so an
+        existing overlay decays before the new evidence is added (REV2 A2).
+
         The entire transaction is delegated to BayesianPriorStore (lock + RMW).
         """
-        updated = self._store.update_from_trades(list(new_trade_outcomes))
+        updated = self._store.update_from_trades(
+            list(new_trade_outcomes),
+            as_of_unix=time.time() if as_of_unix is None else as_of_unix,
+            half_life_days=half_life_days,
+        )
         logger.info(
             "Bayesian priors updated at %s (wins=%s losses=%s trades=%s)",
             self.priors_json_path,

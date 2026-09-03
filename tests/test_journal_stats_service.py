@@ -155,6 +155,27 @@ def test_compute_journal_stats(mock_env):
     assert exp_map[120]["trades"] == 1
 
 
+def test_journal_stats_excludes_calibration_sessions_by_default(mock_env):
+    service, data_dir, _, _ = mock_env
+    calib_path = data_dir / "ghost_trades" / "sessions" / "auto_ghost_calib_1.jsonl"
+    calib_trades = [
+        {
+            "id": "c1", "session_id": "auto_ghost_calib_1", "asset": "EURUSD_otc",
+            "outcome": "win", "profit": 1.0, "expiration_seconds": 60, "oteo_score": 80.0,
+            "entry_context": {"is_calibration": True, "regime_label": "RANGE_BOUND", "z_score": 0.2,
+                              "market_context": {"atr": 0.0004, "tick_frequency": 120.0}, "manipulation": {}},
+        }
+    ]
+    with calib_path.open("w", encoding="utf-8") as fh:
+        for row in calib_trades:
+            fh.write(json.dumps(row) + "\n")
+
+    excluded = service.compute_journal_stats(session_id="ALL", kind="ghost", include_calibration=False)
+    included = service.compute_journal_stats(session_id="ALL", kind="ghost", include_calibration=True)
+    assert excluded["total_trades"] == 4
+    assert included["total_trades"] == 5
+
+
 def test_staging_and_transactional_commit(mock_env):
     service, _, kb_file, priors_file = mock_env
 

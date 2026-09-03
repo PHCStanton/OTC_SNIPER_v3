@@ -6,7 +6,7 @@ import { useSettingsStore } from '../stores/useSettingsStore.js';
 class SoundManager {
   constructor() {
     this.sounds = {
-      CLICK: new Audio('/AUDIO/Generic_UI__Click_3.mp3'),
+      CLICK: new Audio('/AUDIO/UIClick-Short_soft%20click.mp3'),
       GHOST_EXECUTE: new Audio('/AUDIO/GHOST_EXECUTE1.ogg'),
       GHOST_WIN: new Audio('/AUDIO/WIN_SOUND_1.mp3'),
       GHOST_LOSS: new Audio('/AUDIO/Quick_broom_2.mp3'),

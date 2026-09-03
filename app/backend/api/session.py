@@ -10,6 +10,7 @@ Extracted from main.py and extended with:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
@@ -178,7 +179,10 @@ async def connect_session(body: SessionConnectRequest, request: Request) -> JSON
         )
 
     try:
-        state = sm.connect(effective_ssid)
+        # R4 (ops): the broker SDK blocks (15s timeouts) and must NEVER run on
+        # the event loop thread — the SDK captures the caller's loop at
+        # construction and stops/closes it during disconnect (stable_api.py).
+        state = await asyncio.to_thread(sm.connect, effective_ssid)
     except RuntimeError as exc:
         # Connection succeeded format-wise but broker rejected auth
         return JSONResponse(
@@ -237,7 +241,7 @@ async def disconnect_session(request: Request) -> JSONResponse:
         PocketOptionSession.clear_tick_callback()
     except Exception as stream_exc:
         logger.warning("Stream stop during disconnect failed (non-fatal): %s", stream_exc)
-    state = sm.disconnect()
+    state = await asyncio.to_thread(sm.disconnect)
     return JSONResponse(
         content={
             "ok": True,
@@ -360,9 +364,9 @@ async def auto_connect_session(request: Request, demo: bool = False) -> JSONResp
             },
         )
 
-    # Step 5: Connect
+    # Step 5: Connect (off the event loop thread — see R4 note in /connect)
     try:
-        state = sm.connect(ssid_frame)
+        state = await asyncio.to_thread(sm.connect, ssid_frame)
     except RuntimeError as exc:
         return JSONResponse(
             status_code=401,

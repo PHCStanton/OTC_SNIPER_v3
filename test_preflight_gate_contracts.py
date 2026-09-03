@@ -30,6 +30,12 @@ def _make_streaming_service() -> StreamingService:
     service._last_regime = {}
     service._recent_ticks = {}
     service._latest_bayesian_wp = {}
+    service._calibration_prefs = {
+        "auto_ghost_calibration_enabled": False,
+        "auto_ghost_calibration_duration_minutes": 25,
+        "auto_ghost_calibration_target_trades": 24,
+        "auto_ghost_autonomy_tier": "tiered",
+    }
     return service
 
 

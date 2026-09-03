@@ -154,6 +154,7 @@ def test_signal_filter_memory_matches_committed_file(tmp_path):
         "z_score": 0.3,
         "manipulation": False,
         "recommended": "CALL",
+        "expiration_seconds": 60,
     }
     for outcome in ("win", "win", "loss"):
         filt.on_trade_outcome({**base, "outcome": outcome})
@@ -186,6 +187,7 @@ def test_signal_filter_does_not_mutate_before_commit(tmp_path):
                     "z_score": 0.3,
                     "manipulation": False,
                     "recommended": "CALL",
+                    "expiration_seconds": 60,
                 }
             )
     assert filt.total_wins == 2

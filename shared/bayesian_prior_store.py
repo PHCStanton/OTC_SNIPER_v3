@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 import tempfile
@@ -35,6 +36,9 @@ PathLike = Union[str, Path]
 DEFAULT_LOCK_TIMEOUT_SEC = 10.0
 READ_RETRY_ATTEMPTS = 8
 READ_RETRY_BASE_DELAY_SEC = 0.02
+# REV2 A2: 3-week half-life (within the specified 2–4 week range).
+DEFAULT_RECENCY_HALF_LIFE_DAYS = 21.0
+SECONDS_PER_DAY = 86400.0
 
 
 class PriorStoreError(Exception):
@@ -79,6 +83,71 @@ def _require_non_neg_int(value: Any, field: str) -> int:
     return int(value)
 
 
+def _require_non_neg_number(value: Any, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise PriorStoreValidationError(f"{field} must be a non-negative number, got {value!r}")
+    number = float(value)
+    if not math.isfinite(number) or number < 0:
+        raise PriorStoreValidationError(f"{field} must be a finite non-negative number, got {value!r}")
+    return number
+
+
+def recency_weight(
+    age_days: float,
+    half_life_days: float = DEFAULT_RECENCY_HALF_LIFE_DAYS,
+) -> float:
+    """Exponential recency weight. Half-life days must be > 0. Age < 0 is treated as 0."""
+    half = _require_non_neg_number(half_life_days, "half_life_days")
+    if half <= 0:
+        raise PriorStoreValidationError("half_life_days must be > 0")
+    age = _require_non_neg_number(max(0.0, float(age_days)), "age_days")
+    return 0.5 ** (age / half)
+
+
+def empty_recency(half_life_days: float = DEFAULT_RECENCY_HALF_LIFE_DAYS, as_of_unix: float = 0.0) -> Dict[str, Any]:
+    return {
+        "half_life_days": float(half_life_days),
+        "as_of_unix": float(as_of_unix),
+        "total_weighted_wins": 0.0,
+        "total_weighted_losses": 0.0,
+        "feature_counts": {},
+    }
+
+
+def normalize_recency_block(data: Any) -> Dict[str, Any]:
+    """Validate the optional recency overlay. Fail loud on corrupt payloads."""
+    if not isinstance(data, Mapping):
+        raise PriorStoreValidationError("recency must be an object")
+    half = _require_non_neg_number(
+        data.get("half_life_days", DEFAULT_RECENCY_HALF_LIFE_DAYS),
+        "recency.half_life_days",
+    )
+    if half <= 0:
+        raise PriorStoreValidationError("recency.half_life_days must be > 0")
+    as_of = _require_non_neg_number(data.get("as_of_unix", 0), "recency.as_of_unix")
+    tw = _require_non_neg_number(data.get("total_weighted_wins", 0), "recency.total_weighted_wins")
+    tl = _require_non_neg_number(data.get("total_weighted_losses", 0), "recency.total_weighted_losses")
+    raw_fc = data.get("feature_counts") or {}
+    if not isinstance(raw_fc, Mapping):
+        raise PriorStoreValidationError("recency.feature_counts must be an object")
+    feature_counts: Dict[str, Dict[str, float]] = {}
+    for key, counts in raw_fc.items():
+        if not isinstance(key, str) or not key.strip():
+            raise PriorStoreValidationError(f"recency feature key must be a non-empty string, got {key!r}")
+        if not isinstance(counts, Mapping):
+            raise PriorStoreValidationError(f"recency.feature_counts[{key!r}] must be an object")
+        win = _require_non_neg_number(counts.get("win", 0), f"recency.feature_counts[{key}].win")
+        loss = _require_non_neg_number(counts.get("loss", 0), f"recency.feature_counts[{key}].loss")
+        feature_counts[key.strip()] = {"win": win, "loss": loss}
+    return {
+        "half_life_days": half,
+        "as_of_unix": as_of,
+        "total_weighted_wins": tw,
+        "total_weighted_losses": tl,
+        "feature_counts": feature_counts,
+    }
+
+
 def normalize_priors(data: Any) -> Dict[str, Any]:
     """Validate and normalize a priors document. Raises on corruption/invalid schema."""
     if not isinstance(data, Mapping):
@@ -111,12 +180,15 @@ def normalize_priors(data: Any) -> Dict[str, Any]:
         loss = _require_non_neg_int(counts.get("loss", 0), f"feature_counts[{key}].loss")
         feature_counts[key.strip()] = {"win": win, "loss": loss}
 
-    return {
+    result: Dict[str, Any] = {
         "total_wins": total_wins,
         "total_losses": total_losses,
         "total_trades": total_trades,
         "feature_counts": feature_counts,
     }
+    if data.get("recency") is not None:
+        result["recency"] = normalize_recency_block(data.get("recency"))
+    return result
 
 
 def validate_trade_outcome(trade: Any) -> Dict[str, Any]:
@@ -146,14 +218,60 @@ def validate_trade_outcome(trade: Any) -> Dict[str, Any]:
             )
         normalized_features.append(feat.strip())
 
-    return {"won": won, "features": normalized_features}
+    out: Dict[str, Any] = {"won": won, "features": normalized_features}
+    if trade.get("weight") is not None:
+        out["weight"] = _require_non_neg_number(trade.get("weight"), "weight")
+    if trade.get("age_days") is not None:
+        out["age_days"] = _require_non_neg_number(trade.get("age_days"), "age_days")
+    if trade.get("entry_time") is not None:
+        out["entry_time"] = _require_non_neg_number(trade.get("entry_time"), "entry_time")
+    return out
+
+
+def _trade_recency_weight(
+    trade: Mapping[str, Any],
+    *,
+    half_life_days: float,
+    as_of_unix: Optional[float],
+) -> float:
+    if "weight" in trade:
+        return float(trade["weight"])
+    if "age_days" in trade:
+        return recency_weight(float(trade["age_days"]), half_life_days)
+    if "entry_time" in trade and as_of_unix is not None:
+        age_days = max(0.0, (float(as_of_unix) - float(trade["entry_time"])) / SECONDS_PER_DAY)
+        return recency_weight(age_days, half_life_days)
+    return 1.0
+
+
+def _scale_recency(recency: Mapping[str, Any], factor: float) -> Dict[str, Any]:
+    scaled_fc = {
+        key: {"win": float(counts["win"]) * factor, "loss": float(counts["loss"]) * factor}
+        for key, counts in recency.get("feature_counts", {}).items()
+    }
+    return {
+        "half_life_days": float(recency["half_life_days"]),
+        "as_of_unix": float(recency.get("as_of_unix") or 0.0),
+        "total_weighted_wins": float(recency.get("total_weighted_wins") or 0.0) * factor,
+        "total_weighted_losses": float(recency.get("total_weighted_losses") or 0.0) * factor,
+        "feature_counts": scaled_fc,
+    }
 
 
 def apply_trade_outcomes(
     priors: Mapping[str, Any],
     trades: List[Mapping[str, Any]],
+    *,
+    as_of_unix: Optional[float] = None,
+    half_life_days: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Return a new priors dict with trade outcomes applied (pure)."""
+    """Return a new priors dict with trade outcomes applied (pure).
+
+    Integer counts stay unweighted (backward compatible). When a recency overlay
+    already exists, or any trade carries weight/age_days/entry_time, the overlay
+    is decayed toward ``as_of_unix`` and the new evidence is added at its
+    recency weight (REV2 A2).
+    """
     base = normalize_priors(priors)
     total_wins = base["total_wins"]
     total_losses = base["total_losses"]
@@ -162,8 +280,9 @@ def apply_trade_outcomes(
         for k, v in base["feature_counts"].items()
     }
 
-    for raw in trades:
-        trade = validate_trade_outcome(raw)
+    validated: List[Dict[str, Any]] = [validate_trade_outcome(raw) for raw in trades]
+
+    for trade in validated:
         if trade["won"]:
             total_wins += 1
             bucket = "win"
@@ -176,13 +295,74 @@ def apply_trade_outcomes(
                 feature_counts[feat] = {"win": 0, "loss": 0}
             feature_counts[feat][bucket] += 1
 
-    return normalize_priors(
-        {
-            "total_wins": total_wins,
-            "total_losses": total_losses,
-            "total_trades": total_wins + total_losses,
-            "feature_counts": feature_counts,
+    result: Dict[str, Any] = {
+        "total_wins": total_wins,
+        "total_losses": total_losses,
+        "total_trades": total_wins + total_losses,
+        "feature_counts": feature_counts,
+    }
+
+    should_touch_recency = base.get("recency") is not None or any(
+        "weight" in t or "age_days" in t or "entry_time" in t for t in validated
+    )
+    if should_touch_recency:
+        existing = base.get("recency") or empty_recency(
+            half_life_days or DEFAULT_RECENCY_HALF_LIFE_DAYS,
+            as_of_unix or 0.0,
+        )
+        half = float(
+            half_life_days
+            if half_life_days is not None
+            else existing.get("half_life_days") or DEFAULT_RECENCY_HALF_LIFE_DAYS
+        )
+        recency = dict(existing)
+        recency["half_life_days"] = half
+        if as_of_unix is not None:
+            prev_as_of = float(recency.get("as_of_unix") or 0.0)
+            if prev_as_of > 0:
+                elapsed_days = max(0.0, (float(as_of_unix) - prev_as_of) / SECONDS_PER_DAY)
+                recency = _scale_recency(recency, recency_weight(elapsed_days, half))
+            recency["as_of_unix"] = float(as_of_unix)
+            recency["half_life_days"] = half
+
+        tw = float(recency.get("total_weighted_wins") or 0.0)
+        tl = float(recency.get("total_weighted_losses") or 0.0)
+        rfc: Dict[str, Dict[str, float]] = {
+            k: {"win": float(v["win"]), "loss": float(v["loss"])}
+            for k, v in (recency.get("feature_counts") or {}).items()
         }
+        for trade in validated:
+            weight = _trade_recency_weight(trade, half_life_days=half, as_of_unix=as_of_unix)
+            if trade["won"]:
+                tw += weight
+                bucket = "win"
+            else:
+                tl += weight
+                bucket = "loss"
+            for feat in trade["features"]:
+                if feat not in rfc:
+                    rfc[feat] = {"win": 0.0, "loss": 0.0}
+                rfc[feat][bucket] += weight
+        recency["total_weighted_wins"] = tw
+        recency["total_weighted_losses"] = tl
+        recency["feature_counts"] = rfc
+        result["recency"] = recency
+
+    return normalize_priors(result)
+
+
+def build_recency_priors(
+    trades: List[Mapping[str, Any]],
+    *,
+    as_of_unix: float,
+    half_life_days: float = DEFAULT_RECENCY_HALF_LIFE_DAYS,
+) -> Dict[str, Any]:
+    """Rebuild priors from a dated trade list with recency weighting (pure)."""
+    return apply_trade_outcomes(
+        empty_priors(),
+        trades,
+        as_of_unix=as_of_unix,
+        half_life_days=half_life_days,
     )
 
 
@@ -436,7 +616,13 @@ class BayesianPriorStore:
             f"Failed to atomically replace {dest} after {attempts} attempts: {last_err}"
         )
 
-    def update_from_trades(self, trades: List[Mapping[str, Any]]) -> Dict[str, Any]:
+    def update_from_trades(
+        self,
+        trades: List[Mapping[str, Any]],
+        *,
+        as_of_unix: Optional[float] = None,
+        half_life_days: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """Full RMW transaction: lock → read → apply trades → fsync replace → unlock."""
         if not isinstance(trades, list):
             raise PriorStoreValidationError("trades must be a list")
@@ -446,7 +632,12 @@ class BayesianPriorStore:
 
         with self._exclusive_lock():
             current = self._read_under_lock()
-            updated = apply_trade_outcomes(current, trades)
+            updated = apply_trade_outcomes(
+                current,
+                trades,
+                as_of_unix=as_of_unix,
+                half_life_days=half_life_days,
+            )
             self._write_atomic_under_lock(updated)
             return updated
 

@@ -3,6 +3,7 @@
  * Backend CalibrationService is the owner; this store only observes.
  */
 import { create } from 'zustand';
+import { getCalibrationStatus } from '../api/strategyApi.js';
 
 const LOCKED_STATES = new Set(['RUNNING', 'ANALYZING', 'PROPOSING']);
 
@@ -33,8 +34,22 @@ export function isCalibrationSessionId(sessionId) {
   return typeof sessionId === 'string' && sessionId.startsWith('auto_ghost_calib_');
 }
 
-export const useCalibrationStore = create((set) => ({
+export const useCalibrationStore = create((set, get) => ({
   ...CALIBRATION_DEFAULT_STATUS,
+
+  // R2-2 (M-6): authoritative backend status fetch for page-reload recovery.
+  // The 5s `status_update.calibration` poll covers steady state; this closes the
+  // blind window immediately after mount (no "unlocked-looking" UI mid-run).
+  fetchStatus: async () => {
+    try {
+      const res = await getCalibrationStatus();
+      if (res && typeof res === 'object' && res.calibration) {
+        get().applyStatus(res.calibration);
+      }
+    } catch (err) {
+      console.warn('[Calibration] fetchStatus failed:', err?.message);
+    }
+  },
 
   applyStatus: (payload) => {
     if (!payload || typeof payload !== 'object') return;

@@ -120,6 +120,11 @@ CALIBRATION_LOCKED_FIELDS = frozenset({
 
 _LOCKED_STATES = frozenset({"RUNNING", "ANALYZING", "PROPOSING"})
 
+# R1-2 (C-B): hard bound on any single calibration AI review call — a wedged
+# provider must never hang the event loop or strand a finalize. Applied in
+# `_run_milestone_review` via asyncio.wait_for.
+MILESTONE_AI_TIMEOUT_SECONDS = 90.0
+
 
 class CalibrationService:
     """Single owner of calibration state. Bind once via `bind()`, drive via `start()`/`stop()`."""
@@ -154,13 +159,42 @@ class CalibrationService:
         self._last_alignment: str | None = None
         self._drift_streak: int = 0
         self._ai_reviewer = None  # injectable for tests: async (system, user) -> str
+        # R5: startup reconciliation is ONE-SHOT per process — `bind()` is called
+        # on every calibration API call (strategy.py start/stop/status), and
+        # re-running reconcile would repeatedly re-mark the live run's own
+        # session file (RUNNING is a locked state) and spam the notification bell.
+        self._reconcile_done: bool = False
 
     # ── Wiring ────────────────────────────────────────────────────────────────
 
     def bind(self, auto_ghost, sio=None) -> None:
-        """Bind the AutoGhostService (and Socket.IO server) to this singleton."""
+        """Bind the AutoGhostService (and Socket.IO server) to this singleton.
+
+        R1-3 (C-A): binding is the natural startup hook — reconcile any stale
+        persisted sessions (the process died mid-run) and surface them loudly
+        so a stranded PROPOSING/RUNNING can never be silently ignored.
+        """
         self._auto_ghost = auto_ghost
         self._sio = sio
+        if self._reconcile_done:
+            return
+        self._reconcile_done = True
+        disrupted = self._reconcile_stale_sessions()
+        if disrupted and sio is not None:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None:
+                loop.create_task(self._emit_notification({
+                    "type": "warning",
+                    "message": (
+                        f"{len(disrupted)} interrupted calibration session(s) marked "
+                        f"STALE_ABORTED on startup — pre-calibration settings were NOT "
+                        f"auto-restored for those runs: {', '.join(disrupted[:3])}"
+                    ),
+                    "timestamp": unix_time(),
+                }))
 
     @property
     def initialized(self) -> bool:
@@ -249,6 +283,79 @@ class CalibrationService:
         self._changelog.append(entry)
         self._persist()
 
+    def _reconcile_stale_sessions(self) -> list[str]:
+        """R1-3 (C-A): boot-time reconciliation of non-terminal persisted sessions.
+
+        Any session file in a _LOCKED_STATE means the previous process died
+        mid-run (finalize never completed). Mark it STALE_ABORTED in place with
+        a changelog entry and a loud error log; clean orphan `.json.tmp`
+        artifacts. Never silently ignore (Core Principle #8). The in-memory
+        service still boots IDLE so a new calibration can start immediately.
+
+        Returns the list of interrupted calibration ids (empty when healthy).
+        """
+        try:
+            directory = self._session_dir()
+        except Exception as exc:
+            logger.error("Calibration reconcile: cannot resolve session dir: %s", exc)
+            return []
+        if not directory.exists():
+            return []
+        disrupted: list[str] = []
+        for path in sorted(directory.glob("auto_ghost_calib_*.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                logger.error("Calibration reconcile: unreadable session file %s: %s", path.name, exc)
+                continue
+            state = str(data.get("state") or "")
+            if state not in _LOCKED_STATES:
+                continue
+            # R5: NEVER treat the in-memory active calibration's own file as
+            # stale — while RUNNING its persisted state is a locked state by
+            # design and self-heals at the next persist/DONE.
+            if self._calibration_id and str(data.get("calibration_id") or "") == self._calibration_id:
+                continue
+            changelog = data.setdefault("changelog", [])
+            if not isinstance(changelog, list):
+                changelog = []
+                data["changelog"] = changelog
+            changelog.append({
+                "epoch": len(changelog) + 1,
+                "event": "reconciled_stale",
+                "ts": unix_time(),
+                "previous_state": state,
+            })
+            data["state"] = "STALE_ABORTED"
+            data["final_report"] = data.get("final_report") or {
+                "final_state": "STALE_ABORTED",
+                "reason": "process_interrupted_before_finalize",
+                "settled_wins": data.get("settled_wins", 0),
+                "settled_losses": data.get("settled_losses", 0),
+            }
+            tmp = path.with_suffix(".json.tmp")
+            try:
+                with open(tmp, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh, indent=2, default=str)
+                os.replace(tmp, path)
+            except Exception as exc:
+                logger.error("Calibration reconcile: failed to rewrite %s: %s", path.name, exc)
+                continue
+            disrupted.append(str(data.get("calibration_id") or path.stem))
+            logger.error(
+                "Calibration session %s was interrupted in state %s — marked STALE_ABORTED. "
+                "Review protocol settings for that run (settings were not auto-restored).",
+                data.get("calibration_id"), state,
+            )
+        for tmp in directory.glob("auto_ghost_calib_*.json.tmp"):
+            try:
+                tmp.unlink(missing_ok=True)
+            except Exception as exc:
+                logger.warning("Calibration reconcile: failed to remove orphan tmp %s: %s", tmp.name, exc)
+            else:
+                logger.warning("Calibration reconcile: removed orphan temp file %s", tmp.name)
+        return disrupted
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(
@@ -291,6 +398,14 @@ class CalibrationService:
         self._cancel_watchdog()
         self._cancel_guardian()
 
+        # Calibration overrides manual Ghost-enabled state (trades must execute
+        # even when the user had Auto-Ghost off); D4 restore brings it back.
+        # R1-5 (H-3): enable BEFORE minting the calibration session so the
+        # enabled-transition reset in update_config (`auto_ghost.py:293-295`)
+        # cannot re-mint a different auto_ghost_calib_* id afterwards. The id
+        # minted by set_calibration_mode is the single authoritative session id.
+        ag.update_config(enabled=True)
+
         # M1/M9: dedicated isolated session id + calibration mode (mints the session).
         ag.set_calibration_mode(True, session_id=self._calibration_id)
 
@@ -298,9 +413,14 @@ class CalibrationService:
         ag.update_config(**_CALIBRATION_BASELINE_PRESET)
         # Force locked pulse/AI behavior (C5/H4) — explicit bools, never silently skipped.
         ag.update_config(auto_execute_ai_pulse=False, oteo_ai_enabled=False)
-        # Calibration overrides manual Ghost-enabled state (trades must execute
-        # even when the user had Auto-Ghost off); D4 restore brings it back.
-        ag.update_config(enabled=True)
+
+        # Fail fast (Core Principle #9): the calibration session id must be the
+        # id used by all trade stamps and journal analytics. Divergence aborts start.
+        if ag._session_id != self._calibration_id:
+            raise CalibrationStateError(
+                "Calibration session id divergence: "
+                f"auto_ghost={ag._session_id} != calibration={self._calibration_id}.",
+            )
 
         # Entry veto + settlement observation wiring.
         ag.set_entry_veto_check(self._entry_veto)
@@ -327,17 +447,23 @@ class CalibrationService:
         return self.public_status()
 
     async def stop(self, *, reason: str = "user_requested") -> dict[str, Any]:
-        """User stop: freeze new entries NOW, drain in-flight trades, then finalize (M10)."""
+        """User stop: freeze new entries NOW, drain in-flight trades, then finalize (M10).
+
+        R1-4 (H-2) escape hatch: accepted from RUNNING **and** ANALYZING so a
+        calibration can never strand with the 409 lock / veto active while a
+        drain or finalize is already in recovery.
+        """
         ag = self._require_bound()
-        if self._state != "RUNNING":
+        if self._state not in ("RUNNING", "ANALYZING"):
             raise CalibrationStateError(
-                f"stop() requires state RUNNING (current: {self._state})."
+                f"stop() requires RUNNING or ANALYZING (current: {self._state})."
             )
         self._stop_requested = True
         self._stop_reason = str(reason)
         self._terminal_state = "DONE"
         # Freezes entries immediately: _entry_veto vetoes unless state == RUNNING.
-        self._state = "ANALYZING"
+        if self._state == "RUNNING":
+            self._state = "ANALYZING"
         self._journal("stop_requested", reason=self._stop_reason)
         await self._emit_status()
         await self._begin_drain()
@@ -378,7 +504,13 @@ class CalibrationService:
         )
 
     async def abort(self, *, reason: str) -> dict[str, Any]:
-        """Loud abort (kill-switch or fatal). Freeze, drain, THEN restore (H2)."""
+        """Loud abort (kill-switch or fatal). Freeze, drain, THEN restore (H2).
+
+        R1-4 (H-2) escape hatch: if the finalize is stranded (flag set but no
+        live drain/finalize task — e.g. a previous process died mid-finalize),
+        reset the flag and drive finalize to completion so the user is never
+        locked out of recovery.
+        """
         if self._state in ("DONE", "ABORTED", "IDLE"):
             raise CalibrationStateError(
                 f"abort() requires an active calibration (current: {self._state})."
@@ -390,9 +522,28 @@ class CalibrationService:
             self._state = "ANALYZING"
         self._journal("calibration_aborted", reason=reason)
         await self._emit_status()
-        if self._drain_task is not None and not self._drain_task.done():
+
+        drain = self._drain_task
+        alive = drain is not None and not drain.done()
+        if self._finalizing and not alive:
+            # Stranded finalize (process died / task cancelled without cleanup):
+            # rescue it so the terminal state + D4 restore are guaranteed.
+            logger.warning(
+                "Calibration %s finalize was stranded (finalizing=True, no live task) — "
+                "rescuing via abort.",
+                self._calibration_id,
+            )
+            self._finalizing = False
+        if self._finalizing:
+            # A live finalize is already draining/restoring; it completes on its own.
+            logger.info(
+                "Calibration %s finalize already in progress; abort acknowledged.",
+                self._calibration_id,
+            )
+            return self.public_status()
+        if alive:
             try:
-                await self._drain_task
+                await drain
             except asyncio.CancelledError:
                 await self._finalize_after_drain()
             return self.public_status()
@@ -400,7 +551,15 @@ class CalibrationService:
         return self.public_status()
 
     async def _finalize(self, *, final_state: str, reason: str | None = None) -> None:
-        """Common finalization: build final report, restore snapshot (D4), transition."""
+        """Common finalization: build final report, restore snapshot (D4), transition.
+
+        R1-1 (C-B / Phase-3 P1): EXCEPTION-SAFE. D4 restore + unwiring happen
+        AFTER the (non-awaiting) report build but BEFORE any awaited AI review,
+        and the `finally` block ALWAYS reaches a terminal state — a review
+        failure, timeout, or disk error can never leave calibration stranded in
+        PROPOSING with the 409 lock and entry veto still active. Any internal
+        failure forces ABORTED loudly.
+        """
         if self._finalizing or self._state in ("DONE", "ABORTED"):
             return
         self._finalizing = True
@@ -411,40 +570,50 @@ class CalibrationService:
         self._state = "PROPOSING"
         self._persist()
 
-        settled = self._settled_wins + self._settled_losses
-        self._final_report = {
-            "calibration_id": self._calibration_id,
-            "final_state": final_state,
-            "reason": reason or ("stop_requested" if self._stop_reason else "budget_complete"),
-            "settled_wins": self._settled_wins,
-            "settled_losses": self._settled_losses,
-            "settled_voids": self._settled_voids,
-            "win_rate": round(self._settled_wins / settled * 100.0, 2) if settled else None,
-            "calibration_pnl": round(self._calibration_pnl, 2),
-            "changelog_epochs": len(self._changelog),
-        }
-        self._persist()
+        try:
+            settled = self._settled_wins + self._settled_losses
+            self._final_report = {
+                "calibration_id": self._calibration_id,
+                "final_state": final_state,
+                "reason": reason or ("stop_requested" if self._stop_reason else "budget_complete"),
+                "settled_wins": self._settled_wins,
+                "settled_losses": self._settled_losses,
+                "settled_voids": self._settled_voids,
+                "win_rate": round(self._settled_wins / settled * 100.0, 2) if settled else None,
+                "calibration_pnl": round(self._calibration_pnl, 2),
+                "changelog_epochs": len(self._changelog),
+            }
+            self._persist()
 
-        if final_state == "DONE":
-            await self._run_milestone_review(
-                settled, apply_tier_a=False, is_final=True,
+            # D4: auto-restore the pre-calibration snapshot + unwiring BEFORE
+            # any awaited AI review (C-B / Phase-3 P1): a review failure must
+            # never leave the user's config replaced or the veto/lock active.
+            self._restore_snapshot()
+
+            ag.set_calibration_mode(False)
+            ag.set_entry_veto_check(None)
+            ag.remove_outcome_observer(self._on_outcome)
+
+            if final_state == "DONE":
+                await self._run_milestone_review(
+                    settled, apply_tier_a=False, is_final=True,
+                )
+        except Exception:
+            logger.exception(
+                "Calibration %s finalize failed — forcing ABORTED (fail loud).",
+                self._calibration_id,
             )
-
-        # D4: auto-restore the pre-calibration snapshot BEFORE the terminal transition.
-        self._restore_snapshot()
-
-        ag.set_calibration_mode(False)
-        ag.set_entry_veto_check(None)
-        ag.remove_outcome_observer(self._on_outcome)
-
-        self._state = final_state
-        self._persist()
-        await self._emit_status()
-        if final_state == "ABORTED":
-            await self._emit_loud_abort(reason or "unknown")
-        elif final_state == "DONE":
-            self._arm_guardian()
-        logger.info("Calibration %s finalized: %s", self._calibration_id, final_state)
+            final_state = "ABORTED"
+        finally:
+            self._state = final_state
+            self._finalizing = False
+            self._persist()
+            await self._emit_status()
+            if final_state == "ABORTED":
+                await self._emit_loud_abort(reason or "finalize_failure")
+            elif final_state == "DONE":
+                self._arm_guardian()
+            logger.info("Calibration %s finalized: %s", self._calibration_id, final_state)
 
     def _restore_snapshot(self) -> None:
         """D4: restore the exact pre-calibration user config, including None fields."""
@@ -570,6 +739,15 @@ class CalibrationService:
         except Exception as exc:
             logger.error("Failed to emit calibration_status: %s", exc)
 
+    async def _emit_notification(self, payload: dict[str, Any]) -> None:
+        """Emit a live-UI notification (best-effort, fail loud)."""
+        if not self._sio:
+            return
+        try:
+            await self._sio.emit("notification", payload)
+        except Exception as exc:
+            logger.error("Failed to emit notification: %s", exc)
+
     async def _emit_loud_abort(self, reason: str) -> None:
         """Kill-switch alert: intentionally VISIBLE on the live notification channel."""
         if not self._sio:
@@ -636,7 +814,21 @@ class CalibrationService:
             if str(key).startswith("regime:"):
                 regime_counts[str(key).split(":", 1)[-1]] = int(stat.get("wins", 0)) + int(stat.get("losses", 0))
 
-        raw_text = await self._ask_milestone_ai(settled=settled, is_final=is_final, current=current)
+        # R1-2 (C-B): hard-bound the AI call — a wedged provider must never pin
+        # the event loop or strand a finalize. Fail loud on timeout: continue
+        # without AI changes this cycle.
+        try:
+            raw_text = await asyncio.wait_for(
+                self._ask_milestone_ai(settled=settled, is_final=is_final, current=current),
+                timeout=MILESTONE_AI_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Calibration %s milestone AI review timed out after %.0fs (n=%d) "
+                "— no AI changes this cycle.",
+                self._calibration_id, MILESTONE_AI_TIMEOUT_SECONDS, settled,
+            )
+            raw_text = ""
         parsed = parse_autonomy_payload(raw_text)
         verdict = enforce_milestone(
             parsed,
@@ -693,7 +885,15 @@ class CalibrationService:
                 "observations": verdict["observations"],
             }
         self._persist()
-        await self._persist_observations(verdict["observations"])
+        try:
+            await self._persist_observations(verdict["observations"])
+        except Exception as obs_err:
+            # R1-1 (C-B): observation persistence must never break the milestone /
+            # final report flow — log loudly and continue (report emission safety).
+            logger.error(
+                "Calibration %s failed to persist AI observations (non-fatal): %s",
+                self._calibration_id, obs_err,
+            )
         event = "calibration_final" if is_final else "calibration_milestone"
         await self._emit_named(event, report)
         logger.info("Calibration %s %s at n=%d applied=%d proposals=%d",
@@ -792,6 +992,22 @@ class CalibrationService:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
+        if self._warm_start_baseline is None:
+            # R3-2 (H-1): arming the Guardian WITHOUT a KB warm-start baseline is
+            # LOUD — one warning per DONE. Prior-transfer / drift / alignment are
+            # degraded, never silently. (Core Principle #8.)
+            path = self._warm_start_path()
+            loop.create_task(self._emit_notification({
+                "type": "warning",
+                "message": (
+                    "Calibration complete but NO KB warm-start baseline was found at "
+                    f"{path} — Session Guardian prior-transfer, market-drift detector, "
+                    "and alignment classification stay DISABLED until "
+                    "`python scripts/kb_health_backfill.py --backfill --stage-only` is run."
+                ),
+                "calibration_id": self._calibration_id,
+                "timestamp": unix_time(),
+            }))
         self._guardian_task = loop.create_task(self._guardian_loop())
         self._guardian_task.add_done_callback(
             lambda t: logger.error("Session Guardian failed: %s", t.exception())

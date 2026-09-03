@@ -382,7 +382,11 @@ class AutoGhostService:
             self._outcome_observers.append(callback)
 
     def remove_outcome_observer(self, callback: Callable[..., None]) -> None:
-        self._outcome_observers = [cb for cb in self._outcome_observers if cb is not callback]
+        # Bound methods build a NEW object per attribute access, so `is not`
+        # would never match → unwiring silently failed (calibration H-2/C-B
+        # family: D4 restore must fully unwire calibration hooks). Use equality:
+        # bound methods compare equal iff same underlying function AND instance.
+        self._outcome_observers = [cb for cb in self._outcome_observers if cb != callback]
 
     def _notify_outcome_observers(self, **kwargs: Any) -> None:
         """Notify observers of a settlement; observer errors are logged, never silent."""

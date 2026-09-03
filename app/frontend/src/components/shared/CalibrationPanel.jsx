@@ -28,6 +28,10 @@ export default function CalibrationPanel() {
   const draining = calib.state === 'ANALYZING' || calib.state === 'PROPOSING';
 
   useEffect(() => {
+    // R2-2 (M-6): authoritative status fetch on mount so a page reload during a
+    // locked state shows CALIBRATING/badge immediately (no 5s poll blind window).
+    void useCalibrationStore.getState().fetchStatus();
+
     if (!running || !calib.startedAt) {
       setTickElapsed(calib.elapsedSeconds);
       return undefined;

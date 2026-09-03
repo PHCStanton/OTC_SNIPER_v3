@@ -18,6 +18,8 @@
 - Use the `QuFLX-v2` conda environment for Python execution.
 - In automated terminal execution, `conda run -n QuFLX-v2 ...` is more reliable than interactive activation.
 - Always run Powershell commands. Do not use `&&`. Instead use `;`.
+- Calibration / KB health tests (as of 2026-08-31): `conda run -n QuFLX-v2 python -m pytest test_ghost_protocol_profiles.py test_kb_health_phase4.py test_calibration_contracts.py test_calibration_autonomy.py test_preflight_gate_contracts.py test_auto_ghost.py -q`
+- KB backfill is staging-only: `conda run -n QuFLX-v2 python scripts/kb_health_backfill.py --audit --backfill --stage-only`
 
 ## Dependencies
 - FastAPI
@@ -33,7 +35,8 @@
 - Defensive & explicit error handling: never swallow errors.
 - Blocking broker SDK calls must not run directly on the async request path.
 - Trade execution uses REST, while sparklines and live trade results depend on Socket.IO connectivity.
-- **Execution Boundary:** Manual user trades are strictly mapped to the active SSID environment (Live/Demo). Automated simulation is strictly handled by the background Auto-Ghost module.
+- **Execution Boundary:** Manual user trades are strictly mapped to the active SSID environment (Live/Demo). Automated simulation is strictly handled by the background Auto-Ghost module. Calibration Mode is Ghost-kind only and never uses the live/demo broker execution path.
+- **Unit contracts:** `minimum_payout_pct` is 0–100 percent (calibration writes `85.0`, never `0.85`). `bayesian_min_probability` is a 0.50–0.90 float (frontend settings store uses 50–90 and divides by 100 on the REST path). UTC 4h blocks use origin 22:00 UTC.
 - **Zustand Selector Hygiene:** Prohibits broad Zustand hook destructuring (`const { x, y } = useStore()`) in high-frequency rendering contexts to avoid global re-render cascades. Use direct store `.subscribe()` subscriptions at the root (e.g. settings sync) to completely isolate React renders.
 - **requestAnimationFrame Throttling:** Non-critical UI elements (such as historical tick arrays/sparklines) are throttled via requestAnimationFrame (10 FPS active, 2 FPS inactive) to prevent browser main-thread congestion.
 - **In-Memory Trade Context Cache:** Completed ghost trades are cached in memory to avoid repetitive, linear-time session file re-parsing from disk during the AI Pulse loop.

@@ -1,9 +1,71 @@
-## 0. ACTIVE WORK — PreFlight Gate Remediation Plan (2026-08-23/24) — ALL PHASES COMPLETE ✅ (M14 deferred)
+## 0. ACTIVE WORK — Auto-Ghost Calibration Mode (Plan REV2) — Phases 0–5 IMPLEMENTED; Phase 6 DEFERRED AGAIN (2026-08-31)
 
-**Plan document:** `Dev_Docs/PreFlight_Gate_Remediation_Plan_26-08-23.md` (single source of truth — read it FIRST)
-**Source diagnostic:** `Reports-1/Executive_Diagnostic_and_Audit_Report.md` (Stability 74/100)
-**Protocol:** `.agents/PHASE_REVIEW_PROTOCOL.md` — @Reviewer sign-off after every phase; explicit user command between phases.
-**Environment:** conda `QuFLX-v2`; PowerShell (`;` separators, no `&&`).
+**⚠ THIS IS WHERE WE LEFT OFF.** Calibration Mode is in the tree on `feat/ai_kb`. **Do not start Phase 6** (Discord `NotificationSink`) until an explicit user command.
+
+**Plan document (read FIRST):** `Dev_Docs/Auto_Ghost_Calibration_Mode_Plan_26-08-26.md` — REV2, updated 2026-08-31 to match code.
+**Protocol:** `.agents/workflows/phase-review-protocol.md`. conda `QuFLX-v2`; PowerShell `;` not `&&`.
+**Revision history:** REV1 = forensic amendments C1–C5, M1–M11, A1–A2. REV2 = Bootstrap & Guardian (24 trades / ~25 min, health every 4, Tier A every 12 catastrophic-only) + A1 UTC-4h, A2 recency decay, A3 ledger, A4 drift detector.
+
+### Current status (2026-08-31)
+
+| Phase | Status |
+|---|---|
+| 0 AI Pulse enrichment | Done (`test_ai_pulse_prompt.py`) |
+| 1 CalibrationService + silent 5-surface routing + 409 lock + D4 restore + drain | Done (`test_calibration_contracts.py`) |
+| 2 Frontend CALIBRATING badge, freeze, journal Calibration filter | Done (`CalibrationPanel.jsx`, `useCalibrationStore.js`) |
+| 3 Tier A/B + Session Guardian (propose-only N≥20) | Done (`calibration_autonomy.py`) — **3 P1s still open** |
+| 4 KB health audit, staging-only recency backfill, UTC 4h (22:00 origin), 21d half-life, warm-start | Done (`kb_health.py`, `test_kb_health_phase4.py`) — review P1s **fixed** |
+| 5 Relaxed/Conservative/Strict + M8 schema expansion + alignment + A4 drift | Done (`ghost_protocol_profiles.py`, `test_ghost_protocol_profiles.py`) |
+| 6 Discord NotificationSink | **DEFERRED AGAIN 2026-08-31** |
+
+**Last verification:** `conda run -n QuFLX-v2 python -m pytest test_ghost_protocol_profiles.py test_kb_health_phase4.py test_calibration_contracts.py test_calibration_autonomy.py test_preflight_gate_contracts.py test_auto_ghost.py -q` → 73 passed. `npm --prefix app/frontend run build` clean. No live-browser calibration run.
+
+### Locked design (still true)
+- Ghost kind only (D1). Silent = route all five live surfaces, not rename one event. Copy-mode `execute` hard-blocked while RUNNING (D2). Runtime-config 409 while RUNNING/ANALYZING/PROPOSING (C3). D4 auto-restore snapshot on DONE/ABORTED (including `None` fields via `dataclasses.replace`). Budget counts settled win/loss only. Kill-switch is CalibrationService-owned, not the 300s drawdown cooldown. `minimum_payout_pct` is **85.0 percent**, never `0.85`. Bayesian floor is **0.50–0.90 float**. Master KB writes only via staging commit (N≥5/N≥20, `.bak`). UTC 4h blocks origin **22:00** (block 5 = 18:00–22:00, block 0 = 22:00–02:00).
+
+### Key modules (cite these, don't re-derive)
+- `app/backend/services/calibration_service.py` — single owner of calibration state + Guardian loop (alignment/drift after DONE).
+- `app/backend/services/calibration_autonomy.py` — pure Tier A/B + `guardian_proposals` + `guardian_prior_transfer`.
+- `app/backend/services/kb_health.py` — audit + `stage_historical_backfill` (staging-only) + warm-start.
+- `app/backend/services/ghost_protocol_profiles.py` — presets, `FRONTEND_GATE_KEYS` (M8), `detect_market_drift`, `classify_alignment`.
+- `shared/utc_time_blocks.py`, `shared/bayesian_prior_store.py` (integer counts + optional `recency` overlay).
+- Frontend: `useCalibrationStore.js`, `CalibrationPanel.jsx`, `useSettingsStore.js` `applyGhostProtocolGates` / `GHOST_STRICTNESS_PRESETS`.
+- CLI: `scripts/kb_health_backfill.py --audit --backfill --stage-only`. APIs: `GET /api/analysis/kb-health`, `POST /api/analysis/kb-backfill`, `GET /api/analysis/warm-start`.
+
+### Open follow-ups (NOT Phase 6)
+1. Phase 3 P1s: `_finalize` awaits AI before D4 restore (can stick PROPOSING); locked `amount`/`expiration` dropped from Tier B; Guardian empty `allowed_regimes` = allow-all.
+2. A3 suggestion-effectiveness ledger incomplete.
+3. Phase 4 suggestions: live Bayesian scoring still unweighted integers; corrupt warm-start only logged; staging-modal copy still describes integer prior merges.
+4. Live paper calibration (badge, silence, restore, Apply cards) not browser-verified.
+5. Phase 6 Discord — wait for explicit command.
+
+### NEXT STEP
+- Do **not** implement Phase 6.
+- Optional: Phase 3 P1s, A3 ledger, Phase 4 scoring/overlay-read, live calibration dry-run.
+- `.agent-memory/activeContext.md` + `progress.md` record PreFlight as complete — do NOT re-add that milestone.
+
+### Phase 0 implementation record (historical, 2026-08-26) — complete
+- **P0-1 Payout (EX-9):** asset summaries now resolve payout via `await self._resolve_asset_payout_pct(asset)` (TTL cache); rendered `Payout=85.0%` or `Payout=UNAVAILABLE`; trade lines show `entry_context.payout_pct` (None-safe per M5); user_msg gained `Minimum Payout Gate: {x:.1f}% (percent units...)` context line.
+- **P0-2 Bayesian WP:** `self._latest_bayesian_wp` cache merged → `WP60=/WP300=` per asset summary (UNAVAILABLE fallback).
+- **P0-3 HTF (M5):** NEW `StreamingService._compute_pulse_htf_summary(asset)` computes direction-agnostic verdict ON DEMAND (chosen over a cache — verified no `_last_htf` field exists); uses `HTFDirectionalBiasEngine.get_instance().compute_htf_trend(closed_candles)` + `compute_tick_flow_ratio(recent_ticks, 60s/300s)`; local import; try/except → None → UNAVAILABLE marker.
+- **P0-4 Vol/Liq:** `volatility_score`/`liquidity_score` from `mc_engine._cached_context` in summaries; vol/liq gate bands + Bayesian floor lines added to user_msg.
+- **P0-5 Trajectory:** `PulseTrajectoryEngine.get_instance().get_trajectory_analytics()` → attribution distribution line in user_msg (fail-soft try/except → UNAVAILABLE).
+- **P0-6 Confidence (M7, THREE sites):** prompt JSON example rebuilt WITHOUT `"confidence": 85` (+ honesty instruction #4); both regex fallbacks now go through NEW module-level `_extract_pulse_signal_from_text()` emitting `confidence: None`.
+- **P0-7 Rolling stats:** rolling last-20 settled WR + explicit N>=20 sample-size rule line in user_msg.
+- **P0-8 Clamp (M6/EX-21):** `_AUTO_GHOST_FIELD_SPECS["bayesian_min_probability"]` → `(float, 0.50, 0.90)` in `auto_ghost.py`.
+- **Refactor for testability:** prompt construction extracted to module-level pure builders in `streaming.py` (after `normalize_otc_asset_symbol`): `_build_ai_pulse_system_msg()`, `_build_pulse_asset_summary()`, `_build_pulse_user_msg()`, `_extract_pulse_signal_from_text()`, `_fmt_or_unavailable()`. `_run_ai_pulse_insight` rewired to call them — behavior preserved.
+- **Tests:** NEW `test_ai_pulse_prompt.py` — 24 tests (system prompt contract, asset summary, user message, regex fallback, HTF on-demand computation, Bayesian clamp). **Verification: 109/109 passed** (85 prior + 24 new); py_compile clean.
+
+### Key code facts (updated 2026-08-31 — stale 2026-08-26 line numbers below are historical)
+- Calibration owner is `CalibrationService`, not smeared state. Silent UI = `emit_trade_channel(..., calibration=True)` on all five surfaces.
+- `_AUTO_GHOST_FIELD_SPECS["bayesian_min_probability"]` is `(float, 0.50, 0.90)` (P0-8). Payout gate is percent.
+- `loadGhostProtocol` / `applyGhostProtocolGates` now load vol/liq/Bayesian/payout/amount/concurrency (M8). Do not revert to z-score+regime-only.
+- Historical note (pre-Phase-0 tree): prompt `"confidence": 85`, unbounded Bayesian spec, no HTF cache — those Phase 0/1 gaps are closed. Pulse-path manip veto `> 0` vs default `0.0` is still an intentional A1 behavior change when calibration sets 0.35.
+
+## 0.b COMPLETED — PreFlight Gate Remediation (2026-08-23/24) ✅ (M14 deferred — open follow-up: split ~500-line `test_auto_ghost.py` into per-gate modules)
+
+**Plan document (historical):** `Dev_Docs/PreFlight_Gate_Remediation_Plan_26-08-23.md` — all 8 phases + post-audit Z-score fix complete. Final report: `Reports-1/PreFlight_Gate_Remediation_and_Execution_Integrity_Report_26-08-24.md`. Milestone already recorded in `activeContext.md` + `progress.md` — do NOT re-add.
+**Protocol:** `.agents/PHASE_REVIEW_PROTOCOL.md`; **Environment:** conda `QuFLX-v2`; PowerShell (`;` separators, no `&&`).
 
 ### Verification commands (all green as of session end)
 ```

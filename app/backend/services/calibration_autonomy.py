@@ -88,6 +88,13 @@ def enforce_milestone(
 
     for item in _as_change_list(payload.get("tier_a_changes")):
         field = item["field"]
+        # R2-4 (M-4): Tier B-classified fields (amount / expiration_seconds)
+        # are PROPOSE-ONLY — never auto-applied by Tier A, and never rejected
+        # as "locked". True locked internals (mode, block_on_manipulation, ...
+        # not in CALIBRATION_TIER_B_FIELDS) still reject below.
+        if field in CALIBRATION_TIER_B_FIELDS:
+            proposals.append({**item, "requires_confirm": True, "reason": "tier_b_route"})
+            continue
         if field in locked_fields:
             rejected.append({**item, "reason": "locked"})
             continue
@@ -179,11 +186,20 @@ def guardian_proposals(
         wr = wins / len(outcomes)
         if wr >= 0.45:
             continue
+        remaining = [r for r in by_regime if r != regime]
+        if not remaining:
+            # R2-3 (M-3): never propose a whitelist that degrades to allow-all.
+            logger.info(
+                "Guardian: skipping regime-drop proposal for %s — it is the last "
+                "observed regime; an empty allowed_regimes would degrade to allow-all.",
+                regime,
+            )
+            continue
         return [{
             "field": "allowed_regimes",
             "family": "regimes",
             "bucket": family,
-            "new": [r for r in by_regime if r != regime],
+            "new": remaining,
             "rationale": (
                 f"Drop {regime}: {wins}/{len(outcomes)} wins "
                 f"({wr * 100:.1f}% WR, N={len(outcomes)} ≥ {min_n})"

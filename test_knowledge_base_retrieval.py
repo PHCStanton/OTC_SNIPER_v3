@@ -118,6 +118,49 @@ class TestKnowledgeBaseRetrieval(unittest.TestCase):
         )
         self.assertEqual(results_normalized[0]["asset"], "EURUSD_otc")
 
+    def test_query_top_patterns_utc_4h_block_boosts_similarity(self):
+        loader = KnowledgeBaseLoader()
+        loader.patterns = [
+            {
+                "pattern_key": "EURUSD_otc|level3|85-92|RANGE_BOUND|CALL|utc4h:5",
+                "asset": "EURUSD_otc",
+                "strategy_level": "level3",
+                "oteo_score_band": "85-92",
+                "regime_label": "RANGE_BOUND",
+                "direction": "CALL",
+                "utc_4h_block": 5,
+                "utc_4h_label": "18:00-22:00",
+                "sample_size": 12,
+                "win_rate_pct": 61.0,
+                "expectancy": 40.0,
+            },
+            {
+                "pattern_key": "EURUSD_otc|level3|85-92|RANGE_BOUND|CALL|utc4h:0",
+                "asset": "EURUSD_otc",
+                "strategy_level": "level3",
+                "oteo_score_band": "85-92",
+                "regime_label": "RANGE_BOUND",
+                "direction": "CALL",
+                "utc_4h_block": 0,
+                "utc_4h_label": "22:00-02:00",
+                "sample_size": 40,
+                "win_rate_pct": 48.0,
+                "expectancy": 10.0,
+            },
+        ]
+        loader.loaded = True
+        results = loader.query_top_patterns(
+            asset="EURUSD",
+            strategy_level="level3",
+            oteo_score=90.0,
+            regime_label="RANGE_BOUND",
+            direction="CALL",
+            utc_4h_block=5,
+            top_n=2,
+            min_sample_size=5,
+        )
+        self.assertEqual(results[0]["utc_4h_block"], 5)
+
     def test_lazy_loading_from_temp_file(self):
         # Create a temp file containing mock JSON patterns
         mock_data = {

@@ -165,7 +165,26 @@ class PocketOptionSession:
         if self.is_connected:
             return True, f"Already connected to {self.account_type}"
 
-        # Ensure current thread has an active event loop for pocketoptionapi initialization
+        # R4 (ops fail-fast, 2026-08-31 incident): the PocketOption SDK captures the
+        # CURRENT event loop at construction (`stable_api.py:39`
+        # `self.loop = asyncio.get_event_loop()`) and later calls
+        # loop.stop()/close() on it during disconnect (`stable_api.py:84-86`).
+        # If constructed on the server's RUNNING loop, a failed connect STOPS
+        # the live uvicorn loop (observed: 401 → "Cannot close a running event
+        # loop" → "Event loop stopped before Future completed"). Fail fast —
+        # never let the SDK capture the server's event loop. (Core Principle #9.)
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if running_loop is not None:
+            raise SessionConnectionError(
+                "PocketOptionSession.connect() blocked: invoked on a RUNNING event "
+                "loop thread. Call via asyncio.to_thread(...) from async code — the "
+                "broker SDK must never capture the server's event loop."
+            )
+
+        # Ensure the current (idle) thread has an event loop for the SDK init.
         try:
             asyncio.get_event_loop()
         except RuntimeError:

@@ -17,6 +17,8 @@ try:
         validate_tick,
         format_utc_datetime,
         join_trade_with_signals,
+        utc_4h_block,
+        utc_4h_label,
     )
 except ImportError:
     # Fallback to define them for isolated test compilation if scripts hasn't been written
@@ -24,6 +26,18 @@ except ImportError:
     pass
 
 class TestAnalyzeTradeIntelligence(unittest.TestCase):
+
+    def test_utc_4h_blocks_use_rollover_origin(self):
+        """18:00-22:00 UTC is block 5; 22:00-02:00 UTC is block 0 (REV2 A1)."""
+        from datetime import datetime, timezone
+        eighteen = datetime(2026, 1, 1, 18, 30, tzinfo=timezone.utc).timestamp()
+        twenty_two = datetime(2026, 1, 1, 22, 15, tzinfo=timezone.utc).timestamp()
+        one_am = datetime(2026, 1, 2, 1, 0, tzinfo=timezone.utc).timestamp()
+        self.assertEqual(utc_4h_block(eighteen), 5)
+        self.assertEqual(utc_4h_label(5), "18:00-22:00")
+        self.assertEqual(utc_4h_block(twenty_two), 0)
+        self.assertEqual(utc_4h_block(one_am), 0)
+        self.assertEqual(utc_4h_label(0), "22:00-02:00")
 
     def test_format_utc_datetime(self):
         """Verify that timestamps are formatted correctly in Gregorian UTC format."""
