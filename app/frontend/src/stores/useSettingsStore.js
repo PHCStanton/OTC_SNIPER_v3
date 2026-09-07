@@ -21,7 +21,6 @@ export const GHOST_STRICTNESS_PRESETS = {
       autoGhostLiquidityGateEnabled: false,
       minLiquidityScore: 0,
       maxLiquidityScore: 100,
-      autoGhostBayesianFilterEnabled: true,
       autoGhostBayesianMinProbability: 50,
       autoGhostMinimumPayout: 85,
       ghostAmount: 1,
@@ -32,7 +31,7 @@ export const GHOST_STRICTNESS_PRESETS = {
     },
   },
   conservative: {
-    name: 'Conservative',
+    name: 'Balanced',
     gates: {
       ghostMinZScore: -1.5,
       ghostMinZScoreEnabled: true,
@@ -46,7 +45,6 @@ export const GHOST_STRICTNESS_PRESETS = {
       autoGhostLiquidityGateEnabled: true,
       minLiquidityScore: 20,
       maxLiquidityScore: 80,
-      autoGhostBayesianFilterEnabled: true,
       autoGhostBayesianMinProbability: 53.5,
       autoGhostMinimumPayout: 88,
       ghostAmount: 1,
@@ -71,7 +69,6 @@ export const GHOST_STRICTNESS_PRESETS = {
       autoGhostLiquidityGateEnabled: true,
       minLiquidityScore: 40,
       maxLiquidityScore: 100,
-      autoGhostBayesianFilterEnabled: true,
       autoGhostBayesianMinProbability: 58,
       autoGhostMinimumPayout: 90,
       ghostAmount: 1,
@@ -539,6 +536,11 @@ export const useSettingsStore = create()(
             ghostMinConfidence: g.ghostMinConfidence ?? state.ghostMinConfidence,
             ghostMinConfidenceEnabled: g.ghostMinConfidenceEnabled ?? state.ghostMinConfidenceEnabled,
             autoGhostManipulationSeverityThreshold: g.autoGhostManipulationSeverityThreshold ?? state.autoGhostManipulationSeverityThreshold,
+            ghostBlacklist: Array.isArray(g.ghostBlacklist)
+              ? Array.from(new Set([...state.ghostBlacklist, ...g.ghostBlacklist]))
+              : (Array.isArray(g.blacklist_assets)
+                  ? Array.from(new Set([...state.ghostBlacklist, ...g.blacklist_assets]))
+                  : state.ghostBlacklist),
           };
           return { ...state, ...validateSettings(patch) };
         });

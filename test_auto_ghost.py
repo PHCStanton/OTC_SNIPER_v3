@@ -515,6 +515,38 @@ async def test_auto_ghost():
         assert int(p.get("sample_size", 0)) >= 5, "Query must strictly filter patterns with sample_size < 5"
     print("Test 16 passed: KB query minimum sample size filter verified.")
 
+    # Test 17: Session-First Learning tracker integration (feat/ai_kb)
+    print("Starting Test 17 (Session Performance Tracker Integration)...")
+    service.update_config(enabled=True)
+    assert service._session_id and not service._session_id.startswith("auto_ghost_calib_"), (
+        "A live (non-calibration) session id must be minted"
+    )
+    tracker = service.session_tracker
+    baseline = tracker.settled_count
+    baseline_wins = tracker.wins
+    baseline_losses = tracker.losses
+    service.report_outcome(
+        trade_id="trade_test_17a", outcome="win", profit=2.0, asset="EURUSD",
+        entry_context={"regime_label": "RANGE_BOUND", "expiration_seconds": 60},
+    )
+    service.report_outcome(
+        trade_id="trade_test_17b", outcome="void", profit=0.0, asset="EURUSD",
+        entry_context={"regime_label": "RANGE_BOUND", "expiration_seconds": 60},
+    )
+    service.report_outcome(
+        trade_id="trade_test_17c", outcome="loss", profit=-1.0, asset="EURUSD",
+        entry_context={"regime_label": "RANGE_BOUND", "expiration_seconds": 60},
+    )
+    assert tracker.settled_count == baseline + 2, "Void trades must never be recorded by the tracker"
+    assert tracker.wins == baseline_wins + 1 and tracker.losses == baseline_losses + 1
+    assert tracker.current_streak == -1, "Streak must reflect settled outcomes only (win then loss)"
+    assert tracker.rolling_session_wr == pytest.approx((baseline_wins + 1) / (baseline + 2))
+    snap = service.session_performance_snapshot()
+    assert snap["settled_count"] == tracker.settled_count
+    assert snap["session_id"] == service._session_id
+    assert "effective" in snap and "policy_directives" in snap
+    print("Test 17 passed: Session tracker integration verified.")
+
     print("All tests passed successfully!")
 
 if __name__ == "__main__":

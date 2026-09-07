@@ -234,6 +234,17 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Graceful shutdown: abort active calibration if running so config snapshot is restored
+    try:
+        calib = getattr(streaming_service, "calibration_service", None)
+        if calib is not None and calib.state in ("RUNNING", "ANALYZING", "PROPOSING"):
+            _log = logging.getLogger(__name__)
+            _log.warning("FastAPI lifespan shutdown: aborting active calibration %s", calib.calibration_id)
+            await calib.abort(reason="server_shutdown")
+    except Exception as _shut_err:
+        _log = logging.getLogger(__name__)
+        _log.error("Error during calibration shutdown cleanup: %s", _shut_err)
+
 
 fastapi_app = FastAPI(title="OTC SNIPER v3", version="3.0.0", lifespan=lifespan)
 

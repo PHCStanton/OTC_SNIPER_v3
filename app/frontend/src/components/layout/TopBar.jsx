@@ -708,8 +708,18 @@ export default function TopBar() {
                   ) : (
                     <div className="space-y-1.5 max-h-[260px] overflow-y-auto pr-0.5 scrollbar-thin">
                       {notifications.map((n) => {
-                        const Icon = n.type === 'ai_pulse' ? Zap : Bot;
-                        const iconColor = n.type === 'ai_pulse' ? 'text-amber-400' : 'text-[#ffb800]';
+                        let Icon = Bot;
+                        let iconColor = 'text-[#ffb800]';
+                        if (n.type === 'ai_pulse') {
+                          Icon = Zap;
+                          iconColor = 'text-amber-400';
+                        } else if (n.type === 'ai_pulse_aborted') {
+                          Icon = ShieldAlert;
+                          iconColor = 'text-[#fe7453]';
+                        } else if (n.type === 'guardian_proposal' || n.type === 'guardian_alignment') {
+                          Icon = ShieldAlert;
+                          iconColor = 'text-cyan-400';
+                        }
                         
                         const elapsedSecs = Math.max(0, Math.floor(Date.now() / 1000 - n.timestamp));
                         let timeStr = 'now';

@@ -3,12 +3,13 @@
  * Collapsed state persisted via useLayoutStore. Redesigned for Stitch.
  */
 import { useMemo, useState, useEffect } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, BarChart2, Star, Search, Filter, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, BarChart2, Star, Flag, Search, Filter, RefreshCw } from 'lucide-react';
 import { useLayoutStore } from '../../stores/useLayoutStore.js';
 import { useAssetStore } from '../../stores/useAssetStore.js';
 import { useSettingsStore } from '../../stores/useSettingsStore.js';
 import { useToastStore } from '../../stores/useToastStore.js';
 import { getBrokerAssets } from '../../api/tradingApi.js';
+import { updateRuntimeStrategyConfig } from '../../api/strategyApi.js';
 
 const DEFAULT_PAYOUT_THRESHOLD = 92;
 const QUICK_PAYOUT_PRESETS = [
@@ -45,6 +46,8 @@ export default function LeftSidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const payoutThreshold = useSettingsStore((s) => s.sidebarPayoutThreshold);
   const setPayoutThreshold = useSettingsStore((s) => s.setSidebarPayoutThreshold);
+  const ghostBlacklist = useSettingsStore((s) => s.ghostBlacklist) || [];
+  const setGhostBlacklist = useSettingsStore((s) => s.setGhostBlacklist);
   const [otcOnly, setOtcOnly] = useState(false);
   const [assetTypeFilter, setAssetTypeFilter] = useState('all');
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -54,6 +57,17 @@ export default function LeftSidebar() {
   const setAssetAutoRefreshEnabled = useSettingsStore((s) => s.setAssetAutoRefreshEnabled);
   const assetAutoRefreshInterval = useSettingsStore((s) => s.assetAutoRefreshInterval);
   const autoFocusOnSignal = useSettingsStore((s) => s.autoFocusOnSignal);
+
+  const toggleBlacklistAsset = (asset) => {
+    const current = useSettingsStore.getState().ghostBlacklist || [];
+    const next = current.includes(asset)
+      ? current.filter((a) => a !== asset)
+      : [...current, asset];
+    setGhostBlacklist(next);
+    updateRuntimeStrategyConfig({ auto_ghost_blacklist_assets: next }).catch((err) => {
+      console.warn('[LeftSidebar] Syncing blacklist to runtime failed:', err);
+    });
+  };
 
   const handleRefreshAssets = async (silent = false) => {
     try {
@@ -112,14 +126,19 @@ export default function LeftSidebar() {
       });
   }, [assetDetails, assetPayouts, assetTypeFilter, otcOnly, payoutThreshold, searchFilteredAssets]);
 
+  const suspendedList = useMemo(() =>
+    filteredAssets.filter((asset) => ghostBlacklist.includes(asset)),
+    [filteredAssets, ghostBlacklist]
+  );
+
   const starredList = useMemo(() =>
-    filteredAssets.filter(asset => starredAssets.includes(asset)),
-    [filteredAssets, starredAssets]
+    filteredAssets.filter((asset) => starredAssets.includes(asset) && !ghostBlacklist.includes(asset)),
+    [filteredAssets, starredAssets, ghostBlacklist]
   );
 
   const unstarredList = useMemo(() =>
-    filteredAssets.filter(asset => !starredAssets.includes(asset)),
-    [filteredAssets, starredAssets]
+    filteredAssets.filter((asset) => !starredAssets.includes(asset) && !ghostBlacklist.includes(asset)),
+    [filteredAssets, starredAssets, ghostBlacklist]
   );
 
   const hasActiveSearch = searchQuery.trim().length > 0;
@@ -251,8 +270,40 @@ export default function LeftSidebar() {
                       isSelected={selectedAsset === asset}
                       payout={assetPayouts?.[asset]}
                       isStarred={true}
+                      isSuspended={false}
                       onSelect={() => setSelectedAsset(asset)}
                       onToggleStar={() => toggleStarredAsset(asset)}
+                      onToggleSuspend={() => toggleBlacklistAsset(asset)}
+                      autoFocusOnSignal={autoFocusOnSignal}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {suspendedList.length > 0 && (
+              <div className="flex flex-col">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-rose-500/10">
+                  <div className="flex items-center gap-2">
+                    <Flag size={10} className="text-rose-400 fill-rose-500" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-rose-400">Suspended</span>
+                  </div>
+                  <span className="text-[9px] font-mono font-bold text-rose-400/90 bg-rose-500/20 px-1.5 py-0.5 rounded">
+                    {suspendedList.length}
+                  </span>
+                </div>
+                <ul className="py-1">
+                  {suspendedList.map((asset) => (
+                    <AssetRow 
+                      key={asset}
+                      asset={asset}
+                      isSelected={selectedAsset === asset}
+                      payout={assetPayouts?.[asset]}
+                      isStarred={starredAssets.includes(asset)}
+                      isSuspended={true}
+                      onSelect={() => setSelectedAsset(asset)}
+                      onToggleStar={() => toggleStarredAsset(asset)}
+                      onToggleSuspend={() => toggleBlacklistAsset(asset)}
                       autoFocusOnSignal={autoFocusOnSignal}
                     />
                   ))}
@@ -275,8 +326,10 @@ export default function LeftSidebar() {
                     isSelected={selectedAsset === asset}
                     payout={assetPayouts?.[asset]}
                     isStarred={false}
+                    isSuspended={false}
                     onSelect={() => setSelectedAsset(asset)}
                     onToggleStar={() => toggleStarredAsset(asset)}
+                    onToggleSuspend={() => toggleBlacklistAsset(asset)}
                     autoFocusOnSignal={autoFocusOnSignal}
                   />
                 ))}
@@ -304,7 +357,7 @@ export default function LeftSidebar() {
   );
 }
 
-function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar, autoFocusOnSignal }) {
+function AssetRow({ asset, isSelected, payout, isStarred, isSuspended, onSelect, onToggleStar, onToggleSuspend, autoFocusOnSignal }) {
   const payoutLabel = payout != null ? `${Math.round(payout * 100)}%` : null;
   const displayName = asset.replace('_otc', '').toUpperCase();
   const isOTC = asset.toLowerCase().includes('_otc');
@@ -316,7 +369,9 @@ function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar
           flex items-center justify-between px-3 py-1.5 text-xs transition-all duration-200 border-l-2
           ${isSelected
             ? 'bg-[#ffb800]/10 text-[#ffb800] border-[#ffb800]'
-            : 'text-gray-500 border-transparent hover:bg-white/[0.02] hover:text-gray-300'}
+            : isSuspended
+              ? 'text-rose-400/80 border-rose-500/40 bg-rose-500/5 hover:bg-rose-500/10 hover:text-rose-300'
+              : 'text-gray-500 border-transparent hover:bg-white/[0.02] hover:text-gray-300'}
         `}
       >
         <button
@@ -327,12 +382,13 @@ function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar
           <span className={`truncate font-black uppercase tracking-wide ${isSelected ? 'text-white' : ''}`}>
             {displayName}
             {isOTC && <span className="ml-1 text-[8px] text-[#ffb800] font-black tracking-widest bg-[#ffb800]/10 px-1 py-0.5 rounded">OTC</span>}
+            {isSuspended && <span className="ml-1 text-[8px] text-rose-400 font-black tracking-widest bg-rose-500/15 border border-rose-500/30 px-1 py-0.5 rounded">SUSPENDED</span>}
           </span>
           {payoutLabel && (
             <span
               className={`
                 text-[10px] font-black tracking-tighter
-                ${isSelected ? 'text-[#ffb800]' : 'text-emerald-500'}
+                ${isSelected ? 'text-[#ffb800]' : isSuspended ? 'text-rose-400/70' : 'text-emerald-500'}
               `}
             >
               {payoutLabel}
@@ -340,21 +396,43 @@ function AssetRow({ asset, isSelected, payout, isStarred, onSelect, onToggleStar
           )}
         </button>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleStar();
-          }}
-          className={`
-            p-1 rounded hover:bg-white/10 transition-all duration-300
-            ${isStarred ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}
-          `}
-        >
-          <Star
-            size={11}
-            className={`${isStarred ? 'text-[#ffb800] fill-[#ffb800]' : 'text-gray-600 hover:text-gray-400'}`}
-          />
-        </button>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSuspend?.();
+            }}
+            title={isSuspended ? 'Unsuspend asset (remove from blacklist)' : 'Suspend asset (add to ghost blacklist)'}
+            className={`
+              p-1 rounded hover:bg-white/10 transition-all duration-300
+              ${isSuspended ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}
+            `}
+          >
+            <Flag
+              size={11}
+              className={`${isSuspended ? 'text-rose-400 fill-rose-500' : 'text-gray-600 hover:text-rose-400'}`}
+            />
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStar?.();
+            }}
+            title={isStarred ? 'Remove from Quick Select' : 'Add to Quick Select'}
+            className={`
+              p-1 rounded hover:bg-white/10 transition-all duration-300
+              ${isStarred ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'}
+            `}
+          >
+            <Star
+              size={11}
+              className={`${isStarred ? 'text-[#ffb800] fill-[#ffb800]' : 'text-gray-600 hover:text-[#ffb800]'}`}
+            />
+          </button>
+        </div>
       </div>
     </li>
   );

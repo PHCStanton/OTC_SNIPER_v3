@@ -164,8 +164,50 @@ def _build_ai_pulse_system_msg() -> str:
         "4. Units and honesty contract:\n"
         "   - 'min_payout_pct' MUST be expressed in PERCENT (e.g. 87.0 means an 87% payout floor), never as a 0-1 fraction.\n"
         "   - NEVER emit a signal for an asset whose Payout is UNAVAILABLE or below the Minimum Payout Gate.\n"
-        "   - NEVER fabricate a 'confidence' value. Omit the 'confidence' key entirely unless the supplied data clearly supports an estimate; a missing confidence is treated as unspecified."
+        "   - NEVER fabricate a 'confidence' value. Omit the 'confidence' key entirely unless the supplied data clearly supports an estimate; a missing confidence is treated as unspecified.\n"
+        "5. Calibration Evidence Grounding:\n"
+        "   - When '### LATEST CALIBRATION INTELLIGENCE' is present in the prompt, treat its empirical results as primary market ground truth.\n"
+        "   - If the active session has low or zero settled trades (N < 10), actively cite the calibration's trade count, win rate, and prime/hazard assets in your briefing rather than reporting that evidence remains directional only."
     )
+
+
+def _render_calibration_context_section(calib_ctx: Dict[str, Any] | None) -> str:
+    """Render the `### LATEST CALIBRATION INTELLIGENCE` block.
+
+    Pure function formatting recent calibration evidence into the AI Pulse prompt.
+    Returns empty string if no calibration evidence is available.
+    """
+    if not calib_ctx:
+        return ""
+    cid = calib_ctx.get("calibration_id") or "UNKNOWN"
+    mins = float(calib_ctx.get("elapsed_minutes", 0.0) or 0.0)
+    total = int(calib_ctx.get("settled_total", 0) or 0)
+    wins = int(calib_ctx.get("settled_wins", 0) or 0)
+    losses = int(calib_ctx.get("settled_losses", 0) or 0)
+    wr = float(calib_ctx.get("win_rate_pct", 0.0) or 0.0)
+    pnl = float(calib_ctx.get("pnl", 0.0) or 0.0)
+    pnl_str = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
+
+    lines = [
+        f"### LATEST CALIBRATION INTELLIGENCE ({cid})",
+        f"- Status: COMPLETED | Concluded: {mins:.1f}m ago | Empirical Evidence: N={total} settled trades ({wins}W / {losses}L, {wr:.1f}% WR, Net PnL={pnl_str})",
+    ]
+
+    prime = calib_ctx.get("prime_assets") or []
+    hazard = calib_ctx.get("hazard_assets") or []
+    if prime:
+        lines.append(f"- Prime / High-Conviction Assets (Empirically Proven): {', '.join(prime)}")
+    if hazard:
+        lines.append(f"- Hazard / Toxic Assets (Empirically Quarantined): {', '.join(hazard)}")
+
+    favoured = calib_ctx.get("favoured_regimes") or []
+    if favoured:
+        lines.append(f"- Favoured Market Regimes: {', '.join(favoured)}")
+
+    lines.append(
+        "- Operational Directive: If active live session has low settled trades (N < 10), actively cite and utilize this empirical calibration evidence as the primary market baseline rather than stating 'no settled trades' or 'directional only'."
+    )
+    return "\n".join(lines) + "\n\n"
 
 
 def _build_pulse_asset_summary(
@@ -225,12 +267,26 @@ def _build_pulse_user_msg(
     rolling_stats: Dict[str, Any],
     trajectory_analytics: Dict[str, Any],
     lookback_seconds: int,
+    session_context: Dict[str, Any] | None = None,
+    calibration_context: Dict[str, Any] | None = None,
 ) -> str:
     """Build the AI Pulse user message with all Phase 0 enriched sections.
 
     Adds: Minimum Payout Gate in percent units (C2), Bayesian floor, vol/liq
     gate bands (P0-4), rolling last-N win rate + sample-size rule (P0-7), and
     trajectory attribution distribution (P0-5).
+
+    Session-First Learning (feat/ai_kb): when ``session_context`` is provided,
+    a structured `### SESSION CONTEXT & PERFORMANCE LAYERS` section is injected
+    with the live session metrics, 3-layer effective WR breakdown, UTC 4h
+    block, per-regime stats, active session vetoes, and deterministic policy
+    directives (the LLM is given explicit rules — never allowed to invent
+    trade policy).
+
+    Calibration Intelligence: when ``calibration_context`` is provided,
+    a structured `### LATEST CALIBRATION INTELLIGENCE` section is injected
+    with empirical trade count, win rate, Prime assets, Hazard assets, and
+    favoured regimes from the most recent calibration run.
     """
     allowed_regimes = config.allowed_regimes or []
     min_z = config.min_zscore if config.min_zscore_enabled else "Disabled"
@@ -264,7 +320,16 @@ def _build_pulse_user_msg(
     else:
         trajectory_str = "- Pulse Trajectory Attributions: UNAVAILABLE (no settled AI Pulse trajectories yet)"
 
+    calib_section = _render_calibration_context_section(calibration_context)
+
+    if not session_context:
+        session_section = ""
+    else:
+        session_section = _render_session_context_section(session_context)
+
     return (
+        f"{calib_section}"
+        f"{session_section}"
         f"Active OTC Asset Data Summaries:\n"
         f"{summaries_str}\n\n"
         f"Current Controller Gates:\n"
@@ -287,6 +352,66 @@ def _build_pulse_user_msg(
         f"{recent_trades_str}\n\n"
         f"Formulate a brief market pulse update, identifying actionable trade setups and calibration recommendations."
     )
+
+
+def _render_session_context_section(ctx: Dict[str, Any]) -> str:
+    """Render the `### SESSION CONTEXT & PERFORMANCE LAYERS` block (Step 3).
+
+    Pure function of the snapshot produced by
+    ``AutoGhostService.session_performance_snapshot()``. Returns an empty
+    string for an empty context so the prompt contract stays unchanged when
+    session telemetry is unavailable.
+    """
+    if not ctx:
+        return ""
+    eff = ctx.get("effective") or {}
+    eff_wr = eff.get("effective_wr")
+    eff_wr_str = f"{eff_wr * 100:.1f}%" if eff_wr is not None else "UNAVAILABLE (no layer has data)"
+    weights = eff.get("weights") or {}
+    components = eff.get("components") or {}
+    weights_str = ", ".join(f"w_{k}={v:.2f}" for k, v in weights.items()) or "n/a"
+    components_str = (
+        ", ".join(f"{k}={v * 100:.1f}%" for k, v in components.items()) or "none"
+    )
+    reweight_str = (
+        f"RENORMALIZED (missing layers: {', '.join(eff.get('missing_layers') or [])})"
+        if eff.get("renormalized")
+        else "all layers present"
+    )
+    streak = int(ctx.get("streak", 0) or 0)
+    streak_str = f"{streak:+d}" if streak else "0 (even)"
+    elapsed = ctx.get("elapsed_seconds")
+    elapsed_str = f"{int(elapsed // 60)}m {int(elapsed % 60):02d}s" if elapsed is not None else "N/A"
+    session_wr = ctx.get("session_wr")
+    session_wr_str = f"{session_wr * 100:.1f}%" if session_wr is not None else "N/A (no settled trades)"
+
+    lines = [
+        "### SESSION CONTEXT & PERFORMANCE LAYERS",
+        f"- Session: {ctx.get('session_id') or 'UNKNOWN'} | Elapsed: {elapsed_str} | "
+        f"Settled N={ctx.get('settled_count', 0)} | Streak: {streak_str}",
+        f"- Session Win Rate: {session_wr_str} | Effective 3-Layer Win Rate: {eff_wr_str} "
+        f"({weights_str}; components: {components_str}; layers: {reweight_str})",
+        f"- Active UTC 4h Block: {ctx.get('utc_4h_block')} ({ctx.get('utc_4h_label')})",
+    ]
+    per_regime = ctx.get("per_regime") or {}
+    if per_regime:
+        regime_bits = ", ".join(
+            f"{r} {s['wins']}W/{s['losses']}L ({s['wr'] * 100:.1f}%)"
+            for r, s in sorted(per_regime.items())
+        )
+        lines.append(f"- Per-Regime Breakdown (current session): {regime_bits}")
+    else:
+        lines.append("- Per-Regime Breakdown (current session): no settled outcomes yet")
+    vetoed = ctx.get("vetoed_regimes") or []
+    lines.append(
+        "- Active Session Vetoes (in-memory, auto-dissolve on session reset): "
+        f"{', '.join(vetoed) if vetoed else 'None'}"
+    )
+    directives = ctx.get("policy_directives") or []
+    if directives:
+        lines.append("- DETERMINISTIC POLICY DIRECTIVES (binding rules — follow exactly, never contradict):")
+        lines.extend(f"  {i}. {d}" for i, d in enumerate(directives, 1))
+    return "\n".join(lines) + "\n\n"
 
 
 def _extract_pulse_signal_from_text(
@@ -1278,6 +1403,22 @@ class StreamingService:
         # trajectory/rolling-WR; no fabricated confidence; percent-unit payout gate).
         system_msg = _build_ai_pulse_system_msg()
 
+        # Session-First Learning (feat/ai_kb): live session performance layers
+        # + deterministic policy directives. Fail-soft like trajectory analytics.
+        try:
+            session_ctx = self.auto_ghost.session_performance_snapshot()
+        except Exception as snap_err:
+            logger.warning("Session performance snapshot unavailable for AI Pulse: %s", snap_err)
+            session_ctx = None
+
+        # Calibration Intelligence: query latest completed calibration context
+        calib_ctx = None
+        if hasattr(self, "calibration_service") and self.calibration_service:
+            try:
+                calib_ctx = self.calibration_service.get_latest_calibration_context()
+            except Exception as calib_err:
+                logger.warning("Calibration context unavailable for AI Pulse: %s", calib_err)
+
         user_msg = _build_pulse_user_msg(
             config=config,
             summaries_str=summaries_str,
@@ -1290,6 +1431,8 @@ class StreamingService:
             rolling_stats=rolling_stats,
             trajectory_analytics=trajectory_analytics,
             lookback_seconds=interval,
+            session_context=session_ctx,
+            calibration_context=calib_ctx,
         )
 
         chat_req = AIChatRequest(

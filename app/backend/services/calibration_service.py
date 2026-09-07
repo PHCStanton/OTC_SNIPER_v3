@@ -37,6 +37,7 @@ from typing import Any
 
 from ..config import get_settings
 from .auto_ghost import CALIBRATION_TIER_A_FIELDS
+from .calibrated_apply import bayesian_prior_ready, build_calibrated_gates
 from .calibration_autonomy import (
     MILESTONE_SIZE,
     enforce_milestone,
@@ -153,6 +154,7 @@ class CalibrationService:
         self._terminal_state: str = "DONE"
         self._finalizing: bool = False
         self._last_milestone_settled: int = 0
+        self._settled_trades: list[dict[str, Any]] = []
         self._guardian_task: asyncio.Task | None = None
         self._guardian_emitted: set[str] = set()
         self._warm_start_baseline: dict[str, Any] | None = None
@@ -231,7 +233,108 @@ class CalibrationService:
             "stop_requested": self._stop_requested,
             "stop_reason": self._stop_reason,
             "config": self._current_frozen_config(),
+            "final_report": self._final_report,
         }
+
+    def get_latest_calibration_context(self) -> dict[str, Any] | None:
+        """Structured intelligence from the most recent completed calibration run.
+
+        Used by AI Pulse and streaming to cite empirical calibration evidence
+        (trade count, overall win rate, Prime assets, Hazard assets, favoured regimes)
+        as an empirical market baseline instead of reporting 'no settled trades'.
+        """
+        # 1. Prefer in-memory state if a final_report exists (state DONE or PROPOSING)
+        if self._final_report and self._calibration_id:
+            rep = self._final_report
+            gates = rep.get("calibrated_gates") or {}
+            settled = self._settled_wins + self._settled_losses
+            wr = round((self._settled_wins / settled * 100.0), 1) if settled > 0 else float(rep.get("win_rate") or 0.0)
+            ended = float(rep.get("ended_at") or self._started_at or unix_time())
+            elapsed_mins = round((unix_time() - ended) / 60.0, 1)
+
+            prime = gates.get("prime_assets") or []
+            hazard = gates.get("recommended_blacklist") or []
+            asset_perf = gates.get("asset_performance") or {}
+
+            # Per-regime win rates from settled trades
+            regime_stats: dict[str, dict[str, Any]] = {}
+            for t in self._settled_trades:
+                ctx = t.get("entry_context") or {}
+                reg = str(t.get("regime") or ctx.get("regime_label") or "UNKNOWN").upper()
+                out = str(t.get("outcome") or "").lower()
+                if out not in ("win", "loss"):
+                    continue
+                if reg not in regime_stats:
+                    regime_stats[reg] = {"wins": 0, "losses": 0}
+                if out == "win":
+                    regime_stats[reg]["wins"] += 1
+                else:
+                    regime_stats[reg]["losses"] += 1
+
+            favoured = []
+            for r, s in sorted(regime_stats.items()):
+                tot = s["wins"] + s["losses"]
+                r_wr = round(s["wins"] / tot * 100.0, 1) if tot > 0 else 0.0
+                if r_wr >= 55.0:
+                    favoured.append(f"{r} ({r_wr}% WR, N={tot})")
+
+            return {
+                "calibration_id": self._calibration_id,
+                "state": self._state,
+                "ended_at": ended,
+                "elapsed_minutes": elapsed_mins,
+                "settled_total": settled,
+                "settled_wins": self._settled_wins,
+                "settled_losses": self._settled_losses,
+                "win_rate_pct": wr,
+                "pnl": round(self._calibration_pnl, 2),
+                "prime_assets": prime,
+                "hazard_assets": hazard,
+                "favoured_regimes": favoured,
+                "asset_performance": asset_perf,
+            }
+
+        # 2. Fallback: inspect disk archives
+        try:
+            directory = self._session_dir()
+            if not directory.exists():
+                return None
+            calib_files = sorted(directory.glob("auto_ghost_calib_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+            for path in calib_files:
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    if str(data.get("state")) != "DONE":
+                        continue
+                    rep = data.get("final_report") or {}
+                    gates = rep.get("calibrated_gates") or {}
+                    wins = int(data.get("settled_wins") or rep.get("wins") or 0)
+                    losses = int(data.get("settled_losses") or rep.get("losses") or 0)
+                    settled = wins + losses
+                    wr = round(wins / settled * 100.0, 1) if settled > 0 else float(rep.get("win_rate") or 0.0)
+                    ended = float(rep.get("ended_at") or path.stat().st_mtime)
+                    elapsed_mins = round((unix_time() - ended) / 60.0, 1)
+
+                    return {
+                        "calibration_id": str(data.get("calibration_id") or path.stem),
+                        "state": "DONE",
+                        "ended_at": ended,
+                        "elapsed_minutes": elapsed_mins,
+                        "settled_total": settled,
+                        "settled_wins": wins,
+                        "settled_losses": losses,
+                        "win_rate_pct": wr,
+                        "pnl": round(float(data.get("calibration_pnl") or rep.get("pnl") or 0.0), 2),
+                        "prime_assets": gates.get("prime_assets") or [],
+                        "hazard_assets": gates.get("recommended_blacklist") or [],
+                        "favoured_regimes": [],
+                        "asset_performance": gates.get("asset_performance") or {},
+                    }
+                except Exception:
+                    continue
+        except Exception as exc:
+            logger.warning("Failed to load latest calibration context from disk: %s", exc)
+
+        return None
 
     def _current_frozen_config(self) -> dict[str, Any] | None:
         ag = self._auto_ghost
@@ -333,6 +436,15 @@ class CalibrationService:
                 "settled_wins": data.get("settled_wins", 0),
                 "settled_losses": data.get("settled_losses", 0),
             }
+            # Restore config snapshot if captured so interrupted sessions don't leave calibration presets stuck
+            snapshot = data.get("config_snapshot")
+            if snapshot and self._auto_ghost is not None:
+                try:
+                    self._auto_ghost.restore_config_snapshot(snapshot)
+                    logger.info("Calibration reconcile: auto-restored config snapshot for %s", data.get("calibration_id"))
+                except Exception as r_err:
+                    logger.error("Calibration reconcile: failed to auto-restore snapshot for %s: %s", data.get("calibration_id"), r_err)
+
             tmp = path.with_suffix(".json.tmp")
             try:
                 with open(tmp, "w", encoding="utf-8") as fh:
@@ -343,8 +455,7 @@ class CalibrationService:
                 continue
             disrupted.append(str(data.get("calibration_id") or path.stem))
             logger.error(
-                "Calibration session %s was interrupted in state %s — marked STALE_ABORTED. "
-                "Review protocol settings for that run (settings were not auto-restored).",
+                "Calibration session %s was interrupted in state %s — marked STALE_ABORTED.",
                 data.get("calibration_id"), state,
             )
         for tmp in directory.glob("auto_ghost_calib_*.json.tmp"):
@@ -354,6 +465,27 @@ class CalibrationService:
                 logger.warning("Calibration reconcile: failed to remove orphan tmp %s: %s", tmp.name, exc)
             else:
                 logger.warning("Calibration reconcile: removed orphan temp file %s", tmp.name)
+
+        # H-2 disk cleanup: retain all ABORTED / STALE_ABORTED runs, keep newest 20 DONE runs
+        try:
+            done_files = []
+            for p in sorted(directory.glob("auto_ghost_calib_*.json")):
+                try:
+                    d = json.loads(p.read_text(encoding="utf-8"))
+                    if str(d.get("state")) == "DONE":
+                        done_files.append((p.stat().st_mtime, p))
+                except Exception:
+                    continue
+            done_files.sort(key=lambda x: x[0])
+            if len(done_files) > 20:
+                for _, old_p in done_files[:-20]:
+                    try:
+                        old_p.unlink(missing_ok=True)
+                    except Exception as unl_err:
+                        logger.warning("Calibration reconcile: failed to prune old session %s: %s", old_p.name, unl_err)
+        except Exception as prune_err:
+            logger.warning("Calibration reconcile: error pruning old sessions: %s", prune_err)
+
         return disrupted
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -391,6 +523,7 @@ class CalibrationService:
         self._terminal_state = "DONE"
         self._finalizing = False
         self._last_milestone_settled = 0
+        self._settled_trades = []
         self._guardian_emitted = set()
         self._warm_start_baseline = None
         self._last_alignment = None
@@ -595,9 +728,24 @@ class CalibrationService:
             ag.remove_outcome_observer(self._on_outcome)
 
             if final_state == "DONE":
-                await self._run_milestone_review(
-                    settled, apply_tier_a=False, is_final=True,
-                )
+                try:
+                    await asyncio.wait_for(
+                        self._run_milestone_review(
+                            settled, apply_tier_a=False, is_final=True,
+                        ),
+                        timeout=MILESTONE_AI_TIMEOUT_SECONDS,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "Calibration %s finalize milestone review timed out after %.0fs "
+                        "— completing DONE without final AI review.",
+                        self._calibration_id, MILESTONE_AI_TIMEOUT_SECONDS,
+                    )
+                # Calibrated Apply Gates fallback: if the review timed out or
+                # failed before attaching the payload, still compile it from
+                # changelog + final-report evidence (idempotent).
+                if "calibrated_gates" not in self._final_report:
+                    self._compile_calibrated_gates()
         except Exception:
             logger.exception(
                 "Calibration %s finalize failed — forcing ABORTED (fail loud).",
@@ -612,8 +760,43 @@ class CalibrationService:
             if final_state == "ABORTED":
                 await self._emit_loud_abort(reason or "finalize_failure")
             elif final_state == "DONE":
+                if self._auto_ghost and hasattr(self._auto_ghost, "session_tracker"):
+                    try:
+                        self._auto_ghost.session_tracker.archive_calibration_session(
+                            session_id=str(self._calibration_id),
+                            settled_trades=self._settled_trades,
+                        )
+                        logger.info("Calibration %s trades archived into session_tracker Layer 2", self._calibration_id)
+                    except Exception as arch_err:
+                        logger.warning("Failed to archive calibration trades into session_tracker: %s", arch_err)
                 self._arm_guardian()
             logger.info("Calibration %s finalized: %s", self._calibration_id, final_state)
+
+    def _compile_calibrated_gates(self) -> None:
+        """Compile the one-click "Apply Calibrated Gates" payload (feat/ai_kb).
+
+        Sourced from real calibration evidence only: Tier A changelog entries,
+        Guardian proposals, and the final report. Bayesian is surfaced as an
+        explicit user choice (card default ON solely when the 60s prior store
+        is READY) — never auto-enabled. Idempotent: safe to call from both the
+        final review path and the finalize fallback path.
+        """
+        if self._final_report is None:
+            return
+        self._final_report["calibrated_gates"] = build_calibrated_gates(
+            self._changelog,
+            final_report=self._final_report,
+            proposals=(self._final_report.get("autonomy") or {}).get("proposals") or [],
+            bayesian_ready=bayesian_prior_ready(),
+            synthesize_missing=True,
+            settled_trades=self._settled_trades,
+        )
+        logger.info(
+            "Calibration %s compiled calibrated_gates (families=%s, bayesian_ready=%s)",
+            self._calibration_id,
+            sorted(self._final_report["calibrated_gates"]["families"].keys()),
+            self._final_report["calibrated_gates"]["bayesian"]["ready"],
+        )
 
     def _restore_snapshot(self) -> None:
         """D4: restore the exact pre-calibration user config, including None fields."""
@@ -651,7 +834,8 @@ class CalibrationService:
         outcome: str,
         profit: float,
         asset: str | None = None,
-        **_: Any,
+        entry_context: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
         """Settlement observer (sync; called from report_outcome).
 
@@ -671,6 +855,22 @@ class CalibrationService:
             return
         else:
             return
+
+        ctx = kwargs.get("entry_context")
+        regime = None
+        if isinstance(ctx, dict):
+            regime = ctx.get("regime_label")
+        if not regime:
+            regime = kwargs.get("regime_label") or "UNKNOWN"
+
+        self._settled_trades.append({
+            "trade_id": trade_id,
+            "outcome": outcome,
+            "profit": profit,
+            "asset": asset,
+            "entry_context": ctx,
+            "regime_label": regime,
+        })
 
         self._persist()
         settled = self._settled_wins + self._settled_losses
@@ -884,6 +1084,8 @@ class CalibrationService:
                 "proposals": verdict["proposals"],
                 "observations": verdict["observations"],
             }
+            self._compile_calibrated_gates()
+            report["calibrated_gates"] = self._final_report["calibrated_gates"]
         self._persist()
         try:
             await self._persist_observations(verdict["observations"])
@@ -902,6 +1104,8 @@ class CalibrationService:
     async def _ask_milestone_ai(self, *, settled: int, is_final: bool, current: dict) -> str:
         if self._ai_reviewer is not None:
             return await self._ai_reviewer(settled, is_final, current)
+        if settled < 8:
+            return ""
         try:
             from ..models.ai_models import AIChatRequest, AIMessage
             from .ai_service import get_ai_service
@@ -910,15 +1114,28 @@ class CalibrationService:
                 logger.warning("Calibration milestone AI disabled — no Tier A auto-apply this cycle")
                 return ""
             wr = (self._settled_wins / settled * 100.0) if settled else 0.0
-            system = (
-                "You are OTC SNIPER's calibration reviewer. "
-                "Return ONLY a JSON object with keys tier_a_changes, tier_b_proposals, observations. "
-                "tier_a_changes items: {field, new, rationale, evidence_n}. "
-                "bayesian_min_probability is a 0.50-0.90 float. minimum_payout_pct is percent. "
-                "REV2: with N<20 per bucket, prefer empty tier_a_changes unless the sample is catastrophic "
-                "(≤2 wins in 12). Never suggest locked fields (mode, amount, expiration_seconds, "
-                "block_on_manipulation, adaptive_expiry_enabled, auto_execute_ai_pulse)."
-            )
+            if is_final:
+                system = (
+                    "You are OTC SNIPER's calibration reviewer conducting the FINAL calibration review. "
+                    "Return ONLY a JSON object with keys tier_a_changes, tier_b_proposals, observations. "
+                    "Synthesize the calibration evidence (regardless of run size, 12+ trades or 15m+) and recommend "
+                    "solid starting gate bounds for Ghost Protocol: "
+                    "tier_a_changes items: {field, new, rationale, evidence_n}. "
+                    "Allowed tier_a fields: min_zscore (-3 to 1), max_zscore (-1 to 3), min_confidence (50 to 95), "
+                    "manipulation_severity_threshold (0.1 to 0.9), allowed_regimes (list of strings), "
+                    "min_volatility, max_volatility, min_liquidity, max_liquidity, bayesian_min_probability (0.50 to 0.90 float). "
+                    "Never suggest locked fields (mode, amount, expiration_seconds, block_on_manipulation, adaptive_expiry_enabled, auto_execute_ai_pulse)."
+                )
+            else:
+                system = (
+                    "You are OTC SNIPER's calibration reviewer. "
+                    "Return ONLY a JSON object with keys tier_a_changes, tier_b_proposals, observations. "
+                    "tier_a_changes items: {field, new, rationale, evidence_n}. "
+                    "bayesian_min_probability is a 0.50-0.90 float. minimum_payout_pct is percent. "
+                    "REV2: with N<20 per bucket, prefer empty tier_a_changes unless the sample is catastrophic "
+                    "(≤2 wins in 12). Never suggest locked fields (mode, amount, expiration_seconds, "
+                    "block_on_manipulation, adaptive_expiry_enabled, auto_execute_ai_pulse)."
+                )
             user = (
                 f"Milestone {'FINAL' if is_final else 'mid-run'} n={settled} "
                 f"wins={self._settled_wins} losses={self._settled_losses} wr={wr:.1f}% "
@@ -1049,7 +1266,7 @@ class CalibrationService:
                     if item.get("field") == "allowed_regimes":
                         suggestions["ghostAllowedRegimes"] = item.get("new")
                     await self._sio.emit("notification", {
-                        "type": "ai_pulse",
+                        "type": "guardian_proposal",
                         "message": f"Session Guardian: {item.get('rationale')}",
                         "timestamp": unix_time(),
                         "suggestions": suggestions or None,
@@ -1082,7 +1299,8 @@ class CalibrationService:
                     "message": f"⚠ {rationale}",
                     "timestamp": unix_time(),
                 })
-        alignment = classify_alignment(trades[-1], self._warm_start_baseline)
+        alignment_window = trades[-min(len(trades), 10):]
+        alignment = classify_alignment(alignment_window, self._warm_start_baseline)
         level = alignment.get("level")
         if level and level != self._last_alignment:
             self._last_alignment = str(level)
@@ -1091,7 +1309,7 @@ class CalibrationService:
             self._journal("condition_alignment", **alignment)
             if self._sio:
                 await self._sio.emit("notification", {
-                    "type": "ai_pulse",
+                    "type": "guardian_alignment",
                     "message": alignment.get("message"),
                     "timestamp": unix_time(),
                     "suggestions": chosen.get("gates"),
@@ -1106,13 +1324,10 @@ class CalibrationService:
         if self._state != "RUNNING" or self._finalizing:
             return
         logger.info("Calibration time budget elapsed (watchdog) → draining.")
-        self._stop_requested = True
-        self._stop_reason = "time_budget_elapsed"
-        self._terminal_state = "DONE"
-        self._state = "ANALYZING"
+        self._request_terminal("DONE", "time_budget_elapsed")
         self._journal("time_budget_elapsed")
         await self._emit_status()
-        await self._finalize_after_drain()
+        await self._begin_drain()
 
     # ── Misc ──────────────────────────────────────────────────────────────────
 

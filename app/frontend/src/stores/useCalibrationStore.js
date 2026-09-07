@@ -24,6 +24,7 @@ export const CALIBRATION_DEFAULT_STATUS = {
   stopRequested: false,
   stopReason: null,
   strictnessPresets: null,
+  calibratedGates: null,
 };
 
 export function isCalibrationLockedState(state) {
@@ -70,10 +71,15 @@ export const useCalibrationStore = create((set, get) => ({
       locked: payload.locked != null ? Boolean(payload.locked) : isCalibrationLockedState(state),
       stopRequested: Boolean(payload.stop_requested),
       stopReason: payload.stop_reason ?? null,
+      // Calibrated Apply Gates (feat/ai_kb): rides the status payload via
+      // final_report; null mid-run/new calibration clears a stale card.
+      calibratedGates: payload.final_report?.calibrated_gates ?? null,
     });
   },
 
   setStrictnessPresets: (presets) => set({ strictnessPresets: presets || null }),
+
+  setCalibratedGates: (gates) => set({ calibratedGates: gates || null }),
 
   reset: () => set({ ...CALIBRATION_DEFAULT_STATUS }),
 }));

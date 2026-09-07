@@ -10,6 +10,7 @@ from typing import Any, Callable
 from ..brokers.base import BrokerType
 from ..models.requests import TradeExecutionRequest
 from .trade_service import TradeService
+from .session_tracker import SessionPerformanceTracker, CALIB_SESSION_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +250,13 @@ class AutoGhostService:
         # H2 drain signal: settlements not yet emitted. Independent of
         # `_active_assets` (capacity), which `_release_asset` can clear first.
         self._in_flight_settlements: int = 0
+        # Session-First Learning (feat/ai_kb): live session tracker + tiered
+        # mutation state. The tracker is keyed strictly by `_session_id`;
+        # vetoes and audit entries are session-local in-memory state (never
+        # persisted, never written to the knowledge base).
+        self.session_tracker = SessionPerformanceTracker()
+        self._session_vetoed_regimes: set[str] = set()
+        self._session_audit_log: deque[dict[str, Any]] = deque(maxlen=50)
 
     def _record_reject(self, asset: str, reason: str) -> None:
         self._last_reject_reason_by_asset[asset] = reason
@@ -350,6 +358,11 @@ class AutoGhostService:
         self._trade_timestamps.clear()
         self._last_reject_reason_by_asset.clear()
         self._reject_counts.clear()
+        # Session-First Learning: dissolve session-local vetoes and re-bind the
+        # tracker (archives the previous live session into Layer-2 history;
+        # calibration sessions are never archived). Veto dissolves on reset.
+        self._session_vetoed_regimes.clear()
+        self.session_tracker.ensure_session(self._session_id)
 
     def set_calibration_mode(self, active: bool, session_id: str | None = None) -> None:
         """Enter/exit calibration mode (owned by CalibrationService — not API-writable).
@@ -630,6 +643,15 @@ class AutoGhostService:
             if asset:
                 self._update_condition_stat(f"asset:{asset}", is_win)
 
+        # Session-First Learning (feat/ai_kb): live tracker + Category A autonomy.
+        # Voids are zero WR evidence; calibration runs never pollute the tracker.
+        if outcome in {"win", "loss"}:
+            self._record_session_tracker(
+                outcome=outcome,
+                entry_context=entry_context,
+                expiration_seconds=expiration_seconds,
+            )
+
         if self.config.oteo_ai_enabled and self.config.ai_trade_interval > 0:
             if self._session_trade_count > 0 and self._session_trade_count % self.config.ai_trade_interval == 0:
                 logger.info("Trade count interval reached (%d trades). Triggering AI Suggestions in background.", self._session_trade_count)
@@ -649,6 +671,133 @@ class AutoGhostService:
                 direction=direction,
                 expiration_seconds=expiration_seconds,
             )
+
+    def _record_session_tracker(
+        self,
+        *,
+        outcome: str,
+        entry_context: dict[str, Any] | None,
+        expiration_seconds: int | None,
+    ) -> None:
+        """Feed a live settled outcome into the session tracker + Category A autonomy.
+
+        Session-First invariant: calibration mode and ``auto_ghost_calib_*``
+        sessions are excluded — calibration statistics are owned by
+        CalibrationService and must never pollute live trading evidence.
+        """
+        if self.config.mode == "calibration":
+            return
+        session_id = self._session_id
+        if session_id and session_id.startswith(CALIB_SESSION_PREFIX):
+            return
+        regime_label = entry_context.get("regime_label", "UNKNOWN") if entry_context else "UNKNOWN"
+        self.session_tracker.record_settlement(
+            outcome=outcome,
+            regime_label=regime_label,
+            horizon=expiration_seconds,
+            session_id=session_id,
+        )
+        self._apply_category_a_mutations()
+
+    def _write_audit(self, record_type: str, **details: Any) -> None:
+        """Append a structured Category A audit record (zero silent mutations)."""
+        entry = {"ts": unix_time(), "type": record_type, "session_id": self._session_id, **details}
+        self._session_audit_log.append(entry)
+        logger.warning("Auto-Ghost audit [%s]: %s", record_type, entry)
+
+    def _apply_category_a_mutations(self) -> None:
+        """Category A mutations — automatic, in-memory / update_config-routed (Step 4).
+
+        1. Bayesian floor adaptation: +0.02 per 3-loss cold-streak step
+           (streaks of -3, -6, -9, ...), routed through ``update_config`` and
+           clamped to [0.50, 0.90] by ``_AUTO_GHOST_FIELD_SPECS``. The floor
+           keeps float-fraction semantics — NEVER percent form (53.5).
+        2. Session-local regime veto: 0/5 or <= 2/12 (N >= 12) -> in-memory
+           veto set. ``config.allowed_regimes`` is NEVER touched (an empty
+           list evaluates to "allow all regimes" — catastrophic bypass).
+           Vetoes dissolve when ``_session_id`` is reset.
+        """
+        tracker = self.session_tracker
+
+        # 1. Bayesian floor adaptation (only meaningful while the filter is on).
+        streak = tracker.current_streak
+        if self.config.bayesian_filter_enabled and streak <= -3 and abs(streak) % 3 == 0:
+            old = float(self.config.bayesian_min_probability)
+            new = min(0.90, old + 0.02)
+            if new > old:
+                self.update_config(bayesian_min_probability=new)
+                self._write_audit(
+                    "bayesian_floor_adaptation",
+                    old=old,
+                    new=float(self.config.bayesian_min_probability),
+                    streak=streak,
+                    step=0.02,
+                )
+
+        # 2. Session-local regime veto (in-memory only — never config).
+        for regime in tracker.regime_veto_candidates():
+            if regime in self._session_vetoed_regimes:
+                continue
+            self._session_vetoed_regimes.add(regime)
+            stats = tracker.per_regime_stats.get(regime, {})
+            self._write_audit(
+                "session_regime_veto",
+                regime=regime,
+                wins=stats.get("wins", 0),
+                losses=stats.get("losses", 0),
+                settled=stats.get("settled", 0),
+            )
+
+    def session_performance_snapshot(self) -> dict[str, Any]:
+        """Structured Session-First context for the AI Pulse prompt (Step 3)."""
+        tracker = self.session_tracker
+        regime_label = tracker.last_regime_label
+        effective = tracker.effective_win_rate(regime_label=regime_label)
+        per_regime = tracker.per_regime_stats
+        streak = tracker.current_streak
+        started_at = tracker.session_started_at
+        return {
+            "session_id": tracker.session_id,
+            "elapsed_seconds": unix_time() - started_at if started_at is not None else None,
+            "settled_count": tracker.settled_count,
+            "streak": streak,
+            "session_wr": tracker.rolling_session_wr,
+            "effective": effective,
+            "utc_4h_block": tracker.utc_4h_block_index,
+            "utc_4h_label": tracker.utc_4h_block_label,
+            "per_regime": per_regime,
+            "vetoed_regimes": sorted(self._session_vetoed_regimes),
+            "policy_directives": self._session_policy_directives(effective, per_regime, streak),
+            "audit": list(self._session_audit_log)[-10:],
+        }
+
+    @staticmethod
+    def _session_policy_directives(
+        effective: dict[str, Any],
+        per_regime: dict[str, dict[str, Any]],
+        streak: int,
+    ) -> list[str]:
+        """Deterministic prompt policy directives (Step 3.5) — never LLM-invented."""
+        directives: list[str] = []
+        if streak <= -3:
+            directives.append(
+                f"COLD STREAK ACTIVE: {streak} consecutive settled losses. Policy: recommend raising the "
+                "Bayesian probability floor (+0.02 steps are already applied automatically, hard cap 0.90) "
+                "and tightening confluence requirements. NEVER suggest relaxing gates while the cold streak persists."
+            )
+        for regime, s in sorted(per_regime.items()):
+            if s["settled"] >= 5 and s["wr"] < 0.35:
+                directives.append(
+                    f"REGIME PAUSE ADVISED: {regime} is {s['wins']}W/{s['losses']}L "
+                    f"({s['wr'] * 100:.1f}%, N={s['settled']}). Policy: advise pausing signals in this regime."
+                )
+        eff_wr = effective.get("effective_wr")
+        if eff_wr is not None and effective.get("n_session", 0) >= 10 and eff_wr > 0.65:
+            directives.append(
+                f"EXPANSION PERMITTED: effective 3-layer WR {eff_wr * 100:.1f}% over N={effective['n_session']}. "
+                "Policy: normal or expanded signal evaluation is permitted."
+            )
+        return directives
 
     def _reject(self, asset: str, reason: str) -> None:
         self._record_reject(asset, reason)
@@ -775,6 +924,17 @@ class AutoGhostService:
         # Regime Gate checks (Ghost Protocol)
         regime_label = oteo_result.get("regime_label")
         regime_stable = oteo_result.get("regime_stable")
+
+        # Session-First Learning: session-local regime veto (Category A, in-memory).
+        # Checked before the persisted regime gate — vetoes live only for the
+        # current _session_id and NEVER touch config.allowed_regimes.
+        if regime_label is not None and str(regime_label).upper() in self._session_vetoed_regimes:
+            logger.info(
+                "Auto-Ghost skipped %s: regime %s is session-vetoed (cold-streak protection)",
+                asset,
+                regime_label,
+            )
+            return 'session_regime_veto'
         if self.config.regime_gate_enabled and self.config.allowed_regimes:
             if regime_label is None:
                 logger.info("Auto-Ghost skipped %s: regime gate enabled but signal has no regime label", asset)
@@ -1302,10 +1462,10 @@ class AutoGhostService:
             await self._emit_pulse_channel("ai_pulse_aborted", {"asset": asset, "reason": reason})
             return
 
-        # 5. Bayesian Win Probability floor check (51% - 56%) - fail-closed (C2 fix)
-        calibrated_floor = confluence.get("calibrated_bayesian_floor", self.config.bayesian_min_probability)
-        b_prob = mc.get("bayesian_win_probability_60s") or mc.get("bayesian_win_probability")
+        # 5. Bayesian Win Probability floor check - strictly guarded by bayesian_filter_enabled
         if self.config.bayesian_filter_enabled:
+            calibrated_floor = self.config.bayesian_min_probability
+            b_prob = mc.get("bayesian_win_probability_60s") or mc.get("bayesian_win_probability")
             if b_prob is None:
                 reason = "Bayesian win probability unavailable (fail-closed: filter enabled but no WP computed yet)"
                 logger.info("AI Pulse pre-flight aborted for %s: %s", asset, reason)

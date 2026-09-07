@@ -12,7 +12,7 @@ import { X, TrendingUp, TrendingDown, Target, Zap, ShieldAlert, Award, ChevronDo
 import { Tooltip } from './StitchComponents.jsx';
 import { getSocket } from '../../api/socketClient.js';
 import CalibrationPanel from './CalibrationPanel.jsx';
-import { useCalibrationStore } from '../../stores/useCalibrationStore.js';
+import { useCalibrationStore, isCalibrationLockedState } from '../../stores/useCalibrationStore.js';
 
 import ghostStatic from '../../../assets/Ghost_Icon.png';
 import bobble from '../../../assets/bobble.gif';
@@ -66,9 +66,15 @@ export default function GhostTradingWidget() {
   const ghostIcon = useSettingsStore((s) => s.ghostIcon);
   const ghostPnl = useRiskStore((s) => s.ghostPnl);
   const ghostWinRate = useRiskStore((s) => s.ghostWinRate);
+  const ghostWins = useRiskStore((s) => s.ghostWins);
+  const ghostLosses = useRiskStore((s) => s.ghostLosses);
   const ghostTotalTrades = useRiskStore((s) => s.ghostTotalTrades);
   const ghostMaxDrawdown = useRiskStore((s) => s.ghostMaxDrawdown);
   const ghostTrades = useRiskStore((s) => s.ghostTrades);
+  const calibrationLocked = useCalibrationStore((s) => s.locked || isCalibrationLockedState(s.state));
+  const calibrationState = useCalibrationStore((s) => s.state);
+  const calibSettledTotal = useCalibrationStore((s) => s.settledTotal);
+  const calibTradeBudget = useCalibrationStore((s) => s.tradeBudget);
 
   // Settings from store
   const {
@@ -83,6 +89,19 @@ export default function GhostTradingWidget() {
     ghostMaxConfidenceEnabled,
     autoGhostManipulationSeverityThreshold,
     autoGhostBlockOnManipulation,
+    // Volatility & Liquidity gates
+    autoGhostVolatilityGateEnabled,
+    minVolatilityScore,
+    maxVolatilityScore,
+    autoGhostLiquidityGateEnabled,
+    minLiquidityScore,
+    maxLiquidityScore,
+    setAutoGhostVolatilityGateEnabled,
+    setMinVolatilityScore,
+    setMaxVolatilityScore,
+    setAutoGhostLiquidityGateEnabled,
+    setMinLiquidityScore,
+    setMaxLiquidityScore,
     // New Z-Score + Regime gates for Ghost Protocol
     ghostMinZScore,
     ghostMinZScoreEnabled,
@@ -159,15 +178,8 @@ export default function GhostTradingWidget() {
         setPendingPulseSignal(data);
         setPulseSecondsLeft(data.seconds_remaining || 15);
       };
-      const onAborted = (data) => {
+      const onAborted = () => {
         setPendingPulseSignal(null);
-        if (data?.reason) {
-          useToastStore.getState().addToast({
-            type: 'info',
-            message: `⚡ AI Pulse (${data.asset}): ${data.reason}`,
-            duration: 4000,
-          });
-        }
       };
 
       // M11 fix: bind pending-card lifetime to terminal events, not the local clock.
@@ -355,8 +367,6 @@ export default function GhostTradingWidget() {
   const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0, isDragging: false });
   const containerRef = useRef(null);
 
-  if (!autoGhostEnabled) return null;
-
   // We use the persisted position or default to {x: 0, y: 0}
   const position = ghostWidgetPosition || { x: 0, y: 0 };
 
@@ -465,8 +475,8 @@ export default function GhostTradingWidget() {
   };
 
   const recentTrades = ghostTrades.slice(-5).reverse();
-  const calibrationLocked = useCalibrationStore((s) => s.locked);
-  const calibrationState = useCalibrationStore((s) => s.state);
+
+  if (!autoGhostEnabled) return null;
 
   return (
     <div 
@@ -532,8 +542,6 @@ export default function GhostTradingWidget() {
             </div>
           </div>
 
-          <CalibrationPanel />
-
           {/* Navigation Tabs */}
           <div className="flex bg-[#25282f]/50 border border-white/5 p-1 rounded-xl mb-4 select-none">
             <button 
@@ -569,13 +577,76 @@ export default function GhostTradingWidget() {
             >
               AI Tools
             </button>
+            <button 
+              className={`flex-1 text-[9px] font-black uppercase tracking-wider py-2 rounded-lg transition-all relative flex items-center justify-center gap-1 ${
+                activeTab === 'calibrate' 
+                  ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-400/30' 
+                  : calibrationLocked
+                    ? 'text-cyan-400 hover:text-cyan-200 border border-transparent'
+                    : 'text-gray-500 hover:text-white border border-transparent'
+              }`} 
+              onClick={() => setActiveTab('calibrate')}
+            >
+              {calibrationLocked && (
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-500"></span>
+                </span>
+              )}
+              Calibrate
+            </button>
           </div>
 
           {activeTab === 'telemetry' && (
             <div className="space-y-4">
+              {/* Compact Active Calibration Ribbon while on Stats */}
+              {calibrationLocked && (
+                <div 
+                  onClick={() => setActiveTab('calibrate')}
+                  className="p-2.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 flex items-center justify-between hover:bg-cyan-950/50 transition-colors cursor-pointer group"
+                  title="Click to view full Calibration tab"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+                    </span>
+                    <div>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-cyan-300 block leading-tight">
+                        Calibration Active ({calibrationState === 'RUNNING' ? 'Silent' : calibrationState})
+                      </span>
+                      <span className="text-[8px] font-mono text-gray-400">
+                        Trades {calibSettledTotal}/{calibTradeBudget || 12}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[8.5px] font-black uppercase text-cyan-400 group-hover:text-cyan-200 transition-colors flex items-center gap-1">
+                    Manage ↗
+                  </span>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <StatBox label="Ghost PnL" value={formatCurrency(ghostPnl)} tone={ghostPnl >= 0 ? 'emerald' : 'rose'} icon={ghostPnl >= 0 ? TrendingUp : TrendingDown} />
-                <StatBox label="Win Rate" value={`${Math.round(ghostWinRate)}%`} tone="emerald" icon={Award} />
+                <StatBox 
+                  label="Win Rate" 
+                  value={
+                    <div className="flex items-baseline justify-between gap-1">
+                      <span className="text-base font-black font-mono tracking-tight">
+                        {ghostTotalTrades > 0 ? `${Math.round(ghostWinRate)}%` : '0%'}
+                      </span>
+                      <div className="flex items-baseline gap-0.5 text-xs font-mono font-bold">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">W</span>
+                        <span className="text-emerald-400">{ghostWins}</span>
+                        <span className="text-gray-600">/</span>
+                        <span className="text-[#fe7453]">{ghostLosses}</span>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-gray-500">L</span>
+                      </div>
+                    </div>
+                  } 
+                  tone={ghostTotalTrades > 0 && ghostWinRate < 50 ? 'rose' : 'emerald'} 
+                  icon={Award} 
+                />
                 <StatBox label="Ghost Trades" value={String(ghostTotalTrades)} tone="slate" icon={Target} />
                 <StatBox label="Max DD" value={formatCurrency(-Math.abs(ghostMaxDrawdown))} tone="rose" icon={TrendingDown} />
               </div>
@@ -628,15 +699,6 @@ export default function GhostTradingWidget() {
                       const directionLabel = trade.direction === 'call' ? 'CALL' : 'PUT';
                       const outcomeLabel = trade.outcome ? trade.outcome.toUpperCase() : 'PENDING';
                       
-                      let pnlText = '$0.00';
-                      if (trade.outcome === 'pending') {
-                        pnlText = `$${Number(trade.stake || 0).toFixed(2)}`;
-                      } else if (trade.pnl > 0) {
-                        pnlText = `+$${trade.pnl.toFixed(2)}`;
-                      } else if (trade.pnl < 0) {
-                        pnlText = `-$${Math.abs(trade.pnl).toFixed(2)}`;
-                      }
-
                       let outcomeColor = 'text-gray-500 bg-white/5 border-white/5';
                       if (trade.outcome === 'win') outcomeColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25';
                       else if (trade.outcome === 'loss') outcomeColor = 'text-red-400 bg-red-500/10 border-red-500/25';
@@ -644,14 +706,16 @@ export default function GhostTradingWidget() {
 
                       const directionColor = trade.direction === 'call' ? 'text-emerald-400' : 'text-red-400';
 
-                      // Asset Win Rate calculation
+                      // Asset Win Rate calculation (Quantity W/L)
                       const assetTrades = ghostTrades.filter((t) => t.asset === trade.asset && (t.outcome === 'win' || t.outcome === 'loss'));
                       const assetWins = assetTrades.filter((t) => t.outcome === 'win').length;
-                      const assetWinRate = assetTrades.length > 0 ? Math.round((assetWins / assetTrades.length) * 100) : null;
+                      const assetLosses = assetTrades.filter((t) => t.outcome === 'loss').length;
 
                       // Triggered Expiry duration
                       const expirySeconds = trade.expirationSeconds || autoGhostExpirationSeconds || 60;
                       const expiryText = formatInterval(expirySeconds);
+
+                      const isAiPulse = trade.trigger_mode === 'ai_pulse' || trade.entry_context?.trigger_mode === 'ai_pulse';
 
                       return (
                         <button
@@ -660,47 +724,57 @@ export default function GhostTradingWidget() {
                           className="flex w-full items-center justify-between rounded-xl bg-[#25282f]/30 border border-white/5 p-2.5 transition hover:bg-[#25282f]/60 hover:border-[#ffb800]/20 text-left"
                           title={autoGhostCopyMode === 'execute' ? `Click to Copy & Execute on Live (${expiryText})` : `Click to Pre-set Asset & Expiry (${expiryText})`}
                         >
-                          <div className="flex flex-col w-[105px] shrink-0">
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-black uppercase text-white tracking-wide">{assetLabel}</span>
-                              {(trade.trigger_mode === 'ai_pulse' || trade.entry_context?.trigger_mode === 'ai_pulse') && (
-                                <span className="text-[7px] font-black uppercase text-cyan-300 bg-cyan-500/20 border border-cyan-400/40 rounded px-1 py-0.2 animate-pulse" title="Triggered via AI Pulse Forecast">
-                                  ⚡ Pulse
-                                </span>
-                              )}
-                            </div>
+                          {/* Left Column: Asset & Direction + W/L quantity */}
+                          <div className="flex flex-col w-[110px] shrink-0">
+                            <span className="text-[10px] font-black uppercase text-white tracking-wide truncate">{assetLabel}</span>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className={`text-[8.5px] font-black uppercase ${directionColor}`}>
                                 {directionLabel}
                               </span>
-                              {assetWinRate !== null && (
-                                <span className={`text-[7.5px] font-black font-mono px-1 py-0.2 rounded border ${
-                                  assetWinRate >= 50 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                }`} title={`Session Win Rate for ${assetLabel}`}>
-                                  {assetWinRate}% WR
+                              <div 
+                                className="flex items-center gap-1 font-mono text-[8px] bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/5" 
+                                title={`Session Record for ${assetLabel}: ${assetWins} Wins / ${assetLosses} Losses`}
+                              >
+                                <span className="text-[7px] font-black uppercase text-gray-500 leading-none">W</span>
+                                <span className="text-[8.5px] font-bold text-emerald-400 leading-none">{assetWins}</span>
+                                <span className="text-[7.5px] text-gray-600 leading-none">/</span>
+                                <span className="text-[8.5px] font-bold text-[#fe7453] leading-none">{assetLosses}</span>
+                                <span className="text-[7.5px] font-black uppercase text-gray-500 leading-none">L</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Center Column: OTEO Score OR Ai Pulse */}
+                          <div className="flex flex-col items-center justify-center shrink-0 min-w-[75px]">
+                            <span className="text-[7.5px] font-black uppercase tracking-widest text-gray-500">
+                              {isAiPulse ? 'TRIGGER' : 'OTEO'}
+                            </span>
+                            <div className="flex items-center justify-center mt-0.5">
+                              {isAiPulse ? (
+                                <span 
+                                  className="text-[8px] font-black uppercase text-cyan-300 bg-cyan-500/15 border border-cyan-400/35 rounded-md px-1.5 py-0.5 shadow-sm shadow-cyan-500/10 flex items-center gap-0.5 animate-pulse"
+                                  title="Triggered via AI Pulse Forecast"
+                                >
+                                  <span className="text-[9px]">⚡</span> Ai Pulse
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-black text-[#ffb800] font-mono leading-none">
+                                  {trade.oteo_score != null ? `${Math.round(trade.oteo_score)}%` : '—'}
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex flex-col items-center justify-center shrink-0">
-                            <span className="text-[7.5px] font-black uppercase tracking-widest text-gray-500">OTEO / EXPIRY</span>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className="text-[11px] font-black text-[#ffb800] font-mono leading-none">
-                                {trade.oteo_score != null ? `${Math.round(trade.oteo_score)}%` : '—'}
-                              </span>
-                              <span className="text-[8px] font-black font-mono text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded px-1 py-0.2" title={`Triggered Expiry: ${expiryText}`}>
-                                ⏱ {expiryText}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-2 w-[105px] shrink-0">
+                          {/* Right Column: Outcome + Expiry */}
+                          <div className="flex items-center justify-end gap-1.5 w-[95px] shrink-0">
                             <span className={`rounded-md border px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider ${outcomeColor}`}>
                               {outcomeLabel}
                             </span>
-                            <span className={`text-[10px] font-black font-mono ${trade.pnl > 0 ? 'text-emerald-400' : trade.pnl < 0 ? 'text-red-400' : 'text-gray-500'}`}>
-                              {pnlText}
+                            <span 
+                              className="text-[8px] font-black font-mono text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-md px-1.5 py-0.5 shrink-0" 
+                              title={`Triggered Expiry: ${expiryText}`}
+                            >
+                              ⏱ {expiryText}
                             </span>
                           </div>
                         </button>
@@ -907,6 +981,106 @@ export default function GhostTradingWidget() {
                     onChange={(e) => setAutoGhostManipulationSeverityThreshold(Number(e.target.value))}
                     className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
                   />
+                </div>
+              </div>
+
+              {/* Volatility Score Gate */}
+              <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">Volatility Score Gate</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoGhostVolatilityGateEnabled}
+                      onChange={(e) => setAutoGhostVolatilityGateEnabled(e.target.checked)}
+                      className="accent-[#ffb800] rounded h-3 w-3"
+                    />
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${autoGhostVolatilityGateEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      {autoGhostVolatilityGateEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </label>
+                </div>
+                <div className={`space-y-2 transition-opacity duration-200 ${autoGhostVolatilityGateEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">Min Volatility</span>
+                      <span className="text-[10px] font-black font-mono text-white">{minVolatilityScore}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      disabled={!autoGhostVolatilityGateEnabled}
+                      value={minVolatilityScore}
+                      onChange={(e) => setMinVolatilityScore(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">Max Volatility</span>
+                      <span className="text-[10px] font-black font-mono text-white">{maxVolatilityScore}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      disabled={!autoGhostVolatilityGateEnabled}
+                      value={maxVolatilityScore}
+                      onChange={(e) => setMaxVolatilityScore(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Liquidity Score Gate */}
+              <div className="space-y-3 rounded-lg bg-[#25282f]/20 p-2.5 border border-white/5">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1 mb-1">
+                  <span className="text-[9px] font-black uppercase tracking-wider text-gray-400">Liquidity Score Gate</span>
+                  <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoGhostLiquidityGateEnabled}
+                      onChange={(e) => setAutoGhostLiquidityGateEnabled(e.target.checked)}
+                      className="accent-[#ffb800] rounded h-3 w-3"
+                    />
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider ${autoGhostLiquidityGateEnabled ? 'text-[#ffb800]' : 'text-gray-500'}`}>
+                      {autoGhostLiquidityGateEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </label>
+                </div>
+                <div className={`space-y-2 transition-opacity duration-200 ${autoGhostLiquidityGateEnabled ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">Min Liquidity</span>
+                      <span className="text-[10px] font-black font-mono text-white">{minLiquidityScore}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      disabled={!autoGhostLiquidityGateEnabled}
+                      value={minLiquidityScore}
+                      onChange={(e) => setMinLiquidityScore(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8.5px] font-black uppercase tracking-wider text-gray-500">Max Liquidity</span>
+                      <span className="text-[10px] font-black font-mono text-white">{maxLiquidityScore}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      disabled={!autoGhostLiquidityGateEnabled}
+                      value={maxLiquidityScore}
+                      onChange={(e) => setMaxLiquidityScore(Number(e.target.value))}
+                      className="w-full accent-[#ffb800] disabled:opacity-30 cursor-pointer h-1 rounded-lg bg-[#25282f]"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1294,6 +1468,15 @@ export default function GhostTradingWidget() {
                         {latestPulse.suggestions.ghostMinZScore !== undefined && (
                           <div>• MIN Z-SCORE: <span className="text-white">{latestPulse.suggestions.ghostMinZScore}</span></div>
                         )}
+                        {latestPulse.suggestions.ghostMaxZScore !== undefined && (
+                          <div>• MAX Z-SCORE: <span className="text-white">{latestPulse.suggestions.ghostMaxZScore}</span></div>
+                        )}
+                        {(latestPulse.suggestions.minVolatilityScore !== undefined || latestPulse.suggestions.maxVolatilityScore !== undefined) && (
+                          <div>• VOLATILITY: <span className="text-white">{latestPulse.suggestions.minVolatilityScore ?? 0}% – {latestPulse.suggestions.maxVolatilityScore ?? 100}%</span></div>
+                        )}
+                        {(latestPulse.suggestions.minLiquidityScore !== undefined || latestPulse.suggestions.maxLiquidityScore !== undefined) && (
+                          <div>• LIQUIDITY: <span className="text-white">{latestPulse.suggestions.minLiquidityScore ?? 0}% – {latestPulse.suggestions.maxLiquidityScore ?? 100}%</span></div>
+                        )}
                         {latestPulse.suggestions.autoGhostManipulationSeverityThreshold !== undefined && (
                           <div>• MANIP THRESHOLD: <span className="text-white">{latestPulse.suggestions.autoGhostManipulationSeverityThreshold}</span></div>
                         )}
@@ -1359,6 +1542,12 @@ export default function GhostTradingWidget() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'calibrate' && (
+            <div className="space-y-4 max-h-[380px] overflow-y-auto pr-1 select-none scrollbar-thin">
+              <CalibrationPanel />
             </div>
           )}
         </div>

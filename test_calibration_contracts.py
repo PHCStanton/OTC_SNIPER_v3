@@ -853,6 +853,99 @@ class TestReconcileOneShot(unittest.IsolatedAsyncioTestCase):
             harness.cleanup()
 
 
+    async def test_reconcile_restores_snapshot_and_prunes_done(self) -> None:
+        harness = CalibrationHarness()
+        try:
+            # Create a stale file with a snapshot that had custom amount 17.5
+            stale_file = Path(harness.tmp.name) / "auto_ghost_calib_99990002.json"
+            stale_file.write_text(json.dumps({
+                "calibration_id": "auto_ghost_calib_99990002",
+                "state": "RUNNING",
+                "config_snapshot": {"amount": 17.5},
+                "changelog": [],
+            }), encoding="utf-8")
+
+            # Create 25 dummy DONE session files
+            for i in range(25):
+                done_file = Path(harness.tmp.name) / f"auto_ghost_calib_done_{i:02d}.json"
+                done_file.write_text(json.dumps({
+                    "calibration_id": f"auto_ghost_calib_done_{i:02d}",
+                    "state": "DONE",
+                    "changelog": [],
+                }), encoding="utf-8")
+
+            harness.calibration._reconcile_done = False
+            harness.calibration.bind(harness.auto_ghost, harness.sio)
+
+            # 1. Config should have been restored from the interrupted session's snapshot
+            self.assertEqual(harness.auto_ghost.config.amount, 17.5)
+
+            # 2. DONE files should be pruned to at most 20
+            remaining_done = [
+                p for p in Path(harness.tmp.name).glob("auto_ghost_calib_done_*.json")
+            ]
+            self.assertEqual(len(remaining_done), 20)
+
+            # 3. STALE_ABORTED file is kept
+            self.assertTrue(stale_file.exists())
+            self.assertEqual(json.loads(stale_file.read_text(encoding="utf-8"))["state"], "STALE_ABORTED")
+        finally:
+            harness.cleanup()
+
+
+class TestGuardianNotificationTypes(unittest.IsolatedAsyncioTestCase):
+    """Test that Guardian emits guardian_proposal and guardian_alignment types, not ai_pulse."""
+
+    async def test_guardian_notification_types(self) -> None:
+        harness = CalibrationHarness()
+        try:
+            # Prime baseline
+            harness.calibration._warm_start_baseline = {
+                "feature_centroids": {
+                    "overall": {
+                        "volatility": {"mean": 0.001, "std": 0.0001},
+                        "liquidity": {"mean": 100.0, "std": 10.0},
+                        "manipulation": {"mean": 0.0, "std": 0.0},
+                        "z_score": {"mean": 0.0, "std": 1.0},
+                    }
+                }
+            }
+
+            trades = [
+                {
+                    "trade_id": f"t_{i}",
+                    "asset": "EURUSD_otc",
+                    "outcome": "loss",
+                    "profit": -5.0,
+                    "entry_price": 1.0500,
+                    "exit_price": 1.0490,
+                    "direction": "call",
+                    "entry_time": 1000 + i * 60,
+                    "exit_time": 1060 + i * 60,
+                    "market_context": {
+                        "volatility": 0.0005,
+                        "liquidity": 50.0,
+                        "manipulation": 2.0,
+                        "z_score": 1.5,
+                        "utc_4h_block": 2,
+                    },
+                }
+                for i in range(20)
+            ]
+
+            await harness.calibration._run_alignment_and_drift(trades)
+
+            # Check that any emitted notifications do NOT use type "ai_pulse"
+            notif_events = [p for n, p in harness.sio.events if n == "notification"]
+            for notif in notif_events:
+                self.assertNotEqual(notif.get("type"), "ai_pulse")
+            # Should have emitted a guardian_alignment notification
+            alignment_notifs = [p for p in notif_events if p.get("type") == "guardian_alignment"]
+            self.assertTrue(len(alignment_notifs) > 0)
+        finally:
+            harness.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()
 

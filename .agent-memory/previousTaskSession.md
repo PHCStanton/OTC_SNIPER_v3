@@ -1,24 +1,38 @@
-## 0. ACTIVE WORK — Auto-Ghost Calibration Mode (Plan REV2) — Phases 0–5 IMPLEMENTED; Phase 6 DEFERRED AGAIN (2026-08-31)
+## 0. ACTIVE WORK — Auto-Ghost Calibration Mode Stability & Integrity Remediation (2026-09-03/04) ✅ COMPLETE
 
-**⚠ THIS IS WHERE WE LEFT OFF.** Calibration Mode is in the tree on `feat/ai_kb`. **Do not start Phase 6** (Discord `NotificationSink`) until an explicit user command.
+**Plan documents:**
+- Diagnostic Report: `Reports-1/Calibration_Mode_Multi_Agent_Review_Report_26-09-03.md`
+- Implementation Plan: `brain/a7ef0473-8a3e-4eb6-82fa-a4703b7666ae/implementation_plan.md`
+- Walkthrough: `brain/a7ef0473-8a3e-4eb6-82fa-a4703b7666ae/walkthrough.md`
+- Base Plan: `Dev_Docs/Auto_Ghost_Calibration_Mode_Plan_26-08-26.md` & `Dev_Docs/Calibration_Mode_Stability_Remediation_Plan_26-08-31.md`
+- **Protocol:** `.agents/workflows/phase-review-protocol.md`. conda `QuFLX-v2`; PowerShell `;` not `&&`.
+- **Branch:** `feat/ai_kb`
 
-**Plan document (read FIRST):** `Dev_Docs/Auto_Ghost_Calibration_Mode_Plan_26-08-26.md` — REV2, updated 2026-08-31 to match code.
-**Protocol:** `.agents/workflows/phase-review-protocol.md`. conda `QuFLX-v2`; PowerShell `;` not `&&`.
-**Revision history:** REV1 = forensic amendments C1–C5, M1–M11, A1–A2. REV2 = Bootstrap & Guardian (24 trades / ~25 min, health every 4, Tier A every 12 catastrophic-only) + A1 UTC-4h, A2 recency decay, A3 ledger, A4 drift detector.
+### Status: All Planned Stability Fixes Implemented & Verified ✅
 
-### Current status (2026-08-31)
+| ID | Finding & Remediation | File(s) | Status |
+|---|---|---|---|
+| **BUG-3** | **Finalize AI Review Timeout:** Wrapped `_run_milestone_review` in `CalibrationService._finalize` with `asyncio.wait_for(..., timeout=90.0)` + `except asyncio.TimeoutError`. Prevents wedged LLM providers from stranding finalize or forcing an invalid `ABORTED`. | `app/backend/services/calibration_service.py` | Verified ✅ |
+| **BUG-1** | **Server Shutdown & Boot Restore:** Added FastAPI `lifespan` shutdown hook in `main.py` calling `calib.abort(reason="server_shutdown")`. In `_reconcile_stale_sessions`, auto-restored `config_snapshot` into `AutoGhostService` for interrupted sessions marked `STALE_ABORTED`. | `app/backend/main.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
+| **BUG-2** | **Guardian Notification Separation:** Switched Guardian emissions from `"ai_pulse"` to `"guardian_proposal"` and `"guardian_alignment"`. Updated `TopBar.jsx` with `ShieldAlert` cyan badge styling, preventing pulse card collisions in `GhostTradingWidget.jsx`. | `app/backend/services/calibration_service.py`, `app/frontend/src/components/layout/TopBar.jsx` | Verified ✅ |
+| **H-3** | **Time Budget Watchdog Drain Alignment:** Refactored `_time_budget_watchdog` to use `_request_terminal("DONE", "time_budget_elapsed")` and `_begin_drain()`. Eliminates state race with `_check_budgets_sync`. | `app/backend/services/calibration_service.py` | Verified ✅ |
+| **OPT-7 / H-4** | **Bessel's Sample Variance & 10-Trade Rolling Window:** Changed `_mean_std` to sample variance ($N-1$); enhanced `classify_alignment` to average features across a rolling 10-trade slice (`trades[-min(len(trades), 10):]`) to suppress single-trade noise. | `app/backend/services/ghost_protocol_profiles.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
+| **OPT-2 / H-2** | **Dead Code & Disk Cleanup:** Pruned unreachable Tier B check in `calibration_autonomy.py`; implemented automated pruning of `DONE` session files keeping newest 20 while preserving all aborts. | `app/backend/services/calibration_autonomy.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
+| **Contracts** | **Regression Tests:** Added `test_reconcile_restores_snapshot_and_prunes_done` and `test_guardian_notification_types`. | `test_calibration_contracts.py` | Verified ✅ |
 
-| Phase | Status |
-|---|---|
-| 0 AI Pulse enrichment | Done (`test_ai_pulse_prompt.py`) |
-| 1 CalibrationService + silent 5-surface routing + 409 lock + D4 restore + drain | Done (`test_calibration_contracts.py`) |
-| 2 Frontend CALIBRATING badge, freeze, journal Calibration filter | Done (`CalibrationPanel.jsx`, `useCalibrationStore.js`) |
-| 3 Tier A/B + Session Guardian (propose-only N≥20) | Done (`calibration_autonomy.py`) — **3 P1s still open** |
-| 4 KB health audit, staging-only recency backfill, UTC 4h (22:00 origin), 21d half-life, warm-start | Done (`kb_health.py`, `test_kb_health_phase4.py`) — review P1s **fixed** |
-| 5 Relaxed/Conservative/Strict + M8 schema expansion + alignment + A4 drift | Done (`ghost_protocol_profiles.py`, `test_ghost_protocol_profiles.py`) |
-| 6 Discord NotificationSink | **DEFERRED AGAIN 2026-08-31** |
+### Verification Evidence
+1. `conda run -n QuFLX-v2 python -m pytest test_calibration_contracts.py test_calibration_autonomy.py test_ghost_protocol_profiles.py -v` → **54 passed in 20.19s**
+2. `conda run -n QuFLX-v2 python -m pytest test_kb_health_phase4.py test_ai_pulse_prompt.py test_auto_ghost.py -v` → **36 passed in 1.56s**
+3. `npm --prefix app/frontend run build` → **Clean build in 25.78s** (1704 modules transformed)
 
-**Last verification:** `conda run -n QuFLX-v2 python -m pytest test_ghost_protocol_profiles.py test_kb_health_phase4.py test_calibration_contracts.py test_calibration_autonomy.py test_preflight_gate_contracts.py test_auto_ghost.py -q` → 73 passed. `npm --prefix app/frontend run build` clean. No live-browser calibration run.
+### Clarification Decisions Persisted
+1. **Bayesian Priors vs Calibration:** Calibration mode tunes the Bayesian floor gate threshold (`bayesian_min_probability`), while priors (`bayesian_priors.json`) come pre-seeded from disk and are updated only via staging/backfill commits.
+2. **Ghost Trader Bayesian Config:** Starts with the active protocol config (`active_protocol.json` / `AutoGhostConfig` defaults). If disabled or uncalibrated, it can be updated via the Trading Journal staging flow.
+3. **Phase 6 Discord NotificationSink:** Remains strictly **DEFERRED** per user instructions. Do not start.
+
+### Open Follow-ups
+1. Live paper browser calibration dry-run (observing visual transition across IDLE → CALIBRATING → ANALYZING → PROPOSING → DONE/ABORTED and snapshot restore).
+2. Phase 6 Discord NotificationSink (pending explicit user request).
 
 ### Locked design (still true)
 - Ghost kind only (D1). Silent = route all five live surfaces, not rename one event. Copy-mode `execute` hard-blocked while RUNNING (D2). Runtime-config 409 while RUNNING/ANALYZING/PROPOSING (C3). D4 auto-restore snapshot on DONE/ABORTED (including `None` fields via `dataclasses.replace`). Budget counts settled win/loss only. Kill-switch is CalibrationService-owned, not the 300s drawdown cooldown. `minimum_payout_pct` is **85.0 percent**, never `0.85`. Bayesian floor is **0.50–0.90 float**. Master KB writes only via staging commit (N≥5/N≥20, `.bak`). UTC 4h blocks origin **22:00** (block 5 = 18:00–22:00, block 0 = 22:00–02:00).

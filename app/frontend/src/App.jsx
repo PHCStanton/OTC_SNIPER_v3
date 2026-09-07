@@ -86,12 +86,37 @@ export default function App() {
         useCalibrationStore.getState().setStrictnessPresets(data.strictness_presets);
         useSettingsStore.getState().mergeGhostProtocols(data.strictness_presets);
       }
+      if (data?.calibrated_gates) {
+        useCalibrationStore.getState().setCalibratedGates(data.calibrated_gates);
+      }
       useNotificationStore.getState().addNotification({
         type: 'calibration_final',
         message: data?.message || 'Calibration final report ready',
         timestamp: data?.timestamp,
         suggestions: data || null,
       });
+    });
+
+    socket.on('ai_pulse_aborted', (data) => {
+      if (!data?.reason) return;
+      const assetLabel = data.asset ? data.asset.replace(/_otc$/i, ' OTC').replace(/_/g, '/') : 'Asset';
+      const message = `⚡ AI Pulse (${assetLabel}): Rejected — ${data.reason}`;
+
+      useNotificationStore.getState().addNotification({
+        type: 'ai_pulse_aborted',
+        message,
+        timestamp: data.timestamp || Date.now() / 1000,
+        suggestions: data,
+      });
+
+      const { dontDisturbEnabled } = useSettingsStore.getState();
+      if (!dontDisturbEnabled) {
+        useToastStore.getState().addToast({
+          type: 'warning',
+          message,
+          duration: 5000,
+        });
+      }
     });
 
     socket.on('trade_entry', (data) => {
@@ -284,6 +309,7 @@ export default function App() {
       socket.off('calibration_status');
       socket.off('calibration_milestone');
       socket.off('calibration_final');
+      socket.off('ai_pulse_aborted');
     };
   }, [setChromeStatus, setSessionStatus, setSessionId, setBalance, setAccountType]);
 

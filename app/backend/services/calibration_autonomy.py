@@ -99,10 +99,7 @@ def enforce_milestone(
             rejected.append({**item, "reason": "locked"})
             continue
         if field not in CALIBRATION_TIER_A_FIELDS:
-            if field in CALIBRATION_TIER_B_FIELDS:
-                proposals.append(item)
-            else:
-                rejected.append({**item, "reason": "unknown_field"})
+            rejected.append({**item, "reason": "unknown_field"})
             continue
         if field == "manipulation_severity_threshold":
             try:

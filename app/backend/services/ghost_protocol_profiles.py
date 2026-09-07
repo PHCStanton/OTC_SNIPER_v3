@@ -33,7 +33,6 @@ FRONTEND_GATE_KEYS = (
     "autoGhostLiquidityGateEnabled",
     "minLiquidityScore",
     "maxLiquidityScore",
-    "autoGhostBayesianFilterEnabled",
     "autoGhostBayesianMinProbability",
     "autoGhostMinimumPayout",
     "ghostAmount",
@@ -67,7 +66,6 @@ _BACKEND_PRESETS: dict[str, dict[str, Any]] = {
         "liquidity_gate_enabled": False,
         "min_liquidity": 0.0,
         "max_liquidity": 100.0,
-        "bayesian_filter_enabled": True,
         "bayesian_min_probability": 0.50,
         "minimum_payout_pct": 85.0,
         "amount": 1.0,
@@ -77,7 +75,7 @@ _BACKEND_PRESETS: dict[str, dict[str, Any]] = {
         "manipulation_severity_threshold": 0.35,
     },
     "conservative": {
-        "label": "Conservative",
+        "label": "Balanced",
         "rationale": "Mixed readings — near-baseline gates.",
         "min_zscore_enabled": True,
         "min_zscore": -1.5,
@@ -91,7 +89,6 @@ _BACKEND_PRESETS: dict[str, dict[str, Any]] = {
         "liquidity_gate_enabled": True,
         "min_liquidity": 20.0,
         "max_liquidity": 80.0,
-        "bayesian_filter_enabled": True,
         "bayesian_min_probability": 0.535,
         "minimum_payout_pct": 88.0,
         "amount": 1.0,
@@ -115,7 +112,6 @@ _BACKEND_PRESETS: dict[str, dict[str, Any]] = {
         "liquidity_gate_enabled": True,
         "min_liquidity": 40.0,
         "max_liquidity": 100.0,
-        "bayesian_filter_enabled": True,
         "bayesian_min_probability": 0.58,
         "minimum_payout_pct": 90.0,
         "amount": 1.0,
@@ -233,7 +229,10 @@ def _mean_std(values: Sequence[float]) -> dict[str, Any]:
     if n == 0:
         return {"mean": None, "std": None, "n": 0}
     mean = sum(values) / n
-    var = sum((x - mean) ** 2 for x in values) / n
+    if n > 1:
+        var = sum((x - mean) ** 2 for x in values) / (n - 1)
+    else:
+        var = 0.0
     return {"mean": round(mean, 6), "std": round(math.sqrt(var), 6), "n": n}
 
 
@@ -307,11 +306,31 @@ def detect_market_drift(
 
 
 def classify_alignment(
-    live_sample: Mapping[str, Any],
+    live_sample: Mapping[str, Any] | Sequence[Mapping[str, Any]],
     warm_start: Optional[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Justify Relaxed / Conservative / Strict from live readings vs warm-start pockets."""
-    feat = live_sample if "volatility" in live_sample else extract_trade_features(live_sample)
+    """Justify Relaxed / Conservative / Strict from live readings vs warm-start pockets.
+
+    Supports either a single trade/feature dict or a rolling window of trades/features.
+    When given a sequence, averages feature values to prevent single-trade noise.
+    """
+    if isinstance(live_sample, Sequence) and not isinstance(live_sample, (str, bytes, Mapping)):
+        if not live_sample:
+            return {"level": "conservative", "message": "No samples — Conservative default", "favorable": False, "adverse": False}
+        feats = [s if "volatility" in s else extract_trade_features(s) for s in live_sample]
+        # Average numeric feature values across the rolling window
+        vol_vals = [f.get("volatility") for f in feats if f.get("volatility") is not None]
+        liq_vals = [f.get("liquidity") for f in feats if f.get("liquidity") is not None]
+        manip_vals = [f.get("manipulation") for f in feats if f.get("manipulation") is not None]
+        feat = {
+            "volatility": sum(vol_vals) / len(vol_vals) if vol_vals else None,
+            "liquidity": sum(liq_vals) / len(liq_vals) if liq_vals else None,
+            "manipulation": sum(manip_vals) / len(manip_vals) if manip_vals else None,
+            "utc_4h_block": feats[-1].get("utc_4h_block"),
+        }
+    else:
+        feat = live_sample if "volatility" in live_sample else extract_trade_features(live_sample)
+
     block = feat.get("utc_4h_block")
     block_wr = None
     if warm_start and block is not None:

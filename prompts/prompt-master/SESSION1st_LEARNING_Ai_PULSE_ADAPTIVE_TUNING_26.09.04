@@ -1,0 +1,118 @@
+# TASK PROMPT: Session-First Learning & AI Pulse Adaptive Tuning (feat/ai_kb)
+
+You are implementing the next architectural slice of OTC SNIPER / QuFLX Auto-Ghost + AI Pulse on branch `feat/ai_kb`.
+Follow `.agents/CORE_PRINCIPLES.md` and `PHASE_REVIEW_PROTOCOL`. Do not invent alternative calibration owners, shadow state loops, or silent KB writes.
+
+---
+
+## 1. Product Intent & Operational Principles
+- **The Core Problem**: The AI currently views session metrics passively without dynamically adjusting risk postures. The historical knowledge base (~1,029 condition patterns, ~13.4k priors) is a valuable, slow-moving anchor ("museum piece"), but OTC market dynamics and broker price regimes vary dramatically by live UTC 4h blocks (e.g., Block 5: 18:00–22:00 UTC vs. Block 0: 22:00–02:00 UTC).
+- **Session-First Bias**: Live session behavior validates the book; the historical book NEVER overrules a live cold streak.
+- **KB Staging Invariant**: Calibration and live sessions must NEVER directly overwrite master files (`bayesian_priors.json`, `bayesian_priors_300s.json`, or `condition_patterns.json`). Master updates occur solely via offline mining (`scripts/kb_health_backfill.py`) and staged journal commits approved by the operator.
+
+---
+
+## 2. Implementation Steps (Execute Sequentially)
+
+### Step 0 — Stability Pre-Flight Verification
+Verify that the 2026-09-03/04 stability fixes are verified and green before writing new code:
+1. **BUG-3**: Final `_run_milestone_review` wrapped in `asyncio.wait_for(..., timeout=90.0)` (`calibration_service.py:628`).
+2. **BUG-1**: Graceful lifespan shutdown hook in `main.py:243` + stale reconcile snapshot restore in `calibration_service.py:336-343`.
+3. **BUG-2**: Session Guardian emits `type="guardian_proposal"` / `guardian_alignment` rather than `ai_pulse` (`calibration_service.py:1107, 1131`), consumed cleanly by `TopBar.jsx:717` and `GhostTradingWidget.jsx:552`.
+*Action*: Run `conda run -n QuFLX-v2 python -m pytest test_calibration_contracts.py test_calibration_autonomy.py test_ghost_protocol_profiles.py -q`. If all 54 tests pass, log confirmation and advance immediately to Step 1.
+
+---
+
+### Step 1 — Session Performance Tracker (`app/backend/services/session_tracker.py`)
+Implement a standalone, lightweight, in-memory `SessionPerformanceTracker`:
+- **Session Key**: Keyed strictly by `AutoGhostService._session_id` (resets upon session reset/regeneration; never keyed to raw websocket uptime).
+- **Session Isolation**: Ignore any session matching `auto_ghost_calib_*` (calibration runs must not pollute live trading statistics).
+- **Tracked State**:
+  - `settled_trades`: Deque of settled outcomes (max len 50), strictly filtering out `void` trades (`voids` are neither wins nor losses and provide zero WR evidence).
+  - `last_10_settled`: Slice of the last 10 settled outcomes (`["win", "loss", ...]`).
+  - `rolling_session_wr`: Win rate computed over all settled trades in the current session (`wins / (wins + losses)`). Return `None` if `settled_count == 0`.
+  - `current_streak`: Integer tracking consecutive outcomes (`+N` for N wins, `-N` for N losses, `0` initially).
+  - `per_regime_stats`: Mapping `regime_label -> {"wins": int, "losses": int, "settled": int, "wr": float}` for the current session.
+  - `utc_4h_block`: Current UTC 4h block index (`0..5`, origin 22:00 UTC: Block 0 = 22:00–02:00, Block 1 = 02:00–06:00, ..., Block 5 = 18:00–22:00).
+  - `horizon_isolation`: Separate tracking for 60s and 300s expiries if both are processed.
+
+---
+
+### Step 2 — Three-Layer Effective Win Rate Engine
+Implement the composite win rate calculation:
+$$\text{effective\_wr} = w_{\text{session}} \cdot \text{WR}_{\text{session}} + w_{\text{recent}} \cdot \text{WR}_{\text{recent}} + w_{\text{kb}} \cdot \text{WR}_{\text{kb}}$$
+
+#### Weight Distribution Matrix by Sample Size ($N_{\text{session}}$):
+| Session Settled Trades ($N$) | $w_{\text{session}}$ | $w_{\text{recent}}$ (Last 3 Sessions) | $w_{\text{kb}}$ (Book / Priors) |
+| :--- | :---: | :---: | :---: |
+| $N < 10$ (Early Session) | **0.40** | **0.30** | **0.30** |
+| $10 \le N < 20$ (Developing) | **0.50** | **0.25** | **0.25** |
+| $N \ge 20$ (Established) | **0.60** | **0.20** | **0.20** |
+
+#### Layer Specifications & Guardrails:
+- **Layer 1 ($\text{WR}_{\text{session}}$)**: Current session settled trades.
+- **Layer 2 ($\text{WR}_{\text{recent}}$)**: Settled trade win rate across up to 3 most recent live Ghost sessions on the same UTC calendar day and same horizon. If no prior sessions exist today, omit Layer 2.
+- **Layer 3 ($\text{WR}_{\text{kb}}$)**: Recency-weighted book / condition pattern / Bayesian prior for the current regime and UTC block. If missing, do NOT hallucinate a default 50.0% WR; mark as missing and renormalize.
+- **Renormalization Rule**: If any layer has insufficient data (e.g., $N=0$ for session or missing recent sessions), renormalize remaining weights such that $\sum w_i = 1.0$, and log the reweighting event.
+
+---
+
+### Step 3 — AI Pulse & Guardian Prompt Context Injection
+In `app/backend/services/streaming.py::_build_pulse_user_msg`:
+Inject a structured `### SESSION CONTEXT & PERFORMANCE LAYERS` section into the AI Pulse prompt:
+1. Current `session_id`, elapsed duration, settled trade count $N$, consecutive streak ($+W$ or $-L$).
+2. Session Win Rate vs. Effective 3-Layer Win Rate (showing component breakdown $w_1, w_2, w_3$).
+3. Active UTC 4-hour block and per-regime breakdown (`wins / losses / WR%`).
+4. Active Session Vetoes (if any regimes are currently suppressed).
+5. **Deterministic Policy Directives** (give the LLM explicit rules rather than allowing it to hallucinate trade policy):
+   - *If current streak $\le -3$ losses*: Direct the model to recommend raising Bayesian probability floor or tightening confluence requirements.
+   - *If regime $N \ge 5$ and regime WR $< 35\%$*: Instruct the model to advise pausing signals in that regime.
+   - *If effective WR $> 65\%$ and $N \ge 10$*: Permit normal or expanded signal evaluation.
+
+---
+
+### Step 4 — Mutation Authority & Guardrails (Tiered Autonomy)
+
+#### Category A: Automatic In-Memory Mutations (Zero Operator Interruption)
+All automatic adjustments must route through `AutoGhostService.update_config()` or in-memory state, and write a structured audit record:
+1. **Bayesian Floor Adaptation**:
+   - Trigger: 3 consecutive settled losses in the current session.
+   - Action: Increase `bayesian_min_probability` by `+0.02` (e.g., `0.535 -> 0.555`).
+   - Clamping: Hard bounds `[0.50, 0.90]` via `_AUTO_GHOST_FIELD_SPECS["bayesian_min_probability"]`.
+   - Invariant: Never format as percentage integer (`53.5`); must always remain float (`0.535`).
+2. **Session-Local Regime Veto**:
+   - Trigger: A regime achieves $0/5$ losses or $\le 2/12$ ($\le 16.7\%$ with $N \ge 12$) in the active session.
+   - Implementation: Add to `self._session_vetoed_regimes: set[str]`. Inside `consider_signal()`, check `if regime in self._session_vetoed_regimes: reject with reason "session_regime_veto"`.
+   - Invariant: **NEVER** write `allowed_regimes: []` to config (an empty `allowed_regimes` list in AutoGhost evaluates to "allow all regimes", causing catastrophic bypass). Veto automatically dissolves when `_session_id` is reset.
+
+#### Category B: Propose-Only Mutations (Requires User / Guardian Card Approval)
+The following actions must NEVER be automated; they must emit a `guardian_proposal` card:
+- Pausing or disabling Auto-Ghost (`enabled = False`).
+- Switching operational presets (`Relaxed`, `Conservative`, `Strict`).
+- Altering base trade amount, expiration duration, or max drawdown threshold.
+- Permanent modifications to `allowed_regimes` in the persisted config.
+
+---
+
+## 3. Strict Out-of-Scope Boundaries (Fail PR if Touched)
+- Do NOT implement the A3 suggestion-effectiveness ledger (deferred to future milestone).
+- Do NOT rewrite raw integer Bayesian priors in `bayesian_priors.json`.
+- Do NOT implement Discord bot / Phase 6 integrations.
+- Do NOT alter `CalibrationService` lock acquisition (409 on active runs) or D4 snapshot restoration semantics.
+
+---
+
+## 4. Verification & Contract Test Suite
+Add tests to `test_session_tracker.py` and extend `test_auto_ghost.py`:
+1. `test_tracker_ignores_voids_and_calib_sessions`: Assert void trades do not alter streak or settled count; assert `auto_ghost_calib_*` sessions do not record to live tracker.
+2. `test_effective_wr_weight_transitions`: Assert weight transitions exactly match the spec for $N=5, N=15, N=25$, and renormalize properly when Layer 2 is absent.
+3. `test_bayesian_floor_auto_bump_on_3_loss_streak`: Assert 3 consecutive losses increment `bayesian_min_probability` by exactly `0.02` up to max `0.90`, and log the audit entry.
+4. `test_session_regime_veto_isolated_from_allowed_regimes`: Assert regime veto suppresses trades in that regime without altering `config.allowed_regimes` or writing `[]`.
+5. Full regression check: All 90 existing calibration, autonomy, and KB tests must remain green.
+
+---
+
+## 5. Deliverable
+1. Clean implementation of `session_tracker.py` and integration into `auto_ghost.py` and `streaming.py`.
+2. Pytest suite verifying all contract criteria.
+3. Concise update to `Dev_Docs/Session_First_Learning_Decision_Record_26-09-04.md` documenting the 40/30/30 -> 60/20/20 weights and tiered mutation safety model.
