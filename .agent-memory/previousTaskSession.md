@@ -1,29 +1,27 @@
-## 0. ACTIVE WORK — Auto-Ghost Calibration Mode Stability & Integrity Remediation (2026-09-03/04) ✅ COMPLETE
+## 0. ACTIVE WORK — Calibration Intelligence, 300s Bayesian Seeding & Asset Suspension (2026-09-06/07) ✅ COMPLETE
 
 **Plan documents:**
-- Diagnostic Report: `Reports-1/Calibration_Mode_Multi_Agent_Review_Report_26-09-03.md`
-- Implementation Plan: `brain/a7ef0473-8a3e-4eb6-82fa-a4703b7666ae/implementation_plan.md`
-- Walkthrough: `brain/a7ef0473-8a3e-4eb6-82fa-a4703b7666ae/walkthrough.md`
-- Base Plan: `Dev_Docs/Auto_Ghost_Calibration_Mode_Plan_26-08-26.md` & `Dev_Docs/Calibration_Mode_Stability_Remediation_Plan_26-08-31.md`
+- Walkthrough: `brain/f93e5b2b-8fc2-4a02-a568-6d31e87b7023/walkthrough.md`
+- Implementation Plan: `brain/f93e5b2b-8fc2-4a02-a568-6d31e87b7023/implementation_plan.md`
+- Research Paper: `Research/Manipulation_Tactics/research_account_killer_trap_2026-09-05.md`
+- Base Plan: `Dev_Docs/Session_First_Learning_Decision_Record_26-09-04.md` & `Dev_Docs/Calibrated_Apply_Gates_Plan_26-09-04.md`
 - **Protocol:** `.agents/workflows/phase-review-protocol.md`. conda `QuFLX-v2`; PowerShell `;` not `&&`.
 - **Branch:** `feat/ai_kb`
 
-### Status: All Planned Stability Fixes Implemented & Verified ✅
+### Status: All Work Completed & Fully Verified ✅
 
-| ID | Finding & Remediation | File(s) | Status |
+| Work Item | Finding & Implementation | File(s) | Status |
 |---|---|---|---|
-| **BUG-3** | **Finalize AI Review Timeout:** Wrapped `_run_milestone_review` in `CalibrationService._finalize` with `asyncio.wait_for(..., timeout=90.0)` + `except asyncio.TimeoutError`. Prevents wedged LLM providers from stranding finalize or forcing an invalid `ABORTED`. | `app/backend/services/calibration_service.py` | Verified ✅ |
-| **BUG-1** | **Server Shutdown & Boot Restore:** Added FastAPI `lifespan` shutdown hook in `main.py` calling `calib.abort(reason="server_shutdown")`. In `_reconcile_stale_sessions`, auto-restored `config_snapshot` into `AutoGhostService` for interrupted sessions marked `STALE_ABORTED`. | `app/backend/main.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
-| **BUG-2** | **Guardian Notification Separation:** Switched Guardian emissions from `"ai_pulse"` to `"guardian_proposal"` and `"guardian_alignment"`. Updated `TopBar.jsx` with `ShieldAlert` cyan badge styling, preventing pulse card collisions in `GhostTradingWidget.jsx`. | `app/backend/services/calibration_service.py`, `app/frontend/src/components/layout/TopBar.jsx` | Verified ✅ |
-| **H-3** | **Time Budget Watchdog Drain Alignment:** Refactored `_time_budget_watchdog` to use `_request_terminal("DONE", "time_budget_elapsed")` and `_begin_drain()`. Eliminates state race with `_check_budgets_sync`. | `app/backend/services/calibration_service.py` | Verified ✅ |
-| **OPT-7 / H-4** | **Bessel's Sample Variance & 10-Trade Rolling Window:** Changed `_mean_std` to sample variance ($N-1$); enhanced `classify_alignment` to average features across a rolling 10-trade slice (`trades[-min(len(trades), 10):]`) to suppress single-trade noise. | `app/backend/services/ghost_protocol_profiles.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
-| **OPT-2 / H-2** | **Dead Code & Disk Cleanup:** Pruned unreachable Tier B check in `calibration_autonomy.py`; implemented automated pruning of `DONE` session files keeping newest 20 while preserving all aborts. | `app/backend/services/calibration_autonomy.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
-| **Contracts** | **Regression Tests:** Added `test_reconcile_restores_snapshot_and_prunes_done` and `test_guardian_notification_types`. | `test_calibration_contracts.py` | Verified ✅ |
+| **AI Pulse Calibration Context** | **Calibration Grounding:** AI Pulse previously outputted "no settled trades" after a calibration because calibration runs under `auto_ghost_calib_*` and resets to $N=0$. Added `CalibrationService.get_latest_calibration_context()`, `_render_calibration_context_section()`, and system prompt directive instructing the model to ground on calibration evidence when live $N < 10$. | `app/backend/services/calibration_service.py`, `app/backend/services/streaming.py` | Verified ✅ (5/5 tests) |
+| **Layer-2 Calibration Archival** | **Session Bridging:** Added `archive_calibration_session` and `is_calibration: bool` to `SessionSnapshot` in `session_tracker.py`. On `CalibrationService._finalize` (`state == 'DONE'`), settled trades are archived into `SessionPerformanceTracker._history`, feeding Layer-2 recent-sessions evidence on the same UTC day. | `app/backend/services/session_tracker.py`, `app/backend/services/calibration_service.py` | Verified ✅ |
+| **300s Bayesian Prior Seeding** | **Macro-Horizon Statistical Depth:** Seeded `bayesian_priors_300s.json` from 597 ghost session logs (1,727 trades) and multi-timeframe backtest corpus (15,558 trades) $\rightarrow$ **17,285 trades** (9,515 wins, 7,770 losses, 55.05% WR). Saved protocol snapshot `proto_300s_baseline_seed.json` (`READY`). 60s store strictly untouched. | `scripts/seed_bayesian_300s_priors.py`, `app/data/ghost_trades/stats/bayesian_priors_300s.json` | Verified ✅ (52/52 tests) |
+| **Calibrated Asset Profiling** | **Toxic/Hazard Identification:** Added asset profiling in `build_calibrated_gates`, synthesizing Prime Assets ($\ge 60\%$ WR, $<0.20$ manip) and Recommended Blacklist for toxic pairs ($\ge 2$ losses and $\le 25\%$ WR, or losses $>$ wins with manip $\ge 0.25$). Mapped `families["assets"]` to `ghostBlacklist`. | `app/backend/services/calibrated_apply.py`, `useSettingsStore.js` | Verified ✅ |
+| **Sidebar "Suspended" Group** | **1-Click Red Flag Asset Suspension:** Partitioned LeftSidebar into Quick Select (Starred), Suspended (Red Flag / Blacklist), and All Assets. Added dedicated "Suspended" sub-group header and instant backend sync on Red Flag toggle. | `app/frontend/src/components/layout/LeftSidebar.jsx`, `CalibrationPanel.jsx` | Verified ✅ |
 
 ### Verification Evidence
-1. `conda run -n QuFLX-v2 python -m pytest test_calibration_contracts.py test_calibration_autonomy.py test_ghost_protocol_profiles.py -v` → **54 passed in 20.19s**
-2. `conda run -n QuFLX-v2 python -m pytest test_kb_health_phase4.py test_ai_pulse_prompt.py test_auto_ghost.py -v` → **36 passed in 1.56s**
-3. `npm --prefix app/frontend run build` → **Clean build in 25.78s** (1704 modules transformed)
+1. `conda run -n QuFLX-v2 python -m pytest test_session_tracker.py test_calibration_contracts.py tests/test_calibration_ai_pulse_integration.py tests/test_bayesian_signal_filter.py -v` → **76 passed in 5.71s (100% green)**
+2. `npm --prefix app/frontend run build` → **Clean build in 12.35s** (0 errors)
+
 
 ### Clarification Decisions Persisted
 1. **Bayesian Priors vs Calibration:** Calibration mode tunes the Bayesian floor gate threshold (`bayesian_min_probability`), while priors (`bayesian_priors.json`) come pre-seeded from disk and are updated only via staging/backfill commits.
